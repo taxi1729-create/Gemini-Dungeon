@@ -1,20 +1,13 @@
 extends Node
-class_name CurrentStatus
+# プロジェクト設定で "CurrentStatus" としてAutoloadに登録してください
+var current_area_id = "cave" # 今いるエリアのID
+var encounter_level = 1      # 敵の強さなどの指標
+var allies = []
+var enemies = []
 
-# 現在対峙している敵のステータス
-var enemy = {
-	"id": "", "hp": 0, "max_hp": 0, "def": 0, "spd": 0, "poison": 0
-}
-
-# 味方の現在のステータス（配列で管理）
-var allies = [
-	{"id": "knight", "hp": 0, "max_hp": 0, "def": 0, "spd": 0, "ap": 0},
-	{"id": "witch", "hp": 0, "max_hp": 0, "def": 0, "spd": 0, "ap": 0}
-]
-
-# ゲーム開始時や戦闘開始時に初期値をコピーする関数
 func sync_from_init():
-	var k_init = InitAllyStatus.get_status("knight")
-	allies[0] = k_init
-	var w_init = InitAllyStatus.get_status("witch")
-	allies[1] = w_init
+	allies = [
+		{"id": "knight", "hp": 20, "max_hp": 20, "def": 1, "spd": 3, "ap": 3, "color": Color.GREEN, "status_effects": {}},
+		{"id": "witch", "hp": 15, "max_hp": 15, "def": 0, "spd": 6, "ap": 3, "color": Color.PURPLE, "status_effects": {}}
+	]
+	enemies = []

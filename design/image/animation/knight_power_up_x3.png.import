@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cxf2lib7xtd84"
-path="res://.godot/imported/icon002.png-2e1fb3295542bb1921be3efb1a446e4f.ctex"
+uid="uid://dtr6ymiekp6x3"
+path="res://.godot/imported/knight_power_up_x3.png-dcfc90031a6b50e8cfba7b0e1454a9d3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://index/design/image/icon002.png"
-dest_files=["res://.godot/imported/icon002.png-2e1fb3295542bb1921be3efb1a446e4f.ctex"]
+source_file="res://index/design/image/animation/knight_power_up_x3.png"
+dest_files=["res://.godot/imported/knight_power_up_x3.png-dcfc90031a6b50e8cfba7b0e1454a9d3.ctex"]
 
 [params]
 
