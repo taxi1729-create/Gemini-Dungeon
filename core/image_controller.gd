@@ -42,7 +42,15 @@ func show_image(image_name: String, pos: Vector2, scale: Vector2, color: Color, 
 	tween.tween_property(sprite, "modulate:a", color.a, duration_sec) # 指定フレームかけて本来の透明度へ
 	
 	return image_id
-
+func get_image_position(image_id: String) -> Vector2:
+	if active_images.has(image_id):
+		var img = active_images[image_id]
+		if is_instance_valid(img):
+			return img.position
+	
+	# 見つからない場合はゼロベクトルを返すか、エラーログを出す
+	push_warning("ImageController: ID " + image_id + " が見つかりません。")
+	return Vector2.ZERO
 # 2. 画像を操作する関数
 func manipulate_image(image_id: String, target_pos: Vector2, target_scale: Vector2, target_color: Color, target_rotation_deg: float, flip_h: bool, duration_frames: int):
 	if not active_images.has(image_id):

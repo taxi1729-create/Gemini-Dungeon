@@ -16,13 +16,17 @@ const DATA = {
 		"ActionPoint": "res://index/design/image/icon/icon022.png"
 	},
 	"card_frame": {
-		"frame_normal": "res://index/design/image/deck/card_frame_red.png",
+		"frame_normal_red": "res://index/design/image/deck/card_frame_red.png",
 		"frame_normal_blu": "res://index/design/image/deck/card_frame_blu.png",
 		"frame_normal_gre": "res://index/design/image/deck/card_frame_gre.png",
 		"frame_rare": "res://index/design/image/deck/card_frame_gol.png"
 	},
 	"card_sleeve": {
 		"sleeve_red": "res://index/design/image/deck/card_sleeve_magic.png",
+		"sleeve_blue": "res://index/design/image/deck/card_sleeve_treas.png"
+	},
+		"card_image": {
+		"slash": "res://index/design/image/deck/card_sleeve_treas.png",
 		"sleeve_blue": "res://index/design/image/deck/card_sleeve_treas.png"
 	},
 	"background": {
