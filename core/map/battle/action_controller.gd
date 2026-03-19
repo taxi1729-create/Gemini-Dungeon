@@ -3,7 +3,6 @@ class_name ActionController
 
 static func execute_action(user: Dictionary, action: Dictionary, allies: Array, enemies: Array):
 	var targets = _resolve_targets(user, action.target, allies, enemies)
-	
 	for target in targets:
 		if target.hp <= 0: continue
 		
@@ -11,7 +10,9 @@ static func execute_action(user: Dictionary, action: Dictionary, allies: Array, 
 		if action.has("power"):
 			var dmg = max(0, action.power - target.def)
 			target.hp -= dmg
-		
+			#if target.hp <1:
+			#	print(target.name,"は倒された",target)
+
 		# 特殊効果処理
 		if action.has("effect"):
 			match action.effect:

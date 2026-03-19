@@ -43,5 +43,5 @@ func _draw_map_ui():
 func _on_node_selected(node_id: String):
 	current_node = node_id
 	var type = map_data[node_id]["type"]
-	if type == "battle": get_tree().change_scene_to_file("res://core/map/battle/battle_controller.tscn")
+	if type == "battle": get_tree().change_scene_to_file("res://core/map/battle/battle_scene.tscn")
 	elif type == "rest": get_tree().change_scene_to_file("res://core/map/rest/camp_controller.tscn")

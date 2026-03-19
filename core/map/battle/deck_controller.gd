@@ -9,15 +9,35 @@ var discard_pile = []
 # バトル開始時に、CurrentDeckのデータを受け取って山札を作る
 func setup_battle_deck(master_deck_ids: Array):
 	draw_pile.clear()
-	hand = [null,null,null,null]
+	hand = [null, null, null, null]
 	discard_pile.clear()
 	
-	# IDの文字列リストを、実際のカードデータ（辞書）に変換して山札へ入れる
 	for card_id in master_deck_ids:
 		if ActionList.ALLY_CARDS.has(card_id):
-			draw_pile.append(ActionList.ALLY_CARDS[card_id].duplicate(true))
+			# --- 1. 元データをコピーして、このカード専用の辞書を作る ---
+			var card_data = ActionList.ALLY_CARDS[card_id].duplicate(true)
+			# ここに ID も持たせておくと、後で便利です
+			card_data["id"] = card_id
 			
-	# 初期シャッフル
+			# --- 2. レアリティのデフォルト値設定 (コピーに対して行うのでOK) ---
+			if not card_data.has("rarity"):
+				card_data["rarity"] = "normal"
+			if not card_data.has("card_sleeve"):
+				card_data["card_sleeve"] = "sleeve_magic"			
+			# --- 3. タイプのルールに基づいたフレーム設定 ---
+			if not card_data.has("card_frame"):
+				match card_data.get("type", ""):
+					"attack":
+						card_data["card_frame"] = "frame_red"
+					"skill":
+						card_data["card_frame"] = "frame_blu"
+					_:
+						card_data["card_frame"] = "frame_green"
+			
+			# --- 4. 整形が終わったデータを山札に追加 ---
+			draw_pile.append(card_data)
+	
+	# 必要ならここでシャッフル
 	draw_pile.shuffle()
 
 func draw_cards(amount: int):

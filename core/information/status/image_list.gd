@@ -16,18 +16,27 @@ const DATA = {
 		"ActionPoint": "res://index/design/image/icon/icon022.png"
 	},
 	"card_frame": {
-		"frame_normal_red": "res://index/design/image/deck/card_frame_red.png",
-		"frame_normal_blu": "res://index/design/image/deck/card_frame_blu.png",
-		"frame_normal_gre": "res://index/design/image/deck/card_frame_gre.png",
+		"frame_red": "res://index/design/image/deck/card_frame_red.png",
+		"frame_blu": "res://index/design/image/deck/card_frame_blu.png",
+		"frame_gre": "res://index/design/image/deck/card_frame_gre.png",
 		"frame_rare": "res://index/design/image/deck/card_frame_gol.png"
 	},
 	"card_sleeve": {
-		"sleeve_red": "res://index/design/image/deck/card_sleeve_magic.png",
-		"sleeve_blue": "res://index/design/image/deck/card_sleeve_treas.png"
+		"sleeve_magic": "res://index/design/image/deck/card_sleeve_magic.png",
+		"sleeve_treas": "res://index/design/image/deck/card_sleeve_treas.png"
 	},
-		"card_image": {
-		"slash": "res://index/design/image/deck/card_sleeve_treas.png",
-		"sleeve_blue": "res://index/design/image/deck/card_sleeve_treas.png"
+	"card_image": {
+		"buff_1":"res://index/design/image/deck/deck_image/buff_1.jpg",
+		"buff_2":"res://index/design/image/deck/deck_image/buff_2.jpeg",
+		"debuff_1":"res://index/design/image/deck/deck_image/debuff_1.jpg",
+		"fire_1":"res://index/design/image/deck/deck_image/fire.jpg",
+		"force_1":"res://index/design/image/deck/deck_image/force.jpg",
+		"ice_1":"res://index/design/image/deck/deck_image/ice.jpg",	
+		"shield_1":"res://index/design/image/deck/deck_image/shield_1.jpeg",
+		"slash_1": "res://index/design/image/deck/deck_image/slash_wave.jpg",
+		"slash_2": "res://index/design/image/deck/deck_image/slash_wave.jpg",
+		"slash_3":"res://index/design/image/deck/deck_image/slash_3.jpeg",
+		"thunder_1":"res://index/design/image/deck/deck_image/thunder.jpg"
 	},
 	"background": {
 		"bg_cave": "res://index/design/image/5d94cf5a84a05e7ac36012fb632f63c9_t.jpeg"

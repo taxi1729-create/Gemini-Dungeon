@@ -7,7 +7,7 @@ var enemies = []
 
 func sync_from_init():
 	allies = [
-		{"id": "knight", "hp": 20, "max_hp": 20, "def": 1, "spd": 3, "ap": 3, "color": Color.GREEN, "status_effects": {}},
-		{"id": "witch", "hp": 15, "max_hp": 15, "def": 0, "spd": 6, "ap": 3, "color": Color.PURPLE, "status_effects": {}}
+		{"id": "knight", "hp": 20, "max_hp": 20, "def": 1, "spd": 3, "ap": 3, "color": Color.GREEN, "status_effects": {},"flip_h": true},
+		{"id": "witch", "hp": 15, "max_hp": 15, "def": 0, "spd": 6, "ap": 3, "color": Color.PURPLE, "status_effects": {},"flip_h": false}
 	]
 	enemies = []

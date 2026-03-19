@@ -9,7 +9,7 @@ const DATA = {
 	#},
 	"cave": {
 		"name": "暗がりの洞窟",
-		"enemies": ["nagool", "spider", "skeleton"]
+		"enemies": ["gool", "goblin", "skeleton", "dark_knight","fire_warriar", "green_dragon"]
 	}
 }
 

@@ -8,15 +8,15 @@ const DATA = {
 		"name_jp": "ナイト",
 		"hp": 20, "max_hp": 20,
 		"spd": 3, "def": 1,
-		"ap": 3, "max_ap": 5,"color":Color.GREEN,"side":"ally"
-		,"icon": "sword_icon", "motion_group": "knight_motions"
+		"ap": 3, "max_ap": 5,"color":Color.GREEN,"side":"ally","is_defeat":false
+		,"icon": "sword_icon", "motion_group": "knight_motions","flip_h": true,
 	},
 	"witch": { "id": "witch",
 		"name_jp": "ウィッチ",
 		"hp": 15, "max_hp": 15,
 		"spd": 6, "def": 0,
-		"ap": 3, "max_ap": 5,"color":Color.PURPLE,"side":"ally",
-		"icon": "potion_icon", "motion_group": "witch_motions"
+		"ap": 3, "max_ap": 5,"color":Color.PURPLE,"side":"ally","is_defeat":false,
+		"icon": "potion_icon", "motion_group": "witch_motions","flip_h": false,
 	}
 }
 
