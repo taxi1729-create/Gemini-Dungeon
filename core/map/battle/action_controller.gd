@@ -32,7 +32,7 @@ static func _resolve_targets(user: Dictionary, target_type: String, allies: Arra
 	var is_user_ally = allies.has(user)
 	var opponent_team = enemies if is_user_ally else allies
 	var own_team = allies if is_user_ally else enemies
-	
+	#print(opponent_team)
 	match target_type:
 		"self":
 			return [user]
@@ -42,7 +42,31 @@ static func _resolve_targets(user: Dictionary, target_type: String, allies: Arra
 			return opponent_team
 		"front_enemy_single", "front_enemy_group":
 			# 最も配列の前(0番目)にいる生きている敵を「目の前」と判定
+			var user_vec2 =str_to_vector2(user.grid_key)
+			var min_distance =9999999
+			var nearest_enemy = [user]
 			for e in opponent_team:
-				if e.hp > 0: return [e]
-			return []
+				var enemy_vec2 =str_to_vector2(e.grid_key)
+				var distance = enemy_vec2.distance_to(user_vec2)
+				if distance < min_distance and e.hp > 0:
+					min_distance = distance
+					nearest_enemy=e
+	#	print(user.id,"一番近い相手",nearest_enemy.name)
+			return [nearest_enemy]
+		#return []
 	return []
+
+
+# 文字列(A0, C3など)を Vector2(x, y) に変換する関数
+static func str_to_vector2(coord_str: String) -> Vector2:
+	if coord_str.length() < 2:
+		return Vector2.ZERO
+	
+	# 1文字目(A, B, C...)を数値(0, 1, 2...)に変換
+	# 'A' はアスキーコードで 65
+	var x = coord_str.unicode_at(0) - 65
+	
+	# 2文字目以降を数値に変換
+	var y = coord_str.substr(1).to_int()
+	
+	return Vector2(x, y)

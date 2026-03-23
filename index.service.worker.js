@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1773939845|6338537925';
+const CACHE_VERSION = '1774282419|66196035647';
 /** @type {string} */
 const CACHE_PREFIX = 'Gemini-Dungeon-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;

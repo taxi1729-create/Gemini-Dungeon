@@ -39,6 +39,6 @@ const DATA = {
 		"thunder_1":"res://index/design/image/deck/deck_image/thunder.jpg"
 	},
 	"background": {
-		"bg_cave": "res://index/design/image/5d94cf5a84a05e7ac36012fb632f63c9_t.jpeg"
+		"bg_forest": "res://index/design/image/map/background_f.PNG"
 	}
 }

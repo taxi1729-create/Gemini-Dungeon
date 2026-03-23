@@ -26,6 +26,7 @@ var hand_buttons = []
 var hp_bars = {}
 var hp_labels = {}
 var ap_displays = {} # ← 名前を変更！ (AP画像を束ねる箱を管理します)
+var icon_displays = {} # ← 名前を変更！ (AP画像を束ねる箱を管理します)
 var info_label: Label
 var item_menu: Panel # アイテム選択用パネル
 
@@ -38,6 +39,8 @@ func _ready():# ... 既存の初期化 ...
 
 	_init_grid()
 	desc_label = _add_label("", "A5", Color.WHITE)
+	var win = get_viewport_rect().size
+	var background_img = ImageController.show_image("bg_forest", Vector2(win.x/2,win.y/4), {})
 	desc_label.visible = false
 	_init_battle_data()
 	_create_ui()
@@ -50,7 +53,7 @@ func _ready():# ... 既存の初期化 ...
 func _init_grid():
 	var win = get_viewport_rect().size
 	var sep_x =9
-	var sep_y =8
+	var sep_y =9
 	var cw = win.x / sep_x
 	var ch = win.y / sep_y
 	for i in range(sep_x):
@@ -76,7 +79,7 @@ func _init_battle_data():
 	# 敵をランダムに1〜4体生成
 	status.enemies.clear()
 	var enemy_count = (randi() % 3) + 2
-	var e_positions = ["I1", "A1", "F0", "B0"] # 指定された敵配置
+	var e_positions = ["I2", "A2", "G1", "B1"] # 指定された敵配置
 	
 	# エリアリストから出現モンスターを抽選
 	var pool = AreaList.get_enemy_pool("cave") # cave固定。実際はMapから渡す
@@ -139,6 +142,9 @@ func _create_ui():
 	_init_item_menu()
 func _add_status_ui(data):
 	var id = data.id
+	var scale = Vector2(1.0,1.0)
+	if id == "knight":
+		scale = Vector2(0.6,0.6)
 	var pos = grid_map[data.grid_key]
 	var is_ally = data.get("side", "ally") == "ally"
 	
@@ -149,13 +155,14 @@ func _add_status_ui(data):
 	var motion_group = master_data.get("motion_group", "knight_motions")
 	var idle_anim = AnimationList.MOTION_GROUPS[motion_group]["idle"]
 	var flip = data.flip_h
-	data["anim_id"] = AnimationController.play_animation(idle_anim, pos,  {"is_loop":true,"flip_h":flip})
+	data["anim_id"] = AnimationController.play_animation(idle_anim, pos,  {"is_loop":true,"flip_h":flip,"scale":scale})
 	
 	# --- B. HPバーの生成 ---
 	var bar = TextureProgressBar.new()
+	bar.nine_patch_stretch = true
 	# TODO: ここでImageListからHPバーのテクスチャをロードしてください
-	# bar.texture_under = load("res://assets/ui/bar_under.png")
-	# bar.texture_progress = load("res://assets/ui/bar_progress.png")
+	bar.texture_under = load("res://index/design/image/system/pipo-WindowBaseSet2a_01.png")
+	bar.texture_progress = load("res://index/design/image/system/pipo-WindowBaseSet2b_07.png")
 	bar.max_value = data.max_hp
 	bar.value = data.hp
 	bar.size = Vector2(100, 10) # 適宜サイズ調整
@@ -167,6 +174,11 @@ func _add_status_ui(data):
 	$UI.add_child(name_label)
 	# ラベルをhp_labelsに登録（_update_ui_displaysで更新するため）
 	hp_labels[id] = name_label
+	
+	# --- D. chara表示用のコンテナ生成 ---
+	var icon_node = Node2D.new()
+	$UI.add_child(icon_node)
+	icon_displays[id] = icon_node
 	
 	# --- D. AP表示用のコンテナ生成 ---
 	var ap_node = Node2D.new()
@@ -229,11 +241,11 @@ func _setup_ally_turn(user_data):
 	user_data.ap += 1
 	
 	# アニメーションを turn に変更
-	
+	var flip_h = user_data.flip_h
 	AnimationController.stop_animation(user_data.anim_id)
 	var master_data = InitAllyStatus.DATA[user_data.id]
 	var anim_name = AnimationList.MOTION_GROUPS[master_data["motion_group"]]["turn"]
-	user_data.anim_id = AnimationController.play_animation(anim_name, grid_map[user_data.grid_key], {"is_loop":true})
+	user_data.anim_id = AnimationController.play_animation(anim_name, grid_map[user_data.grid_key], {"is_loop":true,"flip_h":flip_h})
 	#print(user_data)
 	_update_ui_displays()
 
@@ -252,21 +264,31 @@ func _execute_card_action(hand_idx: int, action_data: Dictionary):
 	# アクション実行
 	ActionController.execute_action(user, action_data, status.allies, status.enemies)
 	#アニメ更新、ターンのアニメ消去
+	var flip_h = action_order[active_idx].data.flip_h
+	print("muki",flip_h)
 	AnimationController.stop_animation(user.anim_id)
 	#攻撃のアニメ
 	var master_data = InitAllyStatus.DATA[user.id]
 	var anim_name = AnimationList.MOTION_GROUPS[master_data["motion_group"]]["attack"]
-	user.anim_id = AnimationController.play_animation(anim_name, grid_map[user.grid_key], {})
 	if action_data.target == "front_enemy_single":
 		var target_data =ActionController._resolve_targets(user, action_data.target, status.allies, status.enemies)
 		for target_key in target_data:
+			var flip_s =flip_h
+			if target_key.flip_h == flip_h:
+				flip_s = !flip_h
+			user.anim_id = AnimationController.play_animation(anim_name, grid_map[user.grid_key], {"flip_h":flip_s})
 			var move_vector = (grid_map[target_key.grid_key] + grid_map[user.grid_key])/2
 			AnimationController.move_animation_arc(user.anim_id, move_vector, {"arc_height":-200,"duration":10})
+	elif action_data.target == "ally_all" or "self":
+		anim_name = AnimationList.MOTION_GROUPS[master_data["motion_group"]]["skill"]	
+		user.anim_id = AnimationController.play_animation(anim_name, grid_map[user.grid_key], {"flip_h":flip_h})
+	else:
+		user.anim_id = AnimationController.play_animation(anim_name, grid_map[user.grid_key], {"flip_h":flip_h})
 	#await AnimationController.wait_for_animation(user.anim_id, true)
 	get_tree().create_timer(0.7).timeout.connect(func():
 		AnimationController.stop_animation(user.anim_id)
 		anim_name = AnimationList.MOTION_GROUPS[master_data["motion_group"]]["turn"]
-		user.anim_id = AnimationController.play_animation(anim_name, grid_map[user.grid_key], {"is_loop":true}))
+		user.anim_id = AnimationController.play_animation(anim_name, grid_map[user.grid_key], {"is_loop":true,"flip_h":flip_h}))
 	# デッキ処理：使用したカードを捨札へ、新しいカードを1枚引く
 	var start_pos = hand_buttons[hand_idx].global_position + Vector2(60, 30) # ボタンの中心付近
 	var end_pos = grid_map["G6"]
@@ -310,7 +332,8 @@ func _execute_swap():
 	var temp_key = user.grid_key
 	user.grid_key = partner.grid_key
 	partner.grid_key = temp_key
-	
+	user.flip_h = !user.flip_h
+	partner.flip_h = !partner.flip_h
 	var idx_a = status.allies.find(user)
 	var idx_b = status.allies.find(partner)
 	status.allies[idx_a] = partner
@@ -415,7 +438,7 @@ func _update_hand_ui(dc):
 			btn.set_meta("hand_idx", i)
 			btn.visible = true
 			btn.self_modulate.a = 0.0 # ボタン自体は透明にして当たり判定だけ残す
-			
+			print("hand_idx",i,"",card.name)
 			var pos = btn.global_position + (btn.size / 2.0)
 			
 			# 1. フレームとイラスト描画 (ImageController想定)
@@ -425,15 +448,17 @@ func _update_hand_ui(dc):
 			hand_ui_elements.append_array([frame_id, art_id])
 			print(hand_ui_elements)
 			# 2. 消費AP (右上)
-			var ap_icon = ImageController.show_image("ActionPoint", pos + Vector2(50, -50), {})
-			var ap_lbl = _create_ui_label(str(card.ap), pos + Vector2(65, -45), Color.WHITE)
+			var ap_icon = ImageController.show_image("ActionPoint", pos + Vector2(80, -80), {"scale":Vector2(5, 5)})
+			var ap_lbl = _create_ui_label(str(card.ap), pos + Vector2(60, -125), Color.PURPLE)
+			ap_lbl.scale=Vector2(3,3)
 			hand_ui_elements.append_array([ap_icon, ap_lbl])
 			
 			# 3. 攻撃力 (左上、パワー0以外)
 			var power = card.get("power", 0)
 			if power > 0:
-				var atk_icon = ImageController.show_image("sword_icon", pos + Vector2(-50, -50), {})
-				var atk_lbl = _create_ui_label(str(power), pos + Vector2(-35, -40), Color.WHITE)
+				var atk_icon = ImageController.show_image("sword_icon", pos + Vector2(-80, -80), {"scale":Vector2(5, 5)})
+				var atk_lbl = _create_ui_label(str(power), pos + Vector2(-65, -125), Color.GREEN)
+				atk_lbl.scale=Vector2(3,3)
 				hand_ui_elements.append_array([atk_icon, atk_lbl])
 				
 			# 4. 対象・効果アイコン (中央下)
@@ -441,6 +466,7 @@ func _update_hand_ui(dc):
 			if card.has("status_effect"):
 				var status_icon = ImageController.show_image(card.status_effect.icon, pos + Vector2(-90, -60), {})
 				eff_text += "\n" + card.status_effect.name + " " + str(card.status_effect.duration) + "T"
+				eff_text.scale=Vector2(2,2)
 			var eff_lbl = _create_ui_label(eff_text, pos + Vector2(-30, 20), Color.WHITE)
 			hand_ui_elements.append(eff_lbl)
 			#print(btn.button_down.is_connected)
@@ -471,15 +497,29 @@ func _create_ui_label(txt: String, pos: Vector2, color: Color) -> Label:
 # --- 長押しと拡大・縮小処理 ---
 func _on_hand_down(btn: Button, frame_id: String, art_id: String, card: Dictionary):
 	is_pressing = true
-	press_time = 0.0
 	current_press_data = card
-	_process(300)
+	if is_pressing:
+		press_time += 0.5
+		
+		if press_time >= LONG_PRESS_TIME and not desc_label.visible:
+			# 長押し成立時：説明表示
+			desc_label.text = current_press_data.get("description", "説明がありません。")
+			desc_label.visible = true
+			var user = action_order[active_idx].data
+			var target_data =ActionController._resolve_targets(user, current_press_data.target, status.allies, status.enemies)
+			print("カードデータ",card)
+			# 対象の点滅処理
+			target_anim_ids.clear()
+			for t in target_data:
+				AnimationController.set_blink(t.anim_id, true)
+				target_anim_ids.append(t.anim_id)
 	# 画像の拡大
 	ImageController.manipulate_image(frame_id,  {"pos":ImageController.get_image_position(frame_id),"scale":2*card_default_size,"duration":10})
 	ImageController.manipulate_image(art_id, {"pos":ImageController.get_image_position(art_id),"scale":2*card_default_size,"duration":10})
 
 func _on_hand_up(btn: Button, frame_id: String, art_id: String):
 	is_pressing = false
+	press_time = 0.0
 	desc_label.visible = false
 	
 	# 点滅の解除
@@ -520,26 +560,6 @@ func _play_buff_effect(target_data):
 # 今後タップした時に呼ばれる関数 (今回はログ出力のみ)
 func _on_character_tapped(char_data):
 	print(char_data.id + " の詳細ステータスを開きます！ (後日実装)")
-func _process(delta):
-	if is_pressing:
-		press_time += delta
-		if press_time >= LONG_PRESS_TIME and not desc_label.visible:
-			# 長押し成立時：説明表示
-			desc_label.text = current_press_data.get("description", "説明がありません。")
-			desc_label.visible = true
-			
-			# 対象の点滅処理
-			target_anim_ids.clear()
-			var target_type = current_press_data.get("target", "")
-			var targets = []
-			#ここの処理が違う。
-			print("_process光る判定がおかしい")
-			if "enemy" in target_type: targets = status.enemies
-			elif "ally" in target_type: targets = status.allies
-			
-			for t in targets:
-				AnimationController.set_blink(t.anim_id, true)
-				target_anim_ids.append(t.anim_id)
 func _update_ui_displays():
 	for char in status.allies + status.enemies:
 		var id = char.id
@@ -556,11 +576,11 @@ func _update_ui_displays():
 			# HPバーの位置と数値更新
 			if hp_bars.has(id):
 				hp_bars[id].value = char.hp
-				hp_bars[id].position = current_pos + Vector2(-50, 40)
+				hp_bars[id].position = current_pos + Vector2(-50, 70)
 			
 			if hp_labels.has(id):
 				hp_labels[id].text = str(char.hp) + "/" + str(char.max_hp)
-				hp_labels[id].position = current_pos + Vector2(-50, 55)
+				hp_labels[id].position = current_pos + Vector2(-50, 40)
 			# 個別ユニットのステータスUI（シールド・状態異常）を更新
 			var base_pos = grid_map[char.grid_key]
 			# アイコンを表示する基準点（ユニットの少し右上など）
@@ -589,7 +609,7 @@ func _update_ui_displays():
 		# APアイコンの描画（ここが重要！）
 		if ap_displays.has(id):
 			var ap_node = ap_displays[id]
-			ap_node.position = current_pos + Vector2(-50, 100)
+			ap_node.position = current_pos + Vector2(-40, 90)
 			# 一旦古いアイコンを消去
 			for child in ap_node.get_children():
 				child.queue_free()
@@ -601,6 +621,17 @@ func _update_ui_displays():
 				ap_icon.scale = Vector2(0.8, 0.8)
 				ap_icon.position = Vector2(i * 15, 0) # 横に並べる
 				ap_node.add_child(ap_icon)
+				
+		if icon_displays.has(id):
+			var icon_node = icon_displays[id]
+			icon_node.position = current_pos + Vector2(-50, 55)
+			# 一旦古いアイコンを消去
+			for child in icon_node.get_children():
+				child.queue_free()
+			var char_icon = Sprite2D.new()
+			char_icon.texture = load(ImageList.DATA["icon"][char.icon])
+			char_icon.scale = Vector2(1.2, 1.2)
+			icon_node.add_child(char_icon)
 var deck_sleeves_imgs: Array = []
 func _update_deck_ui(dc):
 	# 古いスリーブ画像を消去
