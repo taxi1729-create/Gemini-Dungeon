@@ -1,0 +1,42 @@
+[gd_scene format=3 uid="uid://r5k2jeoksxpx"]
+
+[ext_resource type="Script" uid="uid://v3c3iofl2vcc" path="res://BattleResult.gd" id="1_571c2"]
+
+[node name="BattleResult" type="CanvasLayer" unique_id=1462236971]
+script = ExtResource("1_571c2")
+
+[node name="Background" type="ColorRect" parent="." unique_id=346538600]
+offset_right = 1276.0
+offset_bottom = 1777.0
+color = Color(0.52156866, 0.6117647, 0.96862745, 1)
+
+[node name="ResultWindow" type="Panel" parent="." unique_id=144415761]
+anchors_preset = -1
+anchor_left = 0.22900002
+anchor_top = 0.17
+anchor_right = 0.22900002
+anchor_bottom = 0.17
+offset_left = 100.589966
+offset_top = 276.68
+offset_right = 472.58997
+offset_bottom = 844.68
+
+[node name="TitleLabel" type="Label" parent="ResultWindow" unique_id=919616616]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 24.0
+
+[node name="RewardsContainer" type="VBoxContainer" parent="ResultWindow" unique_id=1976585209]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="CardSelection" type="HBoxContainer" parent="ResultWindow" unique_id=1111189140]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="ActionButtons" type="HBoxContainer" parent="ResultWindow" unique_id=370949919]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
