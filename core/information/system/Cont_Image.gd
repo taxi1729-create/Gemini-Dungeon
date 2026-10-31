@@ -4,33 +4,47 @@ extends Node
 ## どの関数も「描画先の CanvasItem」を受け取り、その CanvasItem の _draw() の中から呼ぶ。
 
 const COL = {
-	"bg": Color("0e1222"),
-	"panel": Color("1a2136"),
-	"panel_hi": Color("26304d"),
-	"line": Color("3a4566"),
-	"gold": Color("e8c26a"),
-	"gold_d": Color("9c7a33"),
-	"text": Color("f2ede0"),
-	"sub": Color("9aa3bd"),
-	"attack": Color("b8423a"),
-	"skill": Color("3a6fc0"),
-	"passive": Color("3d9058"),
-	"hp": Color("e0524c"),
-	"hp_back": Color("3a1d24"),
+	# 基調：黒・白・赤（スタイリッシュなメニュー風の高コントラスト配色）
+	"bg": Color("0a0a0c"),
+	"panel": Color("141417"),
+	"panel_hi": Color("222228"),
+	"line": Color("46464e"),
+	"gold": Color("f2c94c"),
+	"accent": Color("e8213a"),  # 差し色（赤）
+	"knight": Color("2f7cf0"),
+	"witch": Color("9b4dea"),
+	"gold_d": Color("5a5a62"),
+	"text": Color("f5f3ee"),
+	"sub": Color("a8a8b0"),
+	"attack": Color("c8303c"),
+	"skill": Color("2f68c8"),
+	"passive": Color("2f9258"),
+	"hp": Color("e8213a"),
+	"hp_back": Color("2a0c12"),
 	"shield": Color("8fc0ea"),
 	"ap": Color("b88cff"),
-	"good": Color("6fd08a"),
-	"bad": Color("ff7a6b"),
+	"good": Color("7be09a"),
+	"bad": Color("ff5a5a"),
+	# 追加：スタイル用の基本色
+	"ink": Color("0a0a0c"),  # 墨（いちばん濃い黒）
+	"paper": Color("f7f5f0"),  # 紙（吹き出し・白帯）
+	"red": Color("e8213a"),  # 赤（強調・選択中）
+	"red_d": Color("7a0c1a"),  # 暗い赤（影・地色）
+	"steel": Color("2c2c33"),  # 無効・控えめな面
 }
 
 var font: Font
 var font_bold: Font
+var font_head: Font  # 見出し用（極太＋斜体）
 
 
 func _ready() -> void:
 	var base: Font = load("res://index/design/NotoSansJP-VariableFont_wght.ttf")
 	font = _weight(base, 500)
 	font_bold = _weight(base, 800)
+	var fh := _weight(base, 900) as FontVariation
+	fh.variation_transform = Transform2D(Vector2(1, 0), Vector2(-0.2, 1), Vector2.ZERO)  # 右に傾けた斜体
+	font_head = fh
 
 
 func _weight(base: Font, w: int) -> Font:
@@ -48,11 +62,30 @@ func _weight(base: Font, w: int) -> Font:
 func text(ci: CanvasItem, s: String, center: Vector2, size: int, col: Color = COL.text,
 		bold: bool = false, outline: int = 0, max_w: float = -1.0,
 		out_col: Color = Color(0, 0, 0, 0.85)) -> void:
-	var f: Font = font_bold if bold else font
+	_text_f(ci, font_bold if bold else font, s, center, size, col, outline, max_w, out_col)
+
+
+## 見出し文字（極太の斜体）。shadow_col を指定すると右下にずらした影（ベタ影）を付ける
+func head(ci: CanvasItem, s: String, center: Vector2, size: int, col: Color = COL.paper,
+		max_w: float = -1.0, shadow_col: Color = Color(0, 0, 0, 0), shadow_off: Vector2 = Vector2(4, 4),
+		outline: int = 0, out_col: Color = COL.ink) -> void:
+	if shadow_col.a > 0:
+		_text_f(ci, font_head, s, center + shadow_off, size, shadow_col, outline, max_w, shadow_col)
+	_text_f(ci, font_head, s, center, size, col, outline, max_w, out_col)
+
+
+## max_w に収まる文字サイズを返す
+func fit_size(f: Font, s: String, size: int, max_w: float) -> int:
 	var fs := size
 	if max_w > 0:
 		while fs > 9 and f.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > max_w:
 			fs -= 1
+	return fs
+
+
+func _text_f(ci: CanvasItem, f: Font, s: String, center: Vector2, size: int, col: Color,
+		outline: int, max_w: float, out_col: Color) -> void:
+	var fs := fit_size(f, s, size, max_w)
 	var w := 1200.0
 	var pos := Vector2(center.x - w / 2.0, center.y + (f.get_ascent(fs) - f.get_descent(fs)) / 2.0)
 	if outline > 0:
@@ -104,6 +137,168 @@ func glow(ci: CanvasItem, c: Vector2, r: float, col: Color, steps: int = 6) -> v
 	for i in steps:
 		var k := 1.0 - float(i) / steps
 		ci.draw_circle(c, r * k, Color(col.r, col.g, col.b, col.a * (1.0 - k) * 0.5 + 0.03))
+
+
+# ============================================================
+# スタイル図形（斜めの帯・面取りパネル・ギザギザ吹き出し・斜線・網点）
+# ============================================================
+
+## 平行四辺形の頂点（上辺を右へ skew ずらす＝右に傾いた形）
+func slant_pts(r: Rect2, skew: float) -> PackedVector2Array:
+	return PackedVector2Array([Vector2(r.position.x + skew, r.position.y), Vector2(r.end.x, r.position.y),
+			Vector2(r.end.x - skew, r.end.y), Vector2(r.position.x, r.end.y)])
+
+
+## 左上と右下の角を斜めに落とした四角の頂点
+func cut_pts(r: Rect2, cut: float) -> PackedVector2Array:
+	return PackedVector2Array([Vector2(r.position.x + cut, r.position.y), Vector2(r.end.x, r.position.y),
+			Vector2(r.end.x, r.end.y - cut), Vector2(r.end.x - cut, r.end.y), Vector2(r.position.x, r.end.y),
+			Vector2(r.position.x, r.position.y + cut)])
+
+
+## 多角形を「影 → 縁 → 面」の順に描く（影は右下へずらしたベタ影、縁は外側へ太らせた多角形）
+func poly_box(ci: CanvasItem, poly: PackedVector2Array, fill: Color, border: float = 0.0,
+		border_col: Color = Color.TRANSPARENT, shadow_col: Color = Color.TRANSPARENT,
+		shadow_off: Vector2 = Vector2(6, 6)) -> void:
+	var outer := poly
+	if border > 0:
+		var grown := Geometry2D.offset_polygon(poly, border, Geometry2D.JOIN_MITER)
+		if not grown.is_empty():
+			outer = grown[0]
+	if shadow_col.a > 0:
+		var sh := PackedVector2Array()
+		for v in outer:
+			sh.append(v + shadow_off)
+		ci.draw_colored_polygon(sh, shadow_col)
+	if border > 0:
+		ci.draw_colored_polygon(outer, border_col)
+	ci.draw_colored_polygon(poly, fill)
+
+
+## 斜めの帯（平行四辺形）
+func slant(ci: CanvasItem, r: Rect2, col: Color, skew: float = 14.0, border: float = 0.0,
+		border_col: Color = Color.TRANSPARENT, shadow_col: Color = Color.TRANSPARENT,
+		shadow_off: Vector2 = Vector2(6, 6)) -> void:
+	poly_box(ci, slant_pts(r, skew), col, border, border_col, shadow_col, shadow_off)
+
+
+## 角を落としたパネル
+func cut_rect(ci: CanvasItem, r: Rect2, col: Color, cut: float = 14.0, border: float = 0.0,
+		border_col: Color = Color.TRANSPARENT, shadow_col: Color = Color.TRANSPARENT,
+		shadow_off: Vector2 = Vector2(6, 6)) -> void:
+	poly_box(ci, cut_pts(r, cut), col, border, border_col, shadow_col, shadow_off)
+
+
+## 0〜1 の決まった乱数（同じ seed なら毎フレーム同じ形になる）
+func _hash(i: float) -> float:
+	return fposmod(sin(i * 12.9898) * 43758.5453, 1.0)
+
+
+## 四角の周りをギザギザに尖らせた頂点（漫画の吹き出し風）。amp = 尖りの高さ、step = 尖りの間隔
+func jag_pts(r: Rect2, seed: int = 0, amp: float = 10.0, step: float = 21.0) -> PackedVector2Array:
+	var p := PackedVector2Array()
+	var corners := [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]
+	var outs := [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)]
+	var k := float(seed) * 7.31
+	for e in 4:
+		var a: Vector2 = corners[e]
+		var b: Vector2 = corners[(e + 1) % 4]
+		var o: Vector2 = outs[e]
+		# 角は斜め外へ少し張り出させる
+		var diag: Vector2 = (o + outs[(e + 3) % 4]) * amp * 0.9
+		p.append(a + diag)
+		var n := maxi(1, int(a.distance_to(b) / step))
+		for i in range(1, n):
+			var t := (float(i) + (_hash(k + i) - 0.5) * 0.5) / n
+			var h := amp * (0.55 + _hash(k + i * 3.3) * 0.9) if i % 2 == 1 else -amp * 0.25
+			p.append(a.lerp(b, t) + o * h)
+		k += 17.0
+	return p
+
+
+## 吹き出しの頂点（ギザギザの本体＋ tail_to へ向かう尖ったしっぽ）。tail_to.x < -9000 ならしっぽ無し
+func bubble_pts(r: Rect2, tail_to: Vector2 = Vector2(-9999, -9999), seed: int = 0,
+		amp: float = 9.0) -> PackedVector2Array:
+	var body := jag_pts(r, seed, amp)
+	if tail_to.x < -9000 or r.has_point(tail_to):
+		return body
+	# しっぽの根元：tail_to に一番近い辺の上に置く
+	var c := r.get_center()
+	var base := Vector2(clampf(tail_to.x, r.position.x + 30, r.end.x - 30), clampf(tail_to.y, r.position.y + 24, r.end.y - 24))
+	var horiz := absf(tail_to.y - c.y) / maxf(r.size.y, 1.0) >= absf(tail_to.x - c.x) / maxf(r.size.x, 1.0)
+	var w := 22.0
+	var b1: Vector2
+	var b2: Vector2
+	if horiz:
+		base.y = r.end.y - 4 if tail_to.y > c.y else r.position.y + 4
+		b1 = base + Vector2(-w, 0)
+		b2 = base + Vector2(w, 0)
+	else:
+		base.x = r.end.x - 4 if tail_to.x > c.x else r.position.x + 4
+		b1 = base + Vector2(0, -w)
+		b2 = base + Vector2(0, w)
+	var tip := tail_to
+	var lim := 70.0
+	if base.distance_to(tip) > lim:
+		tip = base + (tip - base).normalized() * lim
+	# 少しねじった三角形にして勢いを出す
+	var mid := (b1 + b2) / 2.0
+	var back := (tip - mid).normalized() * 12.0  # 根元を本体の内側へ少し食い込ませて確実につなぐ
+	var tail := PackedVector2Array([b1 - back, b2 - back, tip])
+	var merged := Geometry2D.merge_polygons(body, tail)
+	for m in merged:
+		if Geometry2D.is_polygon_clockwise(m) != Geometry2D.is_polygon_clockwise(body):  # 穴は飛ばす
+			continue
+		return m
+	return body
+
+
+## 白い吹き出し（黒い縁＋赤いベタ影）
+func bubble(ci: CanvasItem, r: Rect2, tail_to: Vector2 = Vector2(-9999, -9999), seed: int = 0,
+		fill: Color = COL.paper, line: Color = COL.ink, shadow: Color = COL.red, amp: float = 9.0) -> void:
+	poly_box(ci, bubble_pts(r, tail_to, seed, amp), fill, 4.0, line, shadow, Vector2(8, 8))
+
+
+## ギザギザの爆発形（漫画の効果線の星）
+func burst_pts(c: Vector2, r_out: float, r_in: float, n: int = 14, seed: int = 0, rot: float = 0.0) -> PackedVector2Array:
+	var p := PackedVector2Array()
+	for i in n * 2:
+		var a := rot + PI * i / n
+		var r := r_out * (0.78 + 0.22 * _hash(seed + i * 1.7)) if i % 2 == 0 else r_in * (0.9 + 0.1 * _hash(seed + i))
+		p.append(c + Vector2(cos(a), sin(a)) * r)
+	return p
+
+
+## 斜線の模様を rect の中に描く（slope = 横へずれる割合、gap = 間隔、w = 線の太さ）
+func stripes(ci: CanvasItem, r: Rect2, col: Color, gap: float = 18.0, w: float = 6.0, slope: float = 0.6) -> void:
+	var rect_poly := PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
+	var dx := r.size.y * slope
+	var x := r.position.x - dx
+	while x < r.end.x:
+		var band := PackedVector2Array([Vector2(x, r.end.y), Vector2(x + w, r.end.y),
+				Vector2(x + w + dx, r.position.y), Vector2(x + dx, r.position.y)])
+		if x >= r.position.x and x + w + dx <= r.end.x:
+			ci.draw_colored_polygon(band, col)
+		else:
+			for poly in Geometry2D.intersect_polygons(band, rect_poly):
+				ci.draw_colored_polygon(poly, col)
+		x += gap
+
+
+## 網点（ハーフトーン）。from に近いほど点が大きく、reach 離れると消える
+func halftone(ci: CanvasItem, r: Rect2, col: Color, from: Vector2, reach: float, spacing: float = 16.0,
+		max_r: float = 5.0) -> void:
+	var y := r.position.y
+	var row := 0
+	while y < r.end.y:
+		var x := r.position.x + (spacing / 2.0 if row % 2 == 1 else 0.0)
+		while x < r.end.x:
+			var k := 1.0 - Vector2(x, y).distance_to(from) / reach
+			if k > 0.06:
+				ci.draw_circle(Vector2(x, y), max_r * k, col)
+			x += spacing
+		y += spacing * 0.866
+		row += 1
 
 
 # ============================================================
@@ -471,14 +666,15 @@ func _arrow(ci: CanvasItem, c: Vector2, sc: float, up: bool) -> void:
 # ============================================================
 
 func card_back(ci: CanvasItem, r: Rect2) -> void:
-	round_rect(ci, r, Color("1b2650"), 10, 3, COL.gold_d)
-	var inner := r.grow(-8)
-	round_rect(ci, inner, Color("243266"), 6, 2, Color(COL.gold, 0.5))
+	# 黒地に赤の斜線、中央に白い双子の星
+	cut_rect(ci, r, COL.ink, 10, 2.0, COL.paper)
+	var inner := r.grow(-7)
+	stripes(ci, inner, Color(COL.red, 0.55), 12, 4, 0.7)
 	var c := r.get_center()
 	var s: float = min(r.size.x, r.size.y)
-	ci.draw_arc(c, s * 0.3, 0, TAU, 32, Color(COL.gold, 0.6), 2.0, true)
-	ci.draw_colored_polygon(star_pts(c + Vector2(-s * 0.1, -s * 0.05), s * 0.09, s * 0.035), COL.gold)
-	ci.draw_colored_polygon(star_pts(c + Vector2(s * 0.1, s * 0.05), s * 0.09, s * 0.035), COL.gold)
+	ci.draw_colored_polygon(slant_pts(Rect2(c - Vector2(s * 0.42, s * 0.2), Vector2(s * 0.84, s * 0.4)), s * 0.12), COL.ink)
+	ci.draw_colored_polygon(star_pts(c + Vector2(-s * 0.13, -s * 0.03), s * 0.12, s * 0.05), COL.paper)
+	ci.draw_colored_polygon(star_pts(c + Vector2(s * 0.13, s * 0.03), s * 0.12, s * 0.05), COL.paper)
 
 
 # ============================================================
@@ -721,67 +917,94 @@ func _vgrad(ci: CanvasItem, r: Rect2, top: Color, bottom: Color, steps: int = 24
 		ci.draw_rect(Rect2(r.position.x, r.position.y + h * i, r.size.x, h + 1), top.lerp(bottom, float(i) / (steps - 1)))
 
 
+## 画面を斜めに横切る光の帯（赤と白の細い筋）
+func _slash(ci: CanvasItem, r: Rect2, y0: float, y1: float, w: float, col: Color) -> void:
+	var p := PackedVector2Array([Vector2(r.position.x, y0), Vector2(r.position.x, y0 + w),
+			Vector2(r.end.x, y1 + w), Vector2(r.end.x, y1)])
+	ci.draw_colored_polygon(p, col)
+
+
 func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool) -> void:
 	var ground_y := r.position.y + r.size.y * (0.62 if not title else 0.72)
-	_vgrad(ci, Rect2(r.position, Vector2(r.size.x, ground_y - r.position.y)), Color("0d1020"), Color("26243a"))
-	_vgrad(ci, Rect2(r.position.x, ground_y, r.size.x, r.end.y - ground_y), Color("2c2536"), Color("15121e"), 12)
-	# 奥の岩壁
+	_vgrad(ci, Rect2(r.position, Vector2(r.size.x, ground_y - r.position.y)), Color("060608"), Color("1c1b21"))
+	_vgrad(ci, Rect2(r.position.x, ground_y, r.size.x, r.end.y - ground_y), Color("17161b"), Color("070709"), 12)
+	# 斜めに差す赤い光と白い筋
+	_slash(ci, r, r.position.y + r.size.y * 0.30, r.position.y - r.size.y * 0.05, r.size.y * 0.16, Color(COL.red, 0.10))
+	_slash(ci, r, r.position.y + r.size.y * 0.47, r.position.y + r.size.y * 0.10, 5, Color(COL.red, 0.35))
+	_slash(ci, r, r.position.y + r.size.y * 0.50, r.position.y + r.size.y * 0.13, 2, Color(1, 1, 1, 0.10))
+	# 網点（左上は白、右下は赤）
+	halftone(ci, Rect2(r.position, Vector2(300, 300)), Color(1, 1, 1, 0.05), r.position, 320, 18, 5)
+	halftone(ci, Rect2(r.end - Vector2(300, 260), Vector2(300, 260)), Color(COL.red, 0.12), r.end, 320, 18, 5)
+	# 奥の岩壁（尖ったシルエット）
 	var wall := PackedVector2Array()
 	wall.append(Vector2(r.position.x, ground_y))
-	var n := 12
+	var n := 14
 	for i in n + 1:
 		var x := r.position.x + r.size.x * i / n
-		var y := ground_y - 60 - 26 * sin(i * 1.7) - 16 * cos(i * 0.9)
+		var y := ground_y - 50 - (34 if i % 2 == 0 else 6) - 18 * sin(i * 1.7)
 		wall.append(Vector2(x, y))
 	wall.append(Vector2(r.end.x, ground_y))
-	ci.draw_colored_polygon(wall, Color("1e1b2c"))
+	ci.draw_colored_polygon(wall, Color("0e0e11"))
+	ci.draw_line(Vector2(r.position.x, ground_y), Vector2(r.end.x, ground_y), Color(1, 1, 1, 0.12), 2)
 	# つらら
 	for i in 9:
 		var x := r.position.x + (i + 0.5) * r.size.x / 9.0
 		var l := 40.0 + 34.0 * absf(sin(i * 2.3))
-		ci.draw_colored_polygon(PackedVector2Array([Vector2(x - 22, r.position.y), Vector2(x + 22, r.position.y), Vector2(x + 3, r.position.y + l)]), Color("181526"))
+		ci.draw_colored_polygon(PackedVector2Array([Vector2(x - 22, r.position.y), Vector2(x + 22, r.position.y), Vector2(x + 3, r.position.y + l)]), Color("040405"))
 	# 地面の遠近線
 	var cx := r.get_center().x
 	for i in 7:
 		var x := r.position.x + r.size.x * i / 6.0
-		ci.draw_line(Vector2(cx + (x - cx) * 0.3, ground_y), Vector2(x, r.end.y), Color(1, 1, 1, 0.04), 2)
+		ci.draw_line(Vector2(cx + (x - cx) * 0.3, ground_y), Vector2(x, r.end.y), Color(1, 1, 1, 0.05), 2)
 	for i in 4:
 		var y := ground_y + (r.end.y - ground_y) * pow((i + 1) / 5.0, 1.6)
-		ci.draw_line(Vector2(r.position.x, y), Vector2(r.end.x, y), Color(1, 1, 1, 0.035), 2)
-	# 松明
+		ci.draw_line(Vector2(r.position.x, y), Vector2(r.end.x, y), Color(1, 1, 1, 0.04), 2)
+	# 松明（赤い炎と白い芯）
 	for side in [-1, 1]:
 		var tx: float = cx + side * r.size.x * 0.46
 		var ty := ground_y - (90.0 if title else 190.0)
 		var fl := 0.85 + 0.15 * sin(t * 9.0 + side) + 0.08 * sin(t * 23.0)
-		glow(ci, Vector2(tx, ty), 120 * fl, Color("ff8a2a", 0.35), 8)
-		ci.draw_line(Vector2(tx, ty + 6), Vector2(tx, ty + 46), Color("5a3a24"), 6)
-		ci.draw_colored_polygon(_teardrop(Vector2(tx, ty + 4), 9, 30 * fl, sin(t * 7.0 + side) * 3), Color("ff9a2a"))
-		ci.draw_colored_polygon(_teardrop(Vector2(tx, ty + 6), 4, 16 * fl, 0), Color("ffe08a"))
-	# 漂う光の粒
+		glow(ci, Vector2(tx, ty), 110 * fl, Color(COL.red, 0.30), 8)
+		ci.draw_line(Vector2(tx, ty + 6), Vector2(tx, ty + 46), Color("2a2a30"), 6)
+		ci.draw_colored_polygon(_teardrop(Vector2(tx, ty + 4), 9, 30 * fl, sin(t * 7.0 + side) * 3), COL.red)
+		ci.draw_colored_polygon(_teardrop(Vector2(tx, ty + 6), 4, 16 * fl, 0), COL.paper)
+	# 漂う光の粒（白と赤）
 	for i in 14:
 		var px := r.position.x + fmod(i * 97.0 + t * (8 + i % 5), r.size.x)
 		var py := r.position.y + fmod(i * 61.0 - t * (5 + i % 3) * 3.0 + 2000.0, ground_y - r.position.y)
-		ci.draw_circle(Vector2(px, py), 1.5 + (i % 3) * 0.6, Color("ffd88a", 0.25 + 0.15 * sin(t * 2 + i)))
+		var pc := COL.red if i % 3 == 0 else Color.WHITE
+		ci.draw_rect(Rect2(Vector2(px, py), Vector2(3, 3)), Color(pc, 0.22 + 0.15 * sin(t * 2 + i)))
 
 
 func _bg_camp(ci: CanvasItem, r: Rect2, t: float) -> void:
 	_bg_cave(ci, r, t, true)
-	var c := Vector2(r.get_center().x, r.position.y + r.size.y * 0.7)
+	var c := Vector2(r.get_center().x, r.position.y + r.size.y * 0.44)  # 休憩所の画面で見える高さに置く
 	var fl := 0.9 + 0.1 * sin(t * 8.0) + 0.06 * sin(t * 21.0)
-	glow(ci, c + Vector2(0, -40), 300 * fl, Color("ff8a2a", 0.4), 10)
-	ci.draw_line(c + Vector2(-70, 14), c + Vector2(64, -10), Color("6e4526"), 16)
-	ci.draw_line(c + Vector2(70, 14), c + Vector2(-64, -10), Color("8a5a32"), 16)
+	glow(ci, c + Vector2(0, -40), 260 * fl, Color(COL.red, 0.35), 10)
+	ci.draw_colored_polygon(slant_pts(Rect2(c.x - 150, c.y + 14, 300, 14), 10), COL.ink)
+	ci.draw_line(c + Vector2(-70, 14), c + Vector2(64, -10), Color("2a2a30"), 16)
+	ci.draw_line(c + Vector2(70, 14), c + Vector2(-64, -10), Color("3a3a42"), 16)
 	var sway := sin(t * 5.0) * 6.0
-	ci.draw_colored_polygon(_teardrop(c + Vector2(0, -6), 46 * fl, 140 * fl, sway), Color("e0501e"))
-	ci.draw_colored_polygon(_teardrop(c + Vector2(0, -4), 32 * fl, 100 * fl, sway * 0.7), Color("ff9a2a"))
-	ci.draw_colored_polygon(_teardrop(c + Vector2(0, -2), 16 * fl, 56 * fl, sway * 0.4), Color("ffe08a"))
+	ci.draw_colored_polygon(_teardrop(c + Vector2(0, -6), 46 * fl, 140 * fl, sway), COL.red_d)
+	ci.draw_colored_polygon(_teardrop(c + Vector2(0, -4), 32 * fl, 100 * fl, sway * 0.7), COL.red)
+	ci.draw_colored_polygon(_teardrop(c + Vector2(0, -2), 16 * fl, 56 * fl, sway * 0.4), COL.paper)
 	for i in 8:
 		var k := fmod(t * 0.6 + i * 0.137, 1.0)
-		ci.draw_circle(c + Vector2(sin(i * 3.1 + t) * 30, -60 - k * 220), 2.0, Color("ffc06a", 1.0 - k))
+		ci.draw_rect(Rect2(c + Vector2(sin(i * 3.1 + t) * 30, -60 - k * 220), Vector2(3, 3)), Color(COL.red.lightened(0.3), 1.0 - k))
 
 
 func _bg_map(ci: CanvasItem, r: Rect2, t: float) -> void:
-	_vgrad(ci, r, Color("141a2e"), Color("0b0e1a"))
-	for i in 40:
+	_vgrad(ci, r, Color("0d0d10"), Color("050506"))
+	# 細かい斜線の地模様
+	stripes(ci, r, Color(1, 1, 1, 0.025), 22, 2, 0.6)
+	# 左上から伸びる赤い大きな斜めの帯
+	var band := PackedVector2Array([Vector2(r.position.x, r.position.y + 40), Vector2(r.position.x + 520, r.position.y),
+			Vector2(r.position.x + 720, r.position.y), Vector2(r.position.x, r.position.y + 420)])
+	ci.draw_colored_polygon(band, Color(COL.red, 0.10))
+	_slash(ci, r, r.position.y + 470, r.position.y - 60, 4, Color(COL.red, 0.35))
+	halftone(ci, Rect2(r.end - Vector2(320, 320), Vector2(320, 320)), Color(COL.red, 0.10), r.end, 360, 18, 5)
+	halftone(ci, Rect2(r.position + Vector2(0, r.size.y * 0.45), Vector2(240, 300)), Color(1, 1, 1, 0.04),
+			r.position + Vector2(0, r.size.y * 0.6), 220, 18, 4)
+	for i in 30:
 		var p := Vector2(fmod(i * 173.0, r.size.x), fmod(i * 291.0, r.size.y)) + r.position
-		ci.draw_circle(p, 1.2 + (i % 3) * 0.5, Color(1, 1, 1, 0.08 + 0.06 * sin(t + i)))
+		ci.draw_rect(Rect2(p, Vector2(2, 2)), Color(1, 1, 1, 0.08 + 0.06 * sin(t + i)))

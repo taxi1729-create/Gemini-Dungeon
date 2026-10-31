@@ -40,23 +40,28 @@ func _draw() -> void:
 
 func _draw_order() -> void:
 	var IC = ImageController
-	IC.round_rect(self, Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.45), 14)
-	IC.text(self, "行動順", Vector2(44, size.y / 2), 18, IC.COL.sub, true)
-	var x := 96.0
+	# 黒い帯＋左端に赤い見出しタグ
+	IC.slant(self, Rect2(Vector2.ZERO, size), Color(IC.COL.ink, 0.85), 18, 2.0, Color(1, 1, 1, 0.25))
+	var tag := Rect2(-2, 8, 92, size.y - 16)
+	IC.slant(self, tag, IC.COL.red, 12, 2.0, IC.COL.ink)
+	IC.head(self, "行動順", tag.get_center(), 19, IC.COL.paper, 72)
+	var x := 100.0
 	for i in units.size():
 		var u: Dictionary = units[i]
 		var is_cur := i == index
 		var w := 64.0 if is_cur else 52.0
 		var r := Rect2(x, (size.y - w) / 2, w, w)
-		var side_col: Color = Color("2f55a8") if u.get("side") == "ally" else Color("8a2f3a")
+		var side_col: Color = Color("1f3f86") if u.get("side") == "ally" else Color("6a1420")
 		var alive: bool = u.hp > 0
-		IC.round_rect(self, r, side_col.darkened(0.3) if alive else Color("222"), 10, 3 if is_cur else 2,
-				IC.COL.gold if is_cur else side_col)
+		if is_cur:
+			IC.slant(self, r, side_col, 8, 4.0, IC.COL.paper, IC.COL.red, Vector2(5, 5))
+		else:
+			IC.slant(self, r, side_col.darkened(0.35) if alive else Color("1a1a1e"), 8, 2.0, side_col.lightened(0.25) if alive else Color("333"))
 		var sc: float = 0.36 * w / 64.0 / float(u.get("art_scale", 1.0))
 		var face := 1.0 if u.get("side") == "ally" else -1.0
 		IC.character(self, u.get("art", "knight"), r.position + Vector2(w / 2, w - 6), sc * float(u.get("art_scale", 1.0)), face, _t)
 		if not alive:
-			draw_line(r.position + Vector2(8, 8), r.end - Vector2(8, 8), IC.COL.bad, 4)
+			draw_line(r.position + Vector2(8, 8), r.end - Vector2(8, 8), IC.COL.red, 5)
 		x += w + 8
 
 
@@ -67,23 +72,23 @@ func _draw_pile() -> void:
 		for i in mini(count, 3):
 			IC.card_back(self, Rect2(card.position + Vector2(i * 3, -i * 3), card.size))
 	else:
-		IC.round_rect(self, card, Color(0, 0, 0, 0.3), 10, 2, Color(1, 1, 1, 0.2))
-	IC.text(self, "%s %d" % [caption, count], Vector2(size.x / 2, size.y - 16), 16, IC.COL.text, true, 4)
+		IC.cut_rect(self, card, Color(0, 0, 0, 0.3), 10, 2.0, Color(1, 1, 1, 0.2))
+	IC.head(self, "%s %d" % [caption, count], Vector2(size.x / 2, size.y - 16), 17, IC.COL.paper, size.x, Color(0, 0, 0, 0), Vector2.ZERO, 4)
 
 
 func _draw_hub() -> void:
 	var IC = ImageController
 	var c := size / 2
-	draw_circle(c, 62, Color(0, 0, 0, 0.35))
-	draw_arc(c, 62, 0, TAU, 40, Color(1, 1, 1, 0.15), 2, true)
+	draw_circle(c, 62, Color(0, 0, 0, 0.5))
+	draw_arc(c, 62, 0, TAU, 40, Color(1, 1, 1, 0.25), 2, true)
 	var dirs := {8: Vector2(0, -1), 2: Vector2(0, 1), 4: Vector2(-1, 0), 6: Vector2(1, 0),
 			7: Vector2(-1, -1).normalized(), 9: Vector2(1, -1).normalized(), 1: Vector2(-1, 1).normalized(), 3: Vector2(1, 1).normalized()}
 	for k in dirs:
 		var d: Vector2 = dirs[k]
 		var on: bool = k == num
 		var p: Vector2 = c + d * 44
-		var col: Color = IC.COL.gold if on else Color(1, 1, 1, 0.25)
+		var col: Color = IC.COL.red if on else Color(1, 1, 1, 0.3)
 		var n := d.orthogonal()
 		draw_colored_polygon(PackedVector2Array([p + d * 10, p - d * 4 + n * 8, p - d * 4 - n * 8]), col)
 	draw_circle(c, 14, Color(1, 1, 1, 0.15 + 0.1 * sin(_t * 3.0)))
-	IC.text(self, "フリック", c + Vector2(0, 0), 13, Color(1, 1, 1, 0.55), true)
+	IC.text(self, "フリック", c + Vector2(0, 0), 13, Color(1, 1, 1, 0.6), true)

@@ -13,23 +13,34 @@ func _ready() -> void:
 	ui = CanvasLayer.new()
 	add_child(ui)
 	var col: Dictionary = ImageController.COL
-	UiSystem.make_label(ui, "休憩所", Vector2(0, 40), Vector2(720, 70), 48, col.gold)
-	UiSystem.make_label(ui, "料理を1品作るか、仮眠をとろう", Vector2(0, 108), Vector2(720, 40), 22, col.sub)
-	status_label = UiSystem.make_label(ui, "", Vector2(40, 150), Vector2(640, 110), 24, col.text)
+	UiSystem.make_banner(ui, "休憩所", Rect2(40, 30, 300, 76), 48)
+	UiSystem.make_banner(ui, "料理を1品作るか、仮眠をとろう", Rect2(260, 108, 420, 42), 21, col.paper, col.ink, 14)
+	# 体力と食材は黒い斜めパネルに
+	var back := Control.new()
+	back.position = Vector2(40, 170)
+	back.size = Vector2(640, 116)
+	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	back.draw.connect(func(): ImageController.slant(back, Rect2(Vector2.ZERO, back.size), Color(col.ink, 0.88), 18, 3.0, col.paper, col.red, Vector2(7, 7)))
+	ui.add_child(back)
+	status_label = UiSystem.make_label(ui, "", Vector2(60, 172), Vector2(600, 112), 23, col.text, HORIZONTAL_ALIGNMENT_CENTER, 0)
+	status_label.add_theme_font_override("font", ImageController.font_bold)
 	var panel := UiSystem.make_panel(ui, Rect2(20, 640, 680, 620))
+	UiSystem.make_banner(ui, "料理", Rect2(36, 614, 160, 44), 26)
 	var y := 14.0
 	for r in FoodList.RECIPES:
-		var b := UiSystem.make_button(panel, "", Vector2(14, y), Vector2(652, 80), _cook.bind(r), 22)
+		var b := UiSystem.make_button(panel, "", Vector2(24, y + 22), Vector2(632, 76), _cook.bind(r), 22)
 		b.set_meta("recipe", r)
-		var lbl := UiSystem.make_label(b, "%s　%s" % [r.name, r.desc], Vector2(150, 0), Vector2(490, 80), 21, col.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
+		var lbl := UiSystem.make_label(b, "%s\n%s" % [r.name, r.desc], Vector2(148, 0), Vector2(468, 76), 20, col.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
 		lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
+		lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		lbl.add_theme_font_override("font", ImageController.font_bold)
 		for i in 2:
-			var ic := GuiWidget.new("icon", Rect2(14 + i * 62, 12, 56, 56))
+			var ic := GuiWidget.new("icon", Rect2(22 + i * 60, 10, 56, 56))
 			ic.icon_kind = FoodList.DATA[r.use[i]].icon
 			b.add_child(ic)
 		buttons.append(b)
-		y += 88
-	var nap := UiSystem.make_button(panel, "仮眠をとる（全員HP+6）", Vector2(14, y + 4), Vector2(652, 72), _nap, 24)
+		y += 84
+	var nap := UiSystem.make_red_button(panel, "仮眠をとる（全員HP+6）", Vector2(24, y + 28), Vector2(632, 70), _nap, 24)
 	buttons.append(nap)
 	_refresh()
 
@@ -43,6 +54,7 @@ func _refresh() -> void:
 	for b in buttons:
 		if b.has_meta("recipe"):
 			b.disabled = done or not Inventory.can_cook(b.get_meta("recipe"))
+			b.modulate.a = 0.45 if b.disabled else 1.0  # 作れない料理は薄く
 		else:
 			b.disabled = done
 

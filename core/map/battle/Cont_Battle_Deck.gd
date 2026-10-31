@@ -85,8 +85,8 @@ static func card_text(user: Dictionary, action: Dictionary) -> String:
 	var target_text := ""
 	match action.get("target", ""):
 		"enemy_all": target_text = "敵全体"
-		"front_enemy_single": target_text = "正面の敵1体"
-		"front_enemy_group": target_text = "目の前の敵全体（前列）"
+		"front_enemy_single": target_text = "一番近い敵1体"
+		"front_enemy_group": target_text = "自分の側（左右）の敵全員"
 		"self": target_text = "自分"
 		"ally_all": target_text = "味方全体"
 	var row := "対象: " + target_text

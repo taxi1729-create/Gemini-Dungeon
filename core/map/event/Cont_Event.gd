@@ -16,22 +16,38 @@ func _ready() -> void:
 	ev_id = EventList.DATA.keys().pick_random()
 	var ev: Dictionary = EventList.DATA[ev_id]
 	var col: Dictionary = ImageController.COL
-	UiSystem.make_label(ui, "？ イベント", Vector2(0, 50), Vector2(720, 40), 24, col.sub)
-	UiSystem.make_label(ui, ev.title, Vector2(0, 92), Vector2(720, 70), 46, col.gold)
-	icon_w = GuiWidget.new("icon", Rect2(260, 200, 200, 200))
+	UiSystem.make_banner(ui, "？ EVENT", Rect2(36, 40, 200, 44), 24)
+	UiSystem.make_banner(ui, ev.title, Rect2(60, 96, 600, 82), 44, col.ink, col.paper, 28)
+	# アイコンの後ろに赤いギザギザ
+	var deco := Control.new()
+	deco.size = Vector2(720, 420)
+	deco.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	deco.draw.connect(func():
+		var IC = ImageController
+		IC.halftone(deco, Rect2(120, 190, 480, 230), Color(col.paper, 0.08), Vector2(360, 300), 240, 16, 5)
+		IC.poly_box(deco, IC.burst_pts(Vector2(360, 300), 140, 100, 14, 11, 0.2), col.red, 4.0, col.ink, col.ink, Vector2(8, 8))
+		deco.draw_circle(Vector2(360, 300), 86, col.ink))
+	ui.add_child(deco)
+	icon_w = GuiWidget.new("icon", Rect2(280, 220, 160, 160))
 	icon_w.icon_kind = ev.icon
 	ui.add_child(icon_w)
-	UiSystem.make_label(ui, ev.text, Vector2(50, 430), Vector2(620, 120), 26, col.text)
+	# 本文は白いギザギザ吹き出し（しっぽはアイコンへ）
+	UiSystem.make_bubble(ui, Rect2(46, 456, 628, 140), Vector2(360, 400), 8)
+	var body := UiSystem.make_label(ui, ev.text, Vector2(70, 462), Vector2(580, 128), 24, col.ink, HORIZONTAL_ALIGNMENT_CENTER, 0)
+	body.add_theme_font_override("font", ImageController.font_bold)
 	choice_box = Control.new()
 	choice_box.size = Vector2(720, 1280)
 	choice_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(choice_box)
-	var y := 640.0
+	var y := 650.0
 	for c in ev.choices:
 		UiSystem.make_button(choice_box, c[1], Vector2(80, y), Vector2(560, 96), _choose.bind(c[0]), 26)
 		y += 116
-	result_label = UiSystem.make_label(ui, "", Vector2(50, 640), Vector2(620, 160), 28, col.good)
-	UiSystem.make_label(ui, "所持：%dゴールド　%s" % [Inventory.gold, Inventory.foods_text()], Vector2(0, 1200), Vector2(720, 40), 20, col.sub)
+	result_label = UiSystem.make_label(ui, "", Vector2(50, 650), Vector2(620, 160), 30, col.paper, HORIZONTAL_ALIGNMENT_CENTER, 8)
+	result_label.add_theme_font_override("font", ImageController.font_head)
+	result_label.add_theme_color_override("font_outline_color", col.red)
+	UiSystem.make_banner(ui, "所持：%dゴールド　%s" % [Inventory.gold, Inventory.foods_text()], Rect2(60, 1196, 600, 44), 20,
+			col.ink, col.paper, 16)
 
 
 func _choose(id: String) -> void:
@@ -47,9 +63,8 @@ func _choose(id: String) -> void:
 			for a in CurrentStatus.allies:
 				a["hp"] = maxi(1, int(a.hp) - 6)
 			var c := ActionList.make_card(ActionList.random_card_id("rare"))
-			_ask_owner("%s を授かった。どちらのデッキに入れますか？" % c.name, func(char_id):
-				CurrentDeck.add_card(char_id, c.id)
-				_done("%sのデッキに %s を追加した" % [InitAllyStatus.DATA[char_id].name, c.name]))
+			CurrentDeck.add_card(c.owner, c.id)
+			_done("%s を授かった（%sのデッキに追加）" % [c.name, InitAllyStatus.DATA[c.owner].name])
 		"mush3":
 			Inventory.add_food("mush", 3)
 			_done("きのこを3つ採った")
@@ -89,7 +104,7 @@ func _choose(id: String) -> void:
 func _ask_owner(msg: String, cb: Callable) -> void:
 	for c in choice_box.get_children():
 		c.queue_free()
-	UiSystem.make_label(choice_box, msg, Vector2(40, 600), Vector2(640, 80), 24, ImageController.COL.text)
+	UiSystem.make_label(choice_box, msg, Vector2(40, 610), Vector2(640, 70), 26, ImageController.COL.paper, HORIZONTAL_ALIGNMENT_CENTER, 6)
 	UiSystem.make_button(choice_box, "ナイト", Vector2(90, 700), Vector2(250, 90), func(): cb.call("knight"), 28)
 	UiSystem.make_button(choice_box, "ウィッチ", Vector2(380, 700), Vector2(250, 90), func(): cb.call("witch"), 28)
 
@@ -97,4 +112,4 @@ func _ask_owner(msg: String, cb: Callable) -> void:
 func _done(msg: String) -> void:
 	choice_box.visible = false
 	result_label.text = msg
-	UiSystem.make_button(ui, "先へ進む", Vector2(160, 900), Vector2(400, 90), func(): UiSystem.goto("map"), 28)
+	UiSystem.make_red_button(ui, "先へ進む", Vector2(160, 900), Vector2(400, 90), func(): UiSystem.goto("map"), 30)

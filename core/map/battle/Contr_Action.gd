@@ -4,8 +4,8 @@ class_name ActionController
 ## 結果はその場で確定し、イベント配列で返す（表示側が演出に使う）。
 ##
 ## 立ち位置
-##   敵  : row 0 = 前列、row 1 = 後列。col 0..2（中央は 1）
-##   味方: row 0 = 前（敵の単体攻撃を受ける）、row 1 = 後
+##   前後の概念はない。味方は lane 0 = 左（青ターゲット）／ lane 1 = 右（赤ターゲット）
+##   各キャラの画面上の位置は pos（Vector2）に入っている
 
 
 static func _st(u: Dictionary, k: String) -> int:
@@ -100,19 +100,29 @@ static func resolve_targets(user: Dictionary, target_type: String, allies: Array
 		"enemy_all":
 			return foes
 		"front_enemy_single":
-			var row := front_row(foes)
-			if row.is_empty():
+			if foes.is_empty():
 				return []
-			row.sort_custom(func(a, b): return absi(int(a.get("col", 1)) - 1) < absi(int(b.get("col", 1)) - 1))
-			return [row[0]]
+			if not is_ally:
+				# 敵の単体攻撃：予告した側（左＝青／右＝赤）にいる味方。倒れていれば残った方
+				var lane := int(user.get("target_lane", 0))
+				for a in foes:
+					if int(a.get("lane", 0)) == lane:
+						return [a]
+				return [foes[0]]
+			# 味方の単体攻撃：一番近い敵
+			var up: Vector2 = user.get("pos", Vector2.ZERO)
+			var best = foes[0]
+			for e in foes:
+				if up.distance_to(e.get("pos", Vector2.ZERO)) < up.distance_to(best.get("pos", Vector2.ZERO)):
+					best = e
+			return [best]
 		"front_enemy_group":
-			return front_row(foes)
+			# 自分の側（左右）にいる敵全員。いなければ反対側の敵全員
+			var left: bool = int(user.get("lane", 0)) == 0
+			var side := foes.filter(func(e): return is_left(e) == left)
+			return side if not side.is_empty() else foes
 	return []
 
 
-## 生きている中で一番前の列（前列が全滅していれば後列）
-static func front_row(units: Array) -> Array:
-	var best := 99
-	for u in units:
-		best = mini(best, int(u.get("row", 0)))
-	return units.filter(func(u): return int(u.get("row", 0)) == best)
+static func is_left(u: Dictionary) -> bool:
+	return Vector2(u.get("pos", Vector2.ZERO)).x < 360.0

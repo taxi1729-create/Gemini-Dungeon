@@ -2,9 +2,9 @@ extends Node
 class_name InitAllyDeck
 ## 初期デッキ（battle-spec.md「カード」の表）
 
-const KNIGHT_DECK = ["strike", "strike", "strike", "block", "block", "sweep", "accel"]
+const KNIGHT_DECK = ["strike", "strike", "strike", "block", "block", "sweep", "spirit"]
 
-const WITCH_DECK = ["missile", "missile", "missile", "firebolt", "firebolt", "sparks", "block", "accel"]
+const WITCH_DECK = ["missile", "missile", "missile", "firebolt", "firebolt", "sparks", "barrier", "chant"]
 
 
 static func get_deck(character_id: String) -> Array:

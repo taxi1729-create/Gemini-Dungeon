@@ -11,6 +11,8 @@ var _title := ""
 var _title_col := Color.WHITE
 var deco: Control
 var _desc: Label
+var _bubble: Control  # 説明の吹き出し
+var _tail := Vector2(-9999, -9999)  # 吹き出しのしっぽの向く先（選んだカード）
 
 
 func _ready() -> void:
@@ -39,12 +41,20 @@ func _process(delta: float) -> void:
 
 func _draw_deco() -> void:
 	var IC = ImageController
+	var col: Dictionary = IC.COL
 	var c := Vector2(360, 150)
-	if _title_col == IC.COL.gold:
-		deco.draw_set_transform(c, _t * 0.3, Vector2.ONE)
-		deco.draw_colored_polygon(IC.star_pts(Vector2.ZERO, 160, 66, 12, 0), Color(IC.COL.gold, 0.12))
-		deco.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
-	IC.text(deco, _title, c, 72, _title_col, true, 10, 680)
+	var lose: bool = _title_col == col.bad
+	# 勝利：赤いギザギザが回る。敗北：赤い斜線
+	if not lose:
+		deco.draw_colored_polygon(IC.burst_pts(c, 230, 150, 16, 4, _t * 0.25), Color(col.red, 0.85))
+		deco.draw_colored_polygon(IC.burst_pts(c, 170, 120, 16, 8, -_t * 0.2), Color(col.ink, 0.9))
+	else:
+		IC.stripes(deco, Rect2(0, 60, 720, 180), Color(col.red, 0.25), 26, 10, 0.5)
+	deco.draw_set_transform(c, -0.06, Vector2.ONE)
+	var band := Rect2(-330, -62, 660, 124)
+	IC.slant(deco, band, col.red if lose else col.ink, 40, 4.0, col.paper, col.ink if lose else col.red, Vector2(12, 12))
+	IC.head(deco, _title, Vector2(0, -2), 92, col.paper, 560, col.ink if lose else col.red, Vector2(6, 6))
+	deco.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
 
 
 func _show_win() -> void:
@@ -55,10 +65,12 @@ func _show_win() -> void:
 		if a.hp <= 0:
 			a["hp"] = 1  # 倒れた仲間は HP1 で起き上がる
 	var drops := _process_drops()
-	UiSystem.make_label(ui, "戦利品：" + "、".join(drops), Vector2(30, 250), Vector2(660, 70), 22, col.text)
-	UiSystem.make_label(ui, "報酬カードを1枚選んでください", Vector2(20, 330), Vector2(680, 40), 24, col.sub)
+	UiSystem.make_banner(ui, "戦利品　" + "、".join(drops), Rect2(30, 262, 660, 54), 24, col.paper, col.ink, 18)
+	UiSystem.make_label(ui, "報酬カードを1枚選んでください（持ち主のデッキに入ります）", Vector2(20, 330), Vector2(680, 40), 21, col.text, HORIZONTAL_ALIGNMENT_CENTER, 4)
+	var owners := ["knight", "witch", ["knight", "witch"].pick_random()]
+	owners.shuffle()
 	for i in 3:
-		var c := ActionList.make_card(ActionList.random_card_id())
+		var c := ActionList.make_card(ActionList.random_card_id("", owners[i]))
 		reward_cards.append(c)
 		var v := GuiCard.new()
 		v.set_card(c)
@@ -66,16 +78,24 @@ func _show_win() -> void:
 		ui.add_child(v)
 		v.tapped.connect(_on_card_selected.bind(i))
 		card_views.append(v)
-	_desc = UiSystem.make_label(ui, "", Vector2(40, 576), Vector2(640, 100), 20, col.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
-	_desc.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	# 説明はカードを選ぶと出る白いギザギザ吹き出し（しっぽが選んだカードを指す）
+	_bubble = Control.new()
+	_bubble.position = Vector2(36, 588)
+	_bubble.size = Vector2(648, 142)
+	_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bubble.visible = false
+	_bubble.draw.connect(func(): ImageController.bubble(_bubble, Rect2(Vector2.ZERO, _bubble.size), _tail - _bubble.position, 2))
+	ui.add_child(_bubble)
+	_desc = UiSystem.make_label(ui, "", Vector2(58, 592), Vector2(604, 134), 20, col.ink, HORIZONTAL_ALIGNMENT_LEFT, 0)
+	_desc.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_desc.add_theme_font_override("font", ImageController.font_bold)
+	_desc.add_theme_constant_override("line_spacing", -3)
 	owner_box = Control.new()
-	owner_box.position = Vector2(0, 690)
-	owner_box.size = Vector2(720, 200)
+	owner_box.position = Vector2(0, 752)
+	owner_box.size = Vector2(720, 120)
 	owner_box.visible = false
 	ui.add_child(owner_box)
-	UiSystem.make_label(owner_box, "どちらのデッキに入れますか？", Vector2(0, 0), Vector2(720, 50), 24, col.text)
-	UiSystem.make_button(owner_box, "ナイト", Vector2(90, 60), Vector2(250, 84), _give.bind("knight"), 30)
-	UiSystem.make_button(owner_box, "ウィッチ", Vector2(380, 60), Vector2(250, 84), _give.bind("witch"), 30)
+	UiSystem.make_red_button(owner_box, "このカードをもらう", Vector2(160, 0), Vector2(400, 84), _take, 28)
 	UiSystem.make_button(ui, "デッキを見る", Vector2(160, 960), Vector2(400, 80), _open_deck, 26)
 	UiSystem.make_button(ui, "受け取らずに進む", Vector2(160, 1060), Vector2(400, 80), _leave, 26)
 
@@ -87,16 +107,21 @@ func _open_deck() -> void:
 func _on_card_selected(i: int) -> void:
 	chosen_card = reward_cards[i]
 	for k in card_views.size():
-		card_views[k].highlighted = k == i
-	_desc.text = DeckController.card_text({}, chosen_card)
+		card_views[k].modulate = Color.WHITE if k == i else Color(1, 1, 1, 0.45)
+	var owner_name: String = InitAllyStatus.DATA[chosen_card.owner].name
+	_desc.text = DeckController.card_text({}, chosen_card) + "\n→ %sのデッキに入ります" % owner_name
+	_tail = card_views[i].position + Vector2(GuiCard.SIZE.x / 2, GuiCard.SIZE.y)
+	_bubble.visible = true
+	_bubble.queue_redraw()
 	owner_box.visible = true
 
 
-func _give(char_id: String) -> void:
+func _take() -> void:
 	if chosen_card.is_empty():
 		return
-	CurrentDeck.add_card(char_id, chosen_card.id)
-	UiSystem.toast(ui, "%sのデッキに %s を追加！" % [InitAllyStatus.DATA[char_id].name, chosen_card.name], 880, ImageController.COL.good)
+	var owner: String = chosen_card.owner
+	CurrentDeck.add_card(owner, chosen_card.id)
+	UiSystem.toast(ui, "%sのデッキに %s を追加！" % [InitAllyStatus.DATA[owner].name, chosen_card.name], 860, ImageController.COL.good)
 	owner_box.visible = false
 	chosen_card = {}
 	await get_tree().create_timer(0.9).timeout
@@ -127,8 +152,10 @@ func _show_lose() -> void:
 	var col: Dictionary = ImageController.COL
 	_title = "DEFEAT"
 	_title_col = col.bad
-	UiSystem.make_label(ui, "%d 階で力尽きた…" % (CurrentStatus.current_floor + 1), Vector2(0, 320), Vector2(720, 60), 30, col.text)
-	UiSystem.make_button(ui, "もう一度挑む", Vector2(160, 760), Vector2(400, 90), _restart, 30)
+	UiSystem.make_bubble(ui, Rect2(150, 330, 420, 90), Vector2(-9999, -9999), 1)
+	var l := UiSystem.make_label(ui, "%d 階で力尽きた…" % (CurrentStatus.current_floor + 1), Vector2(150, 330), Vector2(420, 90), 30, col.ink, HORIZONTAL_ALIGNMENT_CENTER, 0)
+	l.add_theme_font_override("font", ImageController.font_head)
+	UiSystem.make_red_button(ui, "もう一度挑む", Vector2(160, 760), Vector2(400, 90), _restart, 30)
 	UiSystem.make_button(ui, "タイトルに戻る", Vector2(160, 870), Vector2(400, 90), _to_title, 30)
 
 
@@ -136,9 +163,11 @@ func _show_clear() -> void:
 	var col: Dictionary = ImageController.COL
 	_title = "踏破！"
 	_title_col = col.gold
-	UiSystem.make_label(ui, "暗がりの洞窟の主を倒した！\nおめでとう！", Vector2(0, 330), Vector2(720, 120), 32, col.text)
+	UiSystem.make_bubble(ui, Rect2(90, 320, 540, 140), Vector2(-9999, -9999), 1)
+	var l := UiSystem.make_label(ui, "暗がりの洞窟の主を倒した！\nおめでとう！", Vector2(90, 320), Vector2(540, 140), 32, col.ink, HORIZONTAL_ALIGNMENT_CENTER, 0)
+	l.add_theme_font_override("font", ImageController.font_head)
 	UiSystem.make_button(ui, "デッキを見る", Vector2(160, 650), Vector2(400, 80), _open_deck, 26)
-	UiSystem.make_button(ui, "もう一度冒険する", Vector2(160, 760), Vector2(400, 90), _restart, 30)
+	UiSystem.make_red_button(ui, "もう一度冒険する", Vector2(160, 760), Vector2(400, 90), _restart, 30)
 	UiSystem.make_button(ui, "タイトルに戻る", Vector2(160, 870), Vector2(400, 90), _to_title, 30)
 
 
