@@ -10,6 +10,7 @@ const HOLD_TIME := 0.45
 const MOVE_CANCEL := 36.0
 
 var enabled := true
+var interactive := true  # false なら入力を受けない（戦闘の操作エリアはジェスチャーでまとめて処理）
 var highlighted := false:
 	set(v):
 		highlighted = v
@@ -25,7 +26,7 @@ var _t := 0.0
 
 
 func _ready() -> void:
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	mouse_filter = Control.MOUSE_FILTER_STOP if interactive else Control.MOUSE_FILTER_IGNORE
 	pivot_offset = size / 2.0
 
 

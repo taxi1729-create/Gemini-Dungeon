@@ -10,6 +10,8 @@ const SCENES = {
 	"battle": "res://index/core/map/battle/battle_scene.tscn",
 	"result": "res://index/core/map/battle/battle_result.tscn",
 	"rest": "res://index/core/map/rest/camp.tscn",
+	"event": "res://index/core/map/event/event.tscn",
+	"shop": "res://index/core/map/shop/shop.tscn",
 }
 
 var theme: Theme
@@ -111,7 +113,8 @@ func make_button(parent: Node, txt: String, pos: Vector2, sz: Vector2, cb: Calla
 	b.position = pos
 	b.size = sz
 	b.add_theme_font_size_override("font_size", font_size)
-	b.pressed.connect(cb)
+	if cb.is_valid():
+		b.pressed.connect(cb)
 	parent.add_child(b)
 	return b
 

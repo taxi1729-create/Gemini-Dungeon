@@ -3,8 +3,8 @@ extends Node2D
 
 const TOP := 190.0
 const BOTTOM := 1030.0
-const ICONS = {"battle": "battle", "elite": "elite", "rest": "rest", "boss": "boss"}
-const NAMES = {"battle": "戦闘", "elite": "強敵", "rest": "休憩", "boss": "ボス"}
+const ICONS = {"battle": "battle", "elite": "elite", "rest": "rest", "boss": "boss", "event": "event", "shop": "shop"}
+const NAMES = {"battle": "戦闘", "elite": "強敵", "rest": "休憩", "boss": "ボス", "event": "イベント", "shop": "ショップ"}
 
 var view: Control
 var _t := 0.0
@@ -121,6 +121,8 @@ func _select(f: int, i: int) -> void:
 	var t := CurrentStatus.enter_node(f, i)
 	match t:
 		"rest": UiSystem.goto("rest")
+		"event": UiSystem.goto("event")
+		"shop": UiSystem.goto("shop")
 		_: UiSystem.goto("battle")
 
 
@@ -132,8 +134,5 @@ func _build_footer(ui: CanvasLayer) -> void:
 		UiSystem.make_label(p, "%s\nHP %d/%d" % [a.name, a.hp, a.max_hp], Vector2(x, 12), Vector2(200, 70), 22, col, HORIZONTAL_ALIGNMENT_LEFT, 4)
 		UiSystem.make_label(p, "デッキ %d枚" % CurrentDeck.decks[a.id].size(), Vector2(x, 84), Vector2(200, 40), 18, ImageController.COL.sub, HORIZONTAL_ALIGNMENT_LEFT, 0)
 		x += 220
-	var items: Array = []
-	for it in Inventory.items:
-		items.append(Item_List.DATA[it].name)
-	var txt := "食材 %d\n道具 %s" % [Inventory.food_total(), "、".join(items) if not items.is_empty() else "なし"]
+	var txt := "%dゴールド\n%s\n道具 %d個" % [Inventory.gold, Inventory.foods_text(), Inventory.items.size()]
 	UiSystem.make_label(p, txt, Vector2(450, 12), Vector2(230, 120), 18, ImageController.COL.text, HORIZONTAL_ALIGNMENT_LEFT, 0)

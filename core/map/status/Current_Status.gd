@@ -1,8 +1,9 @@
 extends Node
 ## CurrentStatus（Autoload）
-## 冒険中の状態：パーティ、マップ、次の戦闘の種類、直前の戦闘結果。
+## 冒険中の状態：パーティ、マップ、次の戦闘の種類、料理の効果、直前の戦闘結果。
 
-const FLOORS := 8  # 0〜6が通常階、7がボス
+const FLOORS := 8  # 0〜6 が通常階、7 がボス
+const SHOP_FLOORS := [2, 4]  # 3 階と 5 階
 
 var initialized := false
 var current_area_id := "cave"
@@ -18,6 +19,9 @@ var visited: Array = []  # [[floor, index], ...]
 # 戦闘の受け渡し
 var battle_kind := "battle"  # battle / elite / boss
 var last_result := ""  # win / lose
+var gold_multiplier := 1  # イベント「迷子の魔物」で 2
+var next_battle := {}  # 料理の効果 {"ap": n, "atk": n, "block": n}
+var special_choice := {"knight": "sky_slash", "witch": "explosion"}  # 前回セットした必殺技
 
 
 func start_new_game() -> void:
@@ -30,6 +34,8 @@ func start_new_game() -> void:
 	current_index = -1
 	visited = []
 	last_result = ""
+	gold_multiplier = 1
+	next_battle = {}
 	initialized = true
 
 
@@ -40,6 +46,18 @@ func sync_from_init() -> void:
 func ensure_started() -> void:
 	if not initialized:
 		start_new_game()
+
+
+func ally(id: String) -> Dictionary:
+	for a in allies:
+		if a.id == id:
+			return a
+	return {}
+
+
+func heal_all(v: int) -> void:
+	for a in allies:
+		a["hp"] = mini(int(a.max_hp), maxi(1, int(a.hp)) + v)
 
 
 ## 次に進めるマスの [floor, index] 一覧
@@ -61,6 +79,7 @@ func enter_node(f: int, i: int) -> String:
 	var t: String = map_floors[f][i].type
 	if t in ["battle", "elite", "boss"]:
 		battle_kind = t
+		gold_multiplier = 1
 	return t
 
 
@@ -79,14 +98,18 @@ func _generate_map() -> void:
 				t = "rest"
 			elif f >= 2:
 				var r := randf()
-				if r < 0.22:
+				if r < 0.3:
+					t = "event"
+				elif r < 0.45:
 					t = "rest"
-				elif r < 0.40 and f >= 3:
+				elif r < 0.62 and f >= 3:
 					t = "elite"
 			var x := (i + 1.0) / (n + 1.0)
 			if n > 1:
 				x += randf_range(-0.05, 0.05)
 			row.append({"type": t, "x": x, "next": []})
+		if f in SHOP_FLOORS:
+			row[randi() % row.size()].type = "shop"
 		map_floors.append(row)
 	# 隣の階との接続（左右の位置関係が近いものを結ぶ）
 	for f in FLOORS - 1:

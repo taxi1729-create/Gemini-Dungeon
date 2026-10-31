@@ -1,20 +1,19 @@
 extends Node
-## Inventory（Autoload）：道具と食材
+## Inventory（Autoload）：道具・食材・ゴールド
 
 var items: Array = []
-var foods: Dictionary = {"carrot": 0, "onion": 0, "potato": 0, "meat": 0}
+var foods: Dictionary = {"meat": 0, "veg": 0, "mush": 0}
+var gold := 0
 
 
 func reset() -> void:
 	items = ["herb", "fire_potion"]
-	for key in foods.keys():
-		foods[key] = 0
-	foods["meat"] = 2
-	foods["potato"] = 1
+	foods = {"meat": 1, "veg": 1, "mush": 1}
+	gold = 50
 
 
 func add_food(food_id: String, amount: int = 1) -> void:
-	foods[food_id] = foods.get(food_id, 0) + amount
+	foods[food_id] = int(foods.get(food_id, 0)) + amount
 
 
 func food_total() -> int:
@@ -28,15 +27,23 @@ func remove_item(item_id: String) -> void:
 	items.erase(item_id)
 
 
-## ランダムな食材を指定数消費する（休憩用）
-func consume_random_food(amount: int) -> bool:
-	if food_total() < amount:
-		return false
-	for i in amount:
-		var available: Array = []
-		for key in foods.keys():
-			if foods[key] > 0:
-				available.append(key)
-		var picked = available[randi() % available.size()]
-		foods[picked] -= 1
+func can_cook(recipe: Dictionary) -> bool:
+	var need := {}
+	for f in recipe.use:
+		need[f] = int(need.get(f, 0)) + 1
+	for f in need:
+		if int(foods.get(f, 0)) < need[f]:
+			return false
 	return true
+
+
+func consume(recipe: Dictionary) -> void:
+	for f in recipe.use:
+		foods[f] -= 1
+
+
+func foods_text() -> String:
+	var parts: Array = []
+	for k in FoodList.DATA:
+		parts.append("%s%d" % [FoodList.DATA[k].name, foods.get(k, 0)])
+	return "　".join(parts)

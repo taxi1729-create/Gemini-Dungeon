@@ -108,6 +108,7 @@ static func summary(c: Dictionary) -> String:
 		"add_shield": parts.append("盾%d" % c.eff_val)
 		"add_ap": parts.append("AP+%d" % c.eff_val)
 		"heal": parts.append("回復%d" % c.eff_val)
+		"draw": parts.append("%d枚引く" % c.eff_val)
 		"add_status":
 			var st: Dictionary = StatusEffectList.DATA.get(c.status, {})
 			parts.append("%s%d" % [st.get("short", "?"), c.eff_val])

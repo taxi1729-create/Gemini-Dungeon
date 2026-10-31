@@ -123,6 +123,8 @@ const ICON_DEFAULT = {
 	"def_buff": Color("4f86c6"), "def_debuff": Color("4f86c6"), "regen": Color("e8484a"),
 	"shield_sword": Color("4f86c6"), "battle": Color("dfe6ee"), "rest": Color("ff9a3a"),
 	"elite": Color("d0506a"), "boss": Color("f2c84b"), "question": Color("e6edf5"),
+	"leaf": Color("6fbf4a"), "mushroom": Color("d9a46a"), "coin": Color("f2c84b"), "shop": Color("c9a26a"),
+	"event": Color("b88cff"), "info": Color("8fc0ea"), "enter": Color("e8c26a"), "pin": Color("e8c26a"),
 }
 
 
@@ -177,7 +179,14 @@ func icon(ci: CanvasItem, kind: String, c: Vector2, s: float, col: Color = Color
 			_i_shield(ci, k)
 			ci.draw_set_transform(c + Vector2(0.12, 0.08) * s, rot, Vector2(s, s) * 0.62)
 			_i_sword(ci, ICON_DEFAULT.sword)
-		"question":
+		"leaf": _i_leaf(ci, k)
+		"mushroom": _i_mushroom(ci, k)
+		"coin": _i_coin(ci, k)
+		"shop": _i_shop(ci, k)
+		"info": _i_info(ci, k)
+		"enter": _i_enter(ci, k)
+		"pin": _i_pin(ci, k)
+		"question", "event":
 			text_in_icon(ci, "?", k)
 		_:
 			ci.draw_circle(Vector2.ZERO, 0.35, k)
@@ -386,6 +395,59 @@ func _i_horns(ci: CanvasItem, k: Color) -> void:
 	ci.draw_colored_polygon(pts([[-0.22, -0.06], [-0.04, 0.04], [-0.2, 0.08]]), Color("ffe24a"))
 	ci.draw_colored_polygon(pts([[0.22, -0.06], [0.04, 0.04], [0.2, 0.08]]), Color("ffe24a"))
 	ci.draw_colored_polygon(pts([[-0.16, 0.2], [0.16, 0.2], [0, 0.3]]), Color("1a1420"))
+
+
+func _i_leaf(ci: CanvasItem, k: Color) -> void:
+	ci.draw_colored_polygon(pts([[-0.36, 0.36], [-0.3, -0.1], [0.0, -0.4], [0.42, -0.44], [0.36, -0.02], [0.06, 0.3]]), k)
+	ci.draw_line(Vector2(-0.4, 0.42), Vector2(0.3, -0.34), k.darkened(0.4), 0.05, true)
+	ci.draw_colored_polygon(pts([[-0.1, 0.44], [-0.02, 0.18], [0.12, 0.44]]), Color("e07a3a"))
+
+
+func _i_mushroom(ci: CanvasItem, k: Color) -> void:
+	ci.draw_colored_polygon(pts([[-0.12, 0.0], [0.12, 0.0], [0.15, 0.44], [-0.15, 0.44]]), Color("efe6d2"))
+	var cap := PackedVector2Array()
+	for i in 17:
+		var a := PI + PI * i / 16.0
+		cap.append(Vector2(cos(a) * 0.46, sin(a) * 0.4 + 0.04))
+	ci.draw_colored_polygon(cap, k)
+	ci.draw_circle(Vector2(-0.18, -0.16), 0.07, Color(1, 1, 1, 0.7))
+	ci.draw_circle(Vector2(0.14, -0.22), 0.06, Color(1, 1, 1, 0.7))
+
+
+func _i_coin(ci: CanvasItem, k: Color) -> void:
+	ci.draw_circle(Vector2.ZERO, 0.44, k.darkened(0.25))
+	ci.draw_circle(Vector2(-0.03, -0.03), 0.4, k)
+	ci.draw_arc(Vector2(-0.03, -0.03), 0.28, 0, TAU, 20, k.darkened(0.3), 0.05, true)
+	ci.draw_colored_polygon(star_pts(Vector2(-0.03, -0.03), 0.18, 0.08), k.darkened(0.3))
+
+
+func _i_shop(ci: CanvasItem, k: Color) -> void:
+	ci.draw_colored_polygon(pts([[-0.36, -0.12], [0.36, -0.12], [0.42, 0.44], [-0.42, 0.44]]), k)
+	ci.draw_arc(Vector2(0, -0.12), 0.2, PI, TAU, 14, k.darkened(0.35), 0.08, true)
+	_i_coin_small(ci, Vector2(0, 0.16))
+
+
+func _i_coin_small(ci: CanvasItem, c: Vector2) -> void:
+	ci.draw_circle(c, 0.16, ICON_DEFAULT.coin)
+	ci.draw_circle(c, 0.09, ICON_DEFAULT.coin.darkened(0.3))
+
+
+func _i_info(ci: CanvasItem, k: Color) -> void:
+	ci.draw_circle(Vector2.ZERO, 0.44, Color(k, 0.25))
+	ci.draw_arc(Vector2.ZERO, 0.44, 0, TAU, 28, k, 0.07, true)
+	ci.draw_circle(Vector2(0, -0.2), 0.07, k)
+	ci.draw_rect(Rect2(-0.06, -0.06, 0.12, 0.34), k)
+
+
+func _i_enter(ci: CanvasItem, k: Color) -> void:
+	ci.draw_line(Vector2(0.32, -0.36), Vector2(0.32, 0.1), k, 0.1)
+	_arrow_shape(ci, Vector2(0.36, 0.1), Vector2(-0.4, 0.1), k, 0.1)
+
+
+func _i_pin(ci: CanvasItem, k: Color) -> void:
+	ci.draw_rect(Rect2(-0.3, -0.42, 0.6, 0.12), k)
+	ci.draw_colored_polygon(pts([[-0.18, -0.3], [0.18, -0.3], [0.26, 0.08], [-0.26, 0.08]]), k.darkened(0.15))
+	ci.draw_line(Vector2(0, 0.08), Vector2(0, 0.46), Color("dfe6ee"), 0.07)
 
 
 func _i_plus(ci: CanvasItem, k: Color, c: Vector2, r: float) -> void:
