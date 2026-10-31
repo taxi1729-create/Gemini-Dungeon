@@ -1,22 +1,20 @@
 extends Node
 class_name InitAllyDeck
+## 初期デッキ（カードIDの並び）
 
-# デッキのアクション（カード）定義
-# type: アクションタイプ, power: 威力, ap: 消費AP, effect: 特殊効果の識別子
 const KNIGHT_DECK = [
-"strike","strike","strike","action_accel",
-"action_accel",
-"firebolt","firebolt"
+	"strike", "strike", "strike", "block", "block", "sweep", "action_accel",
 ]
 
 const WITCH_DECK = [
-	# ウィッチの初期デッキ定義（仕様に沿って同様に定義します）
-"block","block","block","action_accel","action_accel",
-"firebolt","firebolt","weak_point","weak_point","weak_point",
-"weak_point","companion_block","force"
+	"firebolt", "firebolt", "weak_point", "weak_point", "companion_block",
+	"block", "action_accel", "force",
 ]
 
+
 static func get_deck(character_id: String) -> Array:
-	if character_id == "knight": return KNIGHT_DECK.duplicate(true)
-	elif character_id == "witch": return WITCH_DECK.duplicate(true)
+	if character_id == "knight":
+		return KNIGHT_DECK.duplicate(true)
+	elif character_id == "witch":
+		return WITCH_DECK.duplicate(true)
 	return []

@@ -1,34 +1,44 @@
 extends Node
 class_name StatusController
-#	"fire": {"name": "火傷","type": "stat_change_minus", "status": "hp","timing":"start_turn","val":-1,"duration":-1,"icon": "fire"}
-# 行動開始時のトリガー（毒など）
-static func trigger_start_of_turn(char_data: Dictionary):
-	print(char_data.status_effects)
-	for i in char_data.status_effects.size():
-		if char_data.status_effects[i].timing =="start_turn":
-			var dmg = char_data.status_effects["poison"] # 蓄積ターン数をダメージとする
-			char_data.hp -= dmg
-			print(char_data.id, " は毒で ", dmg, " のダメージを受けた！")
-		
-		if char_data.status_effects.has("regen"):
-			char_data.hp = min(char_data.max_hp, char_data.hp + char_data.status_effects["regen"])
+## 状態異常の発動・付与・時間経過
 
-# ターン終了時の蓄積ターン減少処理（全員）
-static func decrease_all_durations(allies: Array, enemies: Array):
-	for char in allies + enemies:
-		if char.hp <= 0: continue
-		var effects_to_remove = []
-		for effect in char.status_effects.keys():
-			char.status_effects[effect] -= 1
-			if char.status_effects[effect] <= 0:
-				effects_to_remove.append(effect)
-		# 0になったものを削除
-		for effect in effects_to_remove:
-			char.status_effects.erase(effect)
 
-# 状態異常の付与
-static func apply_status(target_data: Dictionary, status_id: String, duration: int):
-	if target_data.status_effects.has(status_id):
-		target_data.status_effects[status_id]+= duration # 重ね掛け
-	else:
-		target_data.status_effects[status_id] =duration
+## 手番の開始時（火傷・毒）。シールドを無視してHPに直接ダメージ。
+static func trigger_start_of_turn(u: Dictionary) -> Array:
+	var evs: Array = []
+	for k in u.status_effects.keys():
+		var st: Dictionary = StatusEffectList.DATA.get(k, {})
+		if st.get("timing") == "start_turn":
+			var v := int(u.status_effects[k])
+			u["hp"] = maxi(0, int(u.hp) - v)
+			evs.append({"target": u, "damage": v, "tick": k})
+	return evs
+
+
+## 手番の終了時（再生）
+static func trigger_end_of_turn(u: Dictionary) -> Array:
+	var evs: Array = []
+	var v := int(u.status_effects.get("regen", 0))
+	if v > 0 and u.hp > 0:
+		var before := int(u.hp)
+		u["hp"] = mini(int(u.max_hp), before + v)
+		evs.append({"target": u, "heal": int(u.hp) - before})
+	return evs
+
+
+## ラウンド終了時：全員の状態異常を1ずつ減らす
+static func decrease_all_durations(units: Array) -> void:
+	for u in units:
+		if u.hp <= 0:
+			continue
+		var remove: Array = []
+		for k in u.status_effects.keys():
+			u.status_effects[k] -= 1
+			if u.status_effects[k] <= 0:
+				remove.append(k)
+		for k in remove:
+			u.status_effects.erase(k)
+
+
+static func apply_status(target: Dictionary, status_id: String, amount: int) -> void:
+	target.status_effects[status_id] = int(target.status_effects.get(status_id, 0)) + amount

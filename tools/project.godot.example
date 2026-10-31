@@ -1,0 +1,33 @@
+; Godot プロジェクトのルートに置く project.godot（このリポジトリを index/ として置く構成）
+config_version=5
+
+[application]
+config/name="Gemini-Dungeon"
+run/main_scene="res://index/core/title/Title.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+boot_splash/bg_color=Color(0.054902, 0.0705882, 0.133333, 1)
+boot_splash/show_image=false
+
+[autoload]
+Inventory="*res://index/core/map/status/Current_Inventory.gd"
+CurrentStatus="*res://index/core/map/status/Current_Status.gd"
+CurrentDeck="*res://index/core/map/status/Current_Deck.gd"
+ImageController="*res://index/core/information/system/Cont_Image.gd"
+AnimationController="*res://index/core/information/system/Cont_Anime.gd"
+UiSystem="*res://index/core/information/system/Cont_UI_System.gd"
+FlickInput="*res://index/core/information/system/Cont_Flick.gd"
+
+[display]
+window/size/viewport_width=720
+window/size/viewport_height=1280
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+window/handheld/orientation=1
+
+[gui]
+theme/custom_font="res://index/design/NotoSansJP-VariableFont_wght.ttf"
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.054902, 0.0705882, 0.133333, 1)
