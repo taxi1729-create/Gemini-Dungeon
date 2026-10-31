@@ -1,19 +1,17 @@
-# core/information/status/area_list.gd
 extends Node
 class_name AreaList
 
 const DATA = {
-	#"forest": {
-	#	"name": "静寂の森",
-	#	"enemies": ["slime", "goblin", "bat"]
-	#},
 	"cave": {
 		"name": "暗がりの洞窟",
-		"enemies": ["gool", "goblin", "skeleton", "dark_knight","fire_warriar", "green_dragon"]
+		"enemies": ["goblin", "gool", "zombie", "skeleton", "harpy", "fire_warriar"],
+		"elites": ["dark_knight"],
+		"bosses": ["green_dragon", "necro"],
 	}
 }
 
-static func get_enemy_pool(area_id: String) -> Array:
+
+static func get_enemy_pool(area_id: String, kind: String = "enemies") -> Array:
 	if DATA.has(area_id):
-		return DATA[area_id]["enemies"]
-	return ["nagool"] # デフォルト
+		return DATA[area_id][kind]
+	return DATA["cave"][kind]

@@ -1,15 +1,21 @@
 extends Node
 class_name StatusEffectList
+## 状態異常。数値は「強さ」と「残りラウンド」を兼ねる（ラウンド終了ごとに1減る）。
+## timing: start_turn = 手番の開始時に発動 / end_turn = 手番の終了時 / all = 常時
 
 const DATA = {
-	"fire": {"name": "火傷","type": "stat_change_minus", "status": "hp","timing":"start_turn","val":-1,"duration":-1,"icon": "fire"}, # 行動開始時に蓄積ターン分のダメージ(valは固定ダメージ等の拡張用)
-	"atk_debuff": {"name": "攻撃力低下", "type": "stat_change_minus", "status": "atk","timing":"all","val":-1,"duration":1,"icon": "attack_debuff"},
-	"atk_buff": {"name": "攻撃力上昇", "type": "stat_change_plus", "status": "atk","timing":"all","val":-1,"duration":1,"icon": "attack_buff"},
-	"def_debuff": {"name": "防御力低下", "type": "stat_change_minus", "status": "def","timing":"all","val":-1,"duration":1,"icon": "def_debuff"},
-	"def_buff": {"name": "防御力上昇", "type": "stat_change_plus", "status": "def","timing":"all","val":-1,"duration":1,"icon": "def_buff"},
-	"speed_debuff": {"name": "素早さ低下", "type": "stat_change_minus", "status": "speed","timing":"all","val":-1,"duration":1,"icon": "speed_debuff"},
-	"speed_buff": {"name": "素早さ上昇", "type": "stat_change_plus", "status": "speed","timing":"all","val":-1,"duration":1,"icon": "speed_buff"},
-	"regen": {"name": "HP回復", "type": "stat_change_plus", "status": "hp","timing":"end_turn","val":-1,"duration":1,"icon": "regen"}
+	"fire": {"name": "火傷", "short": "火傷", "timing": "start_turn", "icon": "flame", "good": false,
+		"desc": "手番の開始時に数値分のダメージ"},
+	"poison": {"name": "毒", "short": "毒", "timing": "start_turn", "icon": "drop", "good": false,
+		"desc": "手番の開始時に数値分のダメージ"},
+	"atk_buff": {"name": "攻撃力上昇", "short": "攻↑", "timing": "all", "icon": "atk_buff", "good": true,
+		"desc": "与えるダメージ +数値"},
+	"atk_debuff": {"name": "攻撃力低下", "short": "攻↓", "timing": "all", "icon": "atk_debuff", "good": false,
+		"desc": "与えるダメージ -数値"},
+	"def_buff": {"name": "防御力上昇", "short": "防↑", "timing": "all", "icon": "def_buff", "good": true,
+		"desc": "受けるダメージ -数値"},
+	"def_debuff": {"name": "防御力低下", "short": "防↓", "timing": "all", "icon": "def_debuff", "good": false,
+		"desc": "受けるダメージ +数値"},
+	"regen": {"name": "再生", "short": "再生", "timing": "end_turn", "icon": "regen", "good": true,
+		"desc": "手番の終了時に数値分回復"},
 }
-#	"regen": {"name": "HP回復", "type": "stat_change", "timing":"end_turn","val":-1,"duration":1,"icon": "regen"}はターン終了時、蓄積数値ぶんHPを回復、ターン終了時効果を取り除く
-#

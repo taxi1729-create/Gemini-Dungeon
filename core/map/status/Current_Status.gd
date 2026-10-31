@@ -1,10 +1,112 @@
 extends Node
-# プロジェクト設定で "CurrentStatus" としてAutoloadに登録してください
-var current_area_id = "cave" # 今いるエリアのID
-var encounter_level = 1      # 敵の強さなどの指標
-var allies = []
-var enemies = []
+## CurrentStatus（Autoload）
+## 冒険中の状態：パーティ、マップ、次の戦闘の種類、直前の戦闘結果。
 
-func sync_from_init():
-	allies = [InitAllyStatus.DATA["knight"].duplicate(),InitAllyStatus.DATA["witch"].duplicate()]
+const FLOORS := 8  # 0〜6が通常階、7がボス
+
+var initialized := false
+var current_area_id := "cave"
+var allies: Array = []
+var enemies: Array = []
+
+# マップ
+var map_floors: Array = []  # [floor][i] = {"type":..., "x":..., "next":[i,...]}
+var current_floor := -1
+var current_index := -1
+var visited: Array = []  # [[floor, index], ...]
+
+# 戦闘の受け渡し
+var battle_kind := "battle"  # battle / elite / boss
+var last_result := ""  # win / lose
+
+
+func start_new_game() -> void:
+	allies = [InitAllyStatus.get_status("knight"), InitAllyStatus.get_status("witch")]
 	enemies = []
+	Inventory.reset()
+	CurrentDeck.sync_from_init()
+	_generate_map()
+	current_floor = -1
+	current_index = -1
+	visited = []
+	last_result = ""
+	initialized = true
+
+
+func sync_from_init() -> void:
+	start_new_game()
+
+
+func ensure_started() -> void:
+	if not initialized:
+		start_new_game()
+
+
+## 次に進めるマスの [floor, index] 一覧
+func reachable() -> Array:
+	var out: Array = []
+	if current_floor < 0:
+		for i in map_floors[0].size():
+			out.append([0, i])
+	elif current_floor < map_floors.size() - 1:
+		for j in map_floors[current_floor][current_index].next:
+			out.append([current_floor + 1, j])
+	return out
+
+
+func enter_node(f: int, i: int) -> String:
+	current_floor = f
+	current_index = i
+	visited.append([f, i])
+	var t: String = map_floors[f][i].type
+	if t in ["battle", "elite", "boss"]:
+		battle_kind = t
+	return t
+
+
+func _generate_map() -> void:
+	map_floors = []
+	for f in FLOORS:
+		var n := 3 if f in [1, 3, 5] else 2 + (randi() % 2)
+		if f == FLOORS - 1:
+			n = 1
+		var row: Array = []
+		for i in n:
+			var t := "battle"
+			if f == FLOORS - 1:
+				t = "boss"
+			elif f == FLOORS - 2:
+				t = "rest"
+			elif f >= 2:
+				var r := randf()
+				if r < 0.22:
+					t = "rest"
+				elif r < 0.40 and f >= 3:
+					t = "elite"
+			var x := (i + 1.0) / (n + 1.0)
+			if n > 1:
+				x += randf_range(-0.05, 0.05)
+			row.append({"type": t, "x": x, "next": []})
+		map_floors.append(row)
+	# 隣の階との接続（左右の位置関係が近いものを結ぶ）
+	for f in FLOORS - 1:
+		var a: Array = map_floors[f]
+		var b: Array = map_floors[f + 1]
+		var incoming := {}
+		for i in a.size():
+			var ratio := 0.0 if a.size() == 1 else float(i) / (a.size() - 1)
+			var j := int(round(ratio * (b.size() - 1)))
+			a[i].next.append(j)
+			incoming[j] = true
+			if b.size() > 1 and randf() < 0.5:
+				var j2 := clampi(j + (1 if randf() < 0.5 else -1), 0, b.size() - 1)
+				if not a[i].next.has(j2):
+					a[i].next.append(j2)
+					incoming[j2] = true
+		for j in b.size():
+			if not incoming.has(j):
+				var ratio := 0.0 if b.size() == 1 else float(j) / (b.size() - 1)
+				var i := int(round(ratio * (a.size() - 1)))
+				a[i].next.append(j)
+		for i in a.size():
+			a[i].next.sort()
