@@ -41,36 +41,64 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var IC = ImageController
-	var fg: Color = IC.COL.text if not dimmed else Color("5c6274")
-	var ac: Color = accent if not dimmed else Color("4a4f60")
+	var fg: Color = IC.COL.text if not dimmed else Color("5c5c66")
+	var ac: Color = accent if not dimmed else Color("4a4a54")
 	if shape == "key":
-		var r := Rect2(Vector2.ZERO, size)
-		if highlighted:
-			IC.round_rect(self, r.grow(5), Color(IC.COL.gold, 0.5), 18)
-		IC.round_rect(self, r, IC.COL.panel_hi if not dimmed else Color("1a1d28"), 16, 3, ac)
-		IC.icon(self, icon_kind, Vector2(size.x / 2, size.y / 2 - 16), 48, ac)
-		IC.text(self, title, Vector2(size.x / 2, size.y / 2 + 30), 20, fg, true, 4, size.x - 10)
+		_draw_key(fg, ac)
 		return
 	var c := size / 2.0
-	var rad := size.x / 2.0 - 4
+	var rad := size.x / 2.0 - 6
+	# 選択中：赤いギザギザの爆発形を背負わせ、円も赤で塗る
 	if highlighted:
-		draw_circle(c, rad + 8, Color(IC.COL.gold, 0.5))
-	draw_circle(c, rad, IC.COL.panel_hi if not dimmed else Color("1a1d28"))
-	var ring := ac
-	if icon_kind == "burst" and not dimmed:
-		ring = accent.lerp(Color.WHITE, 0.3 + 0.3 * sin(_t * 4.0))
-	draw_arc(c, rad, 0, TAU, 40, ring, 4, true)
+		IC.poly_box(self, IC.burst_pts(c, rad + 16, rad + 4, 14, 5, _t * 0.6), IC.COL.red, 3.0, IC.COL.ink)
+	else:
+		draw_circle(c + Vector2(5, 5), rad, Color(0, 0, 0, 0.7))
+	var face: Color = IC.COL.ink
+	if dimmed:
+		face = Color("17171b")
+	elif highlighted:
+		face = IC.COL.red
+	draw_circle(c, rad, face)
+	var ring: Color = IC.COL.paper if not dimmed else Color("3a3a42")
+	if icon_kind == "burst" and not dimmed and not highlighted:
+		ring = IC.COL.red.lerp(IC.COL.paper, 0.5 + 0.5 * sin(_t * 4.0))
+	draw_arc(c, rad, 0, TAU, 48, ring, 4, true)
+	if not highlighted:
+		draw_arc(c, rad - 8, 0, TAU, 40, Color(ac, 0.6), 2, true)
 	if charge > 0:
 		var full := charge >= 1.0
-		var col: Color = Color.WHITE if full and int(_t * 12) % 2 == 0 else IC.COL.gold
-		draw_arc(c, rad + 7, -PI / 2, -PI / 2 + TAU * minf(charge, 1.0), 48, col, 9, true)
-	IC.icon(self, icon_kind, c + Vector2(0, -14), 46, ac)
-	IC.text(self, title, c + Vector2(0, 24), 18, fg, true, 4, size.x - 14)
-	if subtitle != "":
-		IC.text(self, subtitle, c + Vector2(0, 44), 13, Color(fg, 0.75), false, 3, size.x - 10)
+		var col: Color = IC.COL.paper if full and int(_t * 12) % 2 == 0 else IC.COL.red
+		draw_arc(c, rad + 8, -PI / 2, -PI / 2 + TAU * minf(charge, 1.0), 48, IC.COL.ink, 14, true)
+		draw_arc(c, rad + 8, -PI / 2, -PI / 2 + TAU * minf(charge, 1.0), 48, col, 9, true)
+	var sub_on := subtitle != ""
+	IC.icon(self, icon_kind, c + Vector2(0, -18 if sub_on else -14), 44, ac if not highlighted else IC.COL.paper)
+	IC.head(self, title, c + Vector2(0, 16 if sub_on else 22), 19, fg, size.x - 24, Color(0, 0, 0, 0), Vector2.ZERO, 5, IC.COL.ink)
+	if sub_on:
+		IC.text(self, subtitle, c + Vector2(0, 39), 14, Color(fg, 0.85), true, 4, size.x - 30, IC.COL.ink)
 	if ap_cost >= 0:
 		var p := Vector2(size.x - 18, 18)
-		IC.icon(self, "ap", p, 34, IC.COL.ap if not dimmed else Color("7a3a3a"))
-		IC.text(self, str(ap_cost), p + Vector2(0, 1), 17, Color.WHITE, true, 4)
+		IC.icon(self, "ap", p, 34, IC.COL.ap if not dimmed else Color("5a2a30"))
+		IC.text(self, str(ap_cost), p + Vector2(0, 1), 17, Color.WHITE, true, 4, -1.0, IC.COL.ink)
 	if label_hint != "":
-		IC.text(self, label_hint, Vector2(16, 16), 14, Color(1, 1, 1, 0.5), true)
+		IC.text(self, label_hint, Vector2(14, 14), 14, Color(1, 1, 1, 0.45), true)
+
+
+## 右列のキー：斜めの黒いパネル。選択中は赤く塗りつぶす
+func _draw_key(fg: Color, ac: Color) -> void:
+	var IC = ImageController
+	var r := Rect2(8, 6, size.x - 18, size.y - 16)
+	var skew := 16.0
+	var face: Color = IC.COL.ink.lerp(accent, 0.14)  # 黒に差し色をほんのり混ぜる
+	if dimmed:
+		face = Color("17171b")
+	elif highlighted:
+		face = IC.COL.red
+	var shadow: Color = IC.COL.ink if highlighted else Color(0, 0, 0, 0.75)
+	IC.slant(self, r, face, skew, 3.0 if not highlighted else 4.0, IC.COL.paper if not dimmed else Color("3a3a42"),
+			shadow, Vector2(7, 7))
+	if not highlighted and not dimmed:
+		# 右下に差し色の斜線、左に差し色の細い帯
+		IC.stripes(self, Rect2(r.position.x + r.size.x * 0.45, r.end.y - 34, r.size.x * 0.5, 30), Color(ac, 0.35), 10, 3, 0.6)
+		draw_colored_polygon(IC.slant_pts(Rect2(r.position.x + 6, r.position.y + 10, 7, r.size.y - 20), skew * (r.size.y - 20) / r.size.y), ac)
+	IC.icon(self, icon_kind, Vector2(size.x / 2 + 2, size.y / 2 - 18), 50, ac if not highlighted else IC.COL.paper)
+	IC.head(self, title, Vector2(size.x / 2, size.y / 2 + 32), 22, fg, size.x - 46, Color(0, 0, 0, 0), Vector2.ZERO, 5, IC.COL.ink)

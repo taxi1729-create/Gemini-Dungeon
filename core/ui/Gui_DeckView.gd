@@ -40,7 +40,7 @@ func _ready() -> void:
 	add_child(bg)
 	var col: Dictionary = ImageController.COL
 	UiSystem.make_panel(self, Rect2(20, 60, 680, 1160))
-	UiSystem.make_label(self, title_text, Vector2(20, 76), Vector2(680, 50), 32, col.gold)
+	UiSystem.make_banner(self, title_text, Rect2(40, 34, 420, 66), 32)
 	var x := 60.0
 	for id in tabs:
 		var b := UiSystem.make_button(self, InitAllyStatus.DATA[id].name, Vector2(x, 136), Vector2(290, 64), _switch.bind(id), 26)
@@ -51,10 +51,13 @@ func _ready() -> void:
 	_grid.size = Vector2(640, 740)
 	_grid.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(_grid)
-	_desc = UiSystem.make_label(self, "カードをタップすると説明を表示", Vector2(44, 960), Vector2(632, 120), 20, col.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
+	# 説明は白いギザギザ吹き出しに黒文字で
+	UiSystem.make_bubble(self, Rect2(44, 960, 632, 124), Vector2(-9999, -9999), 6)
+	_desc = UiSystem.make_label(self, "カードをタップすると説明を表示", Vector2(64, 970), Vector2(596, 106), 20, col.ink, HORIZONTAL_ALIGNMENT_LEFT, 0)
+	_desc.add_theme_font_override("font", ImageController.font_bold)
 	_desc.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	if pick_cb.is_valid():
-		_pick_btn = UiSystem.make_button(self, "このカードを選ぶ", Vector2(60, 1110), Vector2(290, 80), _do_pick, 24)
+		_pick_btn = UiSystem.make_red_button(self, "このカードを選ぶ", Vector2(60, 1110), Vector2(290, 80), _do_pick, 24)
 		_pick_btn.disabled = true
 		UiSystem.make_button(self, "やめる", Vector2(370, 1110), Vector2(290, 80), _close, 24)
 	else:
@@ -68,7 +71,8 @@ func _switch(id: String) -> void:
 	if _pick_btn:
 		_pick_btn.disabled = true
 	for k in _tab_btns:
-		_tab_btns[k].modulate = Color.WHITE if k == id else Color(1, 1, 1, 0.45)
+		_tab_btns[k].modulate = Color.WHITE if k == id else Color(1, 1, 1, 0.55)
+		UiSystem.set_button_red(_tab_btns[k], k == id)  # 選んでいるタブは赤
 	for c in _grid.get_children():
 		c.queue_free()
 	var groups: Array = sections.get(id, [])
@@ -83,7 +87,14 @@ func _switch(id: String) -> void:
 	var cw := GuiCard.SIZE.x * sc + 10
 	var ch := GuiCard.SIZE.y * sc + 10
 	for g in groups:
-		UiSystem.make_label(_grid, "%s（%d）" % [g[0], g[1].size()], Vector2(0, y), Vector2(640, 32), 20, ImageController.COL.sub, HORIZONTAL_ALIGNMENT_LEFT, 0)
+		var gl := UiSystem.make_label(_grid, "%s（%d）" % [g[0], g[1].size()], Vector2(12, y), Vector2(628, 32), 20, ImageController.COL.paper, HORIZONTAL_ALIGNMENT_LEFT, 0)
+		gl.add_theme_font_override("font", ImageController.font_head)
+		var tick := ColorRect.new()  # 見出しの左の赤い印
+		tick.color = ImageController.COL.red
+		tick.position = Vector2(0, y + 6)
+		tick.size = Vector2(5, 22)
+		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_grid.add_child(tick)
 		y += 34
 		var i := 0
 		for c in g[1]:

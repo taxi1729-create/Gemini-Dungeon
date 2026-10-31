@@ -24,12 +24,12 @@ func _ready() -> void:
 	ui.add_child(view)
 	var col: Dictionary = ImageController.COL
 	var area: String = AreaList.DATA[CurrentStatus.current_area_id].name
-	UiSystem.make_label(ui, area, Vector2(0, 24), Vector2(720, 56), 40, col.gold)
+	UiSystem.make_banner(ui, area, Rect2(28, 22, 400, 72), 42)
 	var f := CurrentStatus.current_floor + 1
-	UiSystem.make_label(ui, "進む道を選んでください（%d / %d 階）" % [mini(f + 1, CurrentStatus.FLOORS), CurrentStatus.FLOORS],
-			Vector2(0, 84), Vector2(720, 40), 22, col.sub)
+	UiSystem.make_banner(ui, "進む道を選んでください（%d / %d 階）" % [mini(f + 1, CurrentStatus.FLOORS), CurrentStatus.FLOORS],
+			Rect2(250, 92, 450, 40), 21, col.paper, col.ink, 16)
 	_build_footer(ui)
-	UiSystem.make_button(ui, "必殺技", Vector2(560, 1056), Vector2(144, 56), _open_specials.bind(ui), 22)
+	UiSystem.make_red_button(ui, "必殺技", Vector2(566, 1048), Vector2(138, 56), _open_specials.bind(ui), 24)
 
 
 func _process(delta: float) -> void:
@@ -54,7 +54,7 @@ func _draw_map() -> void:
 	var IC = ImageController
 	var floors: Array = CurrentStatus.map_floors
 	var reach := CurrentStatus.reachable()
-	# 線
+	# 線（通った道＝赤の実線、今いるマスから出る道＝白、その他＝薄い破線）
 	for f in floors.size() - 1:
 		for i in floors[f].size():
 			for j in floors[f][i].next:
@@ -62,8 +62,10 @@ func _draw_map() -> void:
 				var b := _node_pos(f + 1, j)
 				var walked := _is_visited(f, i) and _is_visited(f + 1, j)
 				var open: bool = f == CurrentStatus.current_floor and i == CurrentStatus.current_index
-				var col := Color(IC.COL.gold, 0.9) if walked else (Color(1, 1, 1, 0.45) if open else Color(1, 1, 1, 0.12))
-				_dashed(a, b, col, 4 if walked or open else 3)
+				if walked:
+					view.draw_line(a, b, IC.COL.red, 6, true)
+				else:
+					_dashed(a, b, Color(1, 1, 1, 0.75) if open else Color(1, 1, 1, 0.16), 4 if open else 3)
 	# マス
 	for f in floors.size():
 		for i in floors[f].size():
@@ -77,20 +79,33 @@ func _draw_map() -> void:
 			var visited := _is_visited(f, i)
 			var rad := 46.0 if node.type == "boss" else 36.0
 			if can:
+				# 進めるマス：赤いギザギザが脈打つ
 				var pulse := 0.5 + 0.5 * sin(_t * 4.0)
-				view.draw_circle(p, rad + 10 + pulse * 6, Color(IC.COL.gold, 0.25 + 0.2 * pulse))
-			var base: Color = IC.COL.panel_hi if (can or is_cur) else Color("161b2c")
-			if visited and not is_cur:
-				base = Color("2a2a20")
+				IC.poly_box(view, IC.burst_pts(p, rad + 16 + pulse * 6, rad + 6, 12, f * 7 + i, _t * 0.5), IC.COL.red, 3.0, IC.COL.ink)
+			else:
+				view.draw_circle(p + Vector2(4, 4), rad, Color(0, 0, 0, 0.6))
+			var base: Color = IC.COL.ink
+			if can:
+				base = IC.COL.red
+			elif visited and not is_cur:
+				base = Color("1c1c20")
 			view.draw_circle(p, rad, base)
-			var ring: Color = IC.COL.gold if (can or is_cur) else Color(1, 1, 1, 0.25)
-			view.draw_arc(p, rad, 0, TAU, 40, ring, 4 if can else 2, true)
-			var ic_col := Color(0, 0, 0, 0) if (can or is_cur or not visited) else Color(0.5, 0.5, 0.5)
-			if not can and not is_cur and not visited:
-				ic_col = Color(0.75, 0.75, 0.8, 0.55)
+			var ring: Color = IC.COL.paper if (can or is_cur) else Color(1, 1, 1, 0.3)
+			if node.type == "boss" and not can:
+				ring = IC.COL.red
+			view.draw_arc(p, rad, 0, TAU, 40, ring, 4 if (can or is_cur) else 2, true)
+			var ic_col := Color(0, 0, 0, 0)
+			if can:
+				ic_col = IC.COL.paper
+			elif visited and not is_cur:
+				ic_col = Color(0.4, 0.4, 0.42)
+			elif not is_cur:
+				ic_col = Color(0.8, 0.8, 0.82, 0.6)
 			IC.icon(view, ICONS[node.type], p, rad * 1.15, ic_col)
 			if can:
-				IC.text(view, NAMES[node.type], p + Vector2(0, rad + 20), 20, IC.COL.text, true, 5)
+				var tag := Rect2(p.x - 44, p.y + rad + 8, 88, 30)
+				IC.slant(view, tag, IC.COL.paper, 10, 2.0, IC.COL.ink, IC.COL.ink, Vector2(3, 3))
+				IC.head(view, NAMES[node.type], tag.get_center(), 19, IC.COL.ink, 66)
 			if is_cur:
 				_draw_party_marker(p + Vector2(rad + 26, -8))
 
@@ -129,11 +144,13 @@ func _select(f: int, i: int) -> void:
 
 func _build_footer(ui: CanvasLayer) -> void:
 	var p := UiSystem.make_panel(ui, Rect2(16, 1120, 688, 144))
-	var x := 20.0
+	var x := 22.0
 	for a in CurrentStatus.allies:
 		var col: Color = ImageController.COL.text if a.hp > 0 else ImageController.COL.bad
-		UiSystem.make_label(p, "%s\nHP %d/%d" % [a.name, a.hp, a.max_hp], Vector2(x, 12), Vector2(200, 70), 22, col, HORIZONTAL_ALIGNMENT_LEFT, 4)
-		UiSystem.make_label(p, "デッキ %d枚" % CurrentDeck.decks[a.id].size(), Vector2(x, 84), Vector2(200, 40), 18, ImageController.COL.sub, HORIZONTAL_ALIGNMENT_LEFT, 0)
+		UiSystem.make_banner(p, a.name, Rect2(x - 4, 12, 150, 34), 20, ImageController.COL.get(a.id, ImageController.COL.ink), ImageController.COL.paper, 10)
+		var hp := UiSystem.make_label(p, "HP %d/%d" % [a.hp, a.max_hp], Vector2(x, 50), Vector2(200, 40), 26, col, HORIZONTAL_ALIGNMENT_LEFT, 4)
+		hp.add_theme_font_override("font", ImageController.font_head)
+		UiSystem.make_label(p, "デッキ %d枚" % CurrentDeck.decks[a.id].size(), Vector2(x, 92), Vector2(200, 36), 18, ImageController.COL.sub, HORIZONTAL_ALIGNMENT_LEFT, 0)
 		x += 220
 	var txt := "%dゴールド\n%s\n道具 %d個" % [Inventory.gold, Inventory.foods_text(), Inventory.items.size()]
 	UiSystem.make_label(p, txt, Vector2(450, 12), Vector2(230, 120), 18, ImageController.COL.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
@@ -152,11 +169,11 @@ func _open_specials(ui: CanvasLayer) -> void:
 	dim.size = box.size
 	box.add_child(dim)
 	UiSystem.make_panel(box, Rect2(30, 280, 660, 680))
-	UiSystem.make_label(box, "必殺技をセット", Vector2(30, 300), Vector2(660, 50), 32, col.accent)
-	UiSystem.make_label(box, "戦闘中は中央を長押しして発動（AP消費）", Vector2(30, 348), Vector2(660, 36), 20, col.sub)
+	UiSystem.make_banner(box, "必殺技をセット", Rect2(50, 252, 380, 64), 32)
+	UiSystem.make_label(box, "戦闘中は中央を長押しして発動（AP消費）", Vector2(30, 334), Vector2(660, 50), 20, col.sub)
 	var y := 404.0
 	for a in CurrentStatus.allies:
-		UiSystem.make_label(box, a.name, Vector2(60, y), Vector2(600, 36), 24, col.text, HORIZONTAL_ALIGNMENT_LEFT)
+		UiSystem.make_banner(box, a.name, Rect2(54, y - 2, 170, 38), 22, col.get(a.id, col.ink), col.paper, 12)
 		var btns: Array = []
 		var x := 60.0
 		for sp in ActionList.SPECIALS[a.id]:
@@ -173,4 +190,4 @@ func _open_specials(ui: CanvasLayer) -> void:
 					o.modulate = Color.WHITE if o == b else Color(1, 1, 1, 0.4))
 			b.modulate = Color.WHITE if b.get_meta("sp") == CurrentStatus.special_choice.get(a.id, "") else Color(1, 1, 1, 0.4)
 		y += 175
-	UiSystem.make_button(box, "決定", Vector2(210, 860), Vector2(300, 80), box.queue_free, 28)
+	UiSystem.make_red_button(box, "決定", Vector2(210, 860), Vector2(300, 80), box.queue_free, 30)

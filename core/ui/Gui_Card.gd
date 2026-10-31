@@ -40,50 +40,59 @@ func _draw() -> void:
 	var r := Rect2(Vector2.ZERO, size)
 	var rarity: String = card.get("rarity", "normal")
 	var fc := _frame_color()
-	if highlighted:
-		IC.round_rect(self, r.grow(6), Color(IC.COL.gold, 0.55), 16)
-	# 外枠（レア度で縁の色が変わる）
-	var border := Color(1, 1, 1, 0.3)
+	# 外枠（種類の色の太い枠）。縁の色はレア度で変わる。選択中は白縁＋赤のベタ影
+	var border: Color = IC.COL.ink
+	var bw := 2.0
 	if rarity == "rare":
 		border = IC.COL.gold
+		bw = 3.0
 	elif rarity == "super_rare":
 		border = Color.from_hsv(fmod(_t * 0.35, 1.0), 0.55, 1.0)
-	IC.round_rect(self, r, fc, 12, 4, border)
-	# 絵柄の窓
-	var art := Rect2(8, 30, size.x - 16, 84)
-	IC.round_rect(self, art, fc.darkened(0.55), 6)
-	IC.glow(self, art.get_center(), 46, Color(fc.lightened(0.4), 0.7), 5)
-	IC.icon(self, card.get("art", "star"), art.get_center(), 62)
+		bw = 3.0
+	if highlighted:
+		IC.cut_rect(self, r, fc, 14, 4.0, IC.COL.paper, IC.COL.red, Vector2(7, 7))
+	else:
+		IC.cut_rect(self, r, fc, 14, bw, border, Color(0, 0, 0, 0.6), Vector2(4, 4))
+	# 本体は黒
+	IC.cut_rect(self, r.grow(-5), IC.COL.ink, 10)
+	# 絵柄の窓：種類の色の斜線の上にアイコン
+	var art := Rect2(9, 27, size.x - 18, 82)
+	draw_rect(art, fc.darkened(0.62))
+	IC.stripes(self, art, Color(fc, 0.35), 14, 5, 0.7)
+	IC.glow(self, art.get_center(), 42, Color(fc.lightened(0.4), 0.6), 5)
+	IC.icon(self, card.get("art", "star"), art.get_center() + Vector2(0, 2), 60)
 	_draw_shine(art, rarity)
-	# 名前
-	IC.round_rect(self, Rect2(6, size.y - 52, size.x - 12, 24), Color(0, 0, 0, 0.45), 5)
-	IC.text(self, card.get("name", ""), Vector2(size.x / 2, size.y - 40), 17, IC.COL.text, true, 0, size.x - 18)
+	draw_rect(art, Color(1, 1, 1, 0.18), false, 1.0)
+	# 名前：白い斜めの帯に黒い太字
+	IC.slant(self, Rect2(4, size.y - 56, size.x - 8, 27), IC.COL.paper, 8)
+	IC.text(self, card.get("name", ""), Vector2(size.x / 2, size.y - 42), 17, IC.COL.ink, true, 0, size.x - 22)
 	# 効果の要約
-	IC.text(self, summary(card), Vector2(size.x / 2, size.y - 15), 14, Color(IC.COL.text, 0.85), false, 0, size.x - 12)
-	# 威力（左上）
+	IC.text(self, summary(card), Vector2(size.x / 2, size.y - 15), 14, IC.COL.text, true, 0, size.x - 14)
+	# 威力（左上）：赤いギザギザの星に白い数字
 	var power: int = int(card.get("power", 0))
 	if power > 0:
-		draw_circle(Vector2(18, 17), 16, Color("2a1418"))
-		draw_arc(Vector2(18, 17), 16, 0, TAU, 24, IC.COL.bad, 2.5, true)
-		IC.text(self, str(power), Vector2(18, 17), 20, Color.WHITE, true)
+		var pc := Vector2(17, 17)
+		IC.poly_box(self, IC.burst_pts(pc, 21, 14, 8, 3), IC.COL.red, 2.0, IC.COL.ink)
+		IC.head(self, str(power), pc + Vector2(-1, 0), 21, IC.COL.paper, 26, Color(0, 0, 0, 0), Vector2.ZERO, 4, IC.COL.ink)
 	# 消費AP（右上）
 	if card.has("ap"):
-		var apc: Color = IC.COL.ap if playable else Color("7a3a3a")
+		var apc: Color = IC.COL.ap if playable else Color("5a2a30")
 		IC.icon(self, "ap", Vector2(size.x - 18, 17), 36, apc)
-		IC.text(self, str(card.ap), Vector2(size.x - 18, 18), 19, Color.WHITE, true, 4)
+		IC.text(self, str(card.ap), Vector2(size.x - 18, 18), 19, Color.WHITE, true, 4, -1.0, IC.COL.ink)
 	elif card.get("type") == "unselectable":
 		IC.text(self, "常時", Vector2(size.x - 22, 16), 14, IC.COL.good, true, 4)
-	# 持ち主のタグ（ナイト／ウィッチ）
+	# 持ち主のタグ（ナイト／ウィッチ）：持ち主の色の斜めタグ
 	var owner: String = card.get("owner", "")
 	if owner != "":
-		var tag := Rect2(size.x / 2 - 30, 3, 60, 20)
-		IC.round_rect(self, tag, IC.COL.get(owner, Color.GRAY), 4)
+		var tag := Rect2(size.x / 2 - 30, 4, 60, 20)
+		IC.slant(self, tag, IC.COL.get(owner, Color.GRAY), 6, 2.0, IC.COL.ink)
 		IC.text(self, "ナイト" if owner == "knight" else "ウィッチ", tag.get_center(), 12, Color.WHITE, true)
 	if not playable:
-		IC.round_rect(self, r, Color(0, 0, 0, 0.45), 12)
+		draw_colored_polygon(IC.cut_pts(r, 14), Color(0, 0, 0, 0.55))
 	if label_hint != "":
-		draw_circle(Vector2(size.x - 14, size.y - 66), 11, Color(0, 0, 0, 0.55))
-		IC.text(self, label_hint, Vector2(size.x - 14, size.y - 66), 14, Color(1, 1, 1, 0.8), true)
+		var hr := Rect2(size.x - 30, size.y - 78, 22, 20)
+		IC.slant(self, hr, Color(IC.COL.ink, 0.8), 4)
+		IC.text(self, label_hint, hr.get_center(), 14, Color(1, 1, 1, 0.85), true)
 
 
 ## 絵柄の窓に斜めの光を走らせる（レア＝金、スーパーレア＝虹）

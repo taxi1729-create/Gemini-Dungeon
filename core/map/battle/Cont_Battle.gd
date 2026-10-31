@@ -273,25 +273,38 @@ func _cell_of(value) -> Vector2i:
 
 func _build_ui() -> void:
 	var col: Dictionary = ImageController.COL
-	var low_bg := ColorRect.new()
-	low_bg.color = col.bg
+	# 下半分の操作エリア：黒地に薄い斜線、上端に赤と白の線
+	var low_bg := Control.new()
 	low_bg.position = Vector2(0, 662)
 	low_bg.size = Vector2(720, 618)
 	low_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	low_bg.draw.connect(func():
+		var IC = ImageController
+		low_bg.draw_rect(Rect2(Vector2.ZERO, low_bg.size), col.ink)
+		IC.stripes(low_bg, Rect2(Vector2.ZERO, low_bg.size), Color(1, 1, 1, 0.022), 24, 2, 0.6)
+		IC.halftone(low_bg, Rect2(Vector2(420, 380), Vector2(300, 238)), Color(col.red, 0.08), low_bg.size, 320, 18, 5))
 	ui.add_child(low_bg)
-	var line := ColorRect.new()
-	line.color = col.accent
-	line.position = Vector2(0, 659)
-	line.size = Vector2(720, 4)
+	var line := Control.new()
+	line.position = Vector2(0, 652)
+	line.size = Vector2(720, 14)
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	line.draw.connect(func():
+		line.draw_rect(Rect2(0, 7, 720, 4), col.red)
+		line.draw_rect(Rect2(0, 12, 720, 1), Color(1, 1, 1, 0.5))
+		line.draw_colored_polygon(ImageController.slant_pts(Rect2(470, 0, 260, 11), 10), col.red))
 	ui.add_child(line)
 
 	order_bar = GuiWidget.new("order", Rect2(8, 6, 704, 62))
 	ui.add_child(order_bar)
-	log_label = UiSystem.make_label(ui, "", Vector2(110, 70), Vector2(500, 38), 22, col.text)
+	log_label = UiSystem.make_label(ui, "", Vector2(110, 72), Vector2(500, 38), 22, col.text, HORIZONTAL_ALIGNMENT_CENTER, 4)
+	log_label.add_theme_font_override("font", ImageController.font_bold)
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0, 0, 0, 0.6)
-	sb.set_corner_radius_all(4)
+	sb.bg_color = Color(col.ink, 0.88)
+	sb.skew = Vector2(0.4, 0)
+	sb.border_color = col.red
+	sb.border_width_left = 8
+	sb.border_width_right = 2
+	sb.anti_aliasing = true
 	log_label.add_theme_stylebox_override("normal", sb)
 	log_label.z_index = 5
 
@@ -310,10 +323,19 @@ func _build_ui() -> void:
 	grid.size = Vector2(720, 1280)
 	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	grid.draw.connect(func():
+		# 3×3 のマス：うっすら面を敷き、四隅に L 字の印（照準のような枠）
 		for r in 3:
 			for c in 3:
 				var rr := Rect2(_cell_center(Vector2i(c, r)) - Vector2(86, 91), Vector2(172, 182))
-				ImageController.round_rect(grid, rr, Color(1, 1, 1, 0.03), 6))
+				grid.draw_rect(rr, Color(1, 1, 1, 0.025))
+				var k := 16.0
+				var lc := Color(1, 1, 1, 0.22)
+				for corner in [[rr.position, Vector2(1, 1)], [Vector2(rr.end.x, rr.position.y), Vector2(-1, 1)],
+						[rr.end, Vector2(-1, -1)], [Vector2(rr.position.x, rr.end.y), Vector2(1, -1)]]:
+					var p0: Vector2 = corner[0]
+					var d: Vector2 = corner[1]
+					grid.draw_line(p0, p0 + Vector2(d.x * k, 0), lc, 2)
+					grid.draw_line(p0, p0 + Vector2(0, d.y * k), lc, 2))
 	pad.add_child(grid)
 
 	for i in 4:
@@ -342,7 +364,7 @@ func _build_ui() -> void:
 	hold_card.visible = false
 	pad.add_child(hold_card)
 
-	var kb := [["deck", "デッキ・捨札", "cards", Color("5c8ad8")], ["status", "ステータス", "info", Color("8fc0ea")], ["end", "ターン終了", "enter", Color("e8c26a")]]
+	var kb := [["deck", "デッキ・捨札", "cards", Color("8fb4ff")], ["status", "ステータス", "info", Color("8fc0ea")], ["end", "ターン終了", "enter", col.red]]
 	for k in kb:
 		var b := GuiSysButton.new()
 		var c := _cell_center(_cell_of(k[0]))
@@ -367,18 +389,25 @@ func _add_btn(id: String, title: String, ik: String, acc: Color, num: int, sz: V
 
 func _draw_strip() -> void:
 	var IC = ImageController
-	IC.round_rect(strip, Rect2(8, 2, 704, 38), Color(1, 1, 1, 0.05), 4)
+	strip.draw_rect(Rect2(0, 0, 720, 42), Color(IC.COL.ink, 0.0))
 	var ap := int(current.get("ap", 0)) if current.get("side", "") == "ally" else 0
 	if strip_text != "":
-		IC.text(strip, strip_title + "　" + strip_text, Vector2(360, 21), 20, strip_col, true, 0, 690)
+		IC.slant(strip, Rect2(8, 4, 704, 36), Color(1, 1, 1, 0.06), 14)
+		IC.text(strip, strip_title + "　" + strip_text, Vector2(360, 22), 20, strip_col, true, 0, 680)
 		return
 	if current.get("side", "") == "ally":
-		IC.text(strip, "%sの手番" % current.name, Vector2(100, 21), 22, IC.COL.accent, true)
+		# 左に赤い斜めタグで「〇〇の手番」、右に AP の菱形
+		var tag := Rect2(4, 3, 196, 38)
+		IC.slant(strip, tag, IC.COL.red, 14, 2.0, IC.COL.ink, IC.COL.ink, Vector2(4, 4))
+		IC.head(strip, "%sの手番" % current.name, tag.get_center(), 22, IC.COL.paper, 168)
 		for i in InitAllyStatus.AP_MAX:
-			IC.icon(strip, "ap", Vector2(220 + i * 30, 21), 24, IC.COL.ap if i < ap else Color(0.3, 0.3, 0.35, 0.7))
-		IC.text(strip, "AP %d" % ap, Vector2(560, 21), 20, IC.COL.text, true)
+			IC.icon(strip, "ap", Vector2(228 + i * 30, 22), 24, IC.COL.ap if i < ap else Color(1, 1, 1, 0.14))
+		var apr := Rect2(548, 5, 116, 34)
+		IC.slant(strip, apr, IC.COL.paper, 12)
+		IC.head(strip, "AP %d" % ap, apr.get_center(), 22, IC.COL.ink, 96)
 	elif not current.is_empty():
-		IC.text(strip, "%sの行動" % current.name, Vector2(360, 21), 20, IC.COL.sub, true)
+		IC.slant(strip, Rect2(160, 4, 400, 36), Color(1, 1, 1, 0.06), 14)
+		IC.head(strip, "%sの行動" % current.name, Vector2(360, 22), 21, IC.COL.sub, 380)
 
 
 # ============================================================
@@ -998,12 +1027,14 @@ func _show_unit_info(u: Dictionary) -> void:
 	_close_info()
 	var v: GuiUnit = views[u.uid]
 	var lines := _unit_lines(u)
-	var w := 440.0
-	var h := 64.0 + lines.size() * 30.0
-	var x := clampf(v.position.x - w / 2, 10, 720 - w - 10)
-	var y := clampf(v.position.y - v.body_height() - h - 10, 74, 640 - h)
+	var w := 470.0
+	var h := GuiInfoPanel.measure(lines, w)
+	var head := v.position - Vector2(0, v.body_height())  # キャラの頭のあたり
+	var x := clampf(v.position.x - w / 2, 16, 720 - w - 24)
+	var y := clampf(head.y - h - 40, 92, 630 - h)
 	info_panel = GuiInfoPanel.new()
 	info_panel.setup(u.name, lines, Rect2(x, y, w, h), u.side == "enemy")
+	info_panel.tail_to = head + Vector2(0, -4) if head.y > y + h else v.position + Vector2(0, -v.body_height() * 0.5)
 	info_panel.z_index = 50
 	ui.add_child(info_panel)
 
@@ -1049,7 +1080,7 @@ func _open_status() -> void:
 	dim.size = overlay.size
 	overlay.add_child(dim)
 	UiSystem.make_panel(overlay, Rect2(20, 80, 680, 1100))
-	UiSystem.make_label(overlay, "ステータス", Vector2(20, 96), Vector2(680, 50), 32, col.accent)
+	UiSystem.make_banner(overlay, "ステータス", Rect2(40, 56, 330, 60), 32)
 	var lines: Array = []
 	for u in CurrentStatus.allies + CurrentStatus.enemies:
 		if u.hp <= 0:
@@ -1057,7 +1088,7 @@ func _open_status() -> void:
 		lines.append("■ " + u.name)
 		for l in _unit_lines(u):
 			lines.append("　" + l)
-	var l := UiSystem.make_label(overlay, "\n".join(lines), Vector2(44, 156), Vector2(632, 900), 18, col.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
+	var l := UiSystem.make_label(overlay, "\n".join(lines), Vector2(44, 140), Vector2(632, 920), 18, col.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
 	l.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	UiSystem.make_button(overlay, "閉じる", Vector2(210, 1080), Vector2(300, 80), func():
 		overlay.queue_free()
@@ -1067,7 +1098,7 @@ func _open_status() -> void:
 func _open_items() -> void:
 	for c in item_panel.get_children():
 		c.queue_free()
-	UiSystem.make_label(item_panel, "アイテム（AP 0）", Vector2(0, 14), Vector2(620, 50), 30, ImageController.COL.accent)
+	UiSystem.make_banner(item_panel, "アイテム（AP 0）", Rect2(20, -22, 340, 58), 28)
 	var y := 80.0
 	if Inventory.items.is_empty():
 		UiSystem.make_label(item_panel, "道具を持っていない", Vector2(0, 200), Vector2(620, 60), 26)
