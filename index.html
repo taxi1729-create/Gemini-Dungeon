@@ -1,169 +1,220 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#f5f0e8">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>異種伝言ゲーム</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div id="app">
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+		<title>Gemini-Dungeon</title>
+		<style>
+html, body, #canvas {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
 
-    <!-- ==================== タイトル画面 ==================== -->
-    <div id="titleScreen" class="screen active">
+body {
+	color: white;
+	background-color: black;
+	overflow: hidden;
+	touch-action: none;
+}
 
-      <!-- タイトルロゴ画像：title_logo.png をこのフォルダに置いてください -->
-      <img
-        src="title_logo.PNG"
-        alt="異種伝言ゲーム"
-        class="title-logo-img"
-        id="titleLogoImg"
-        draggable="false"
-      >
-      <p class="title-sub">ishu_dengon</p>
+#canvas {
+	display: block;
+}
 
-      <div class="settings-panel">
+#canvas:focus {
+	outline: none;
+}
 
-        <!-- 人数設定 -->
-        <div class="setting-row">
-          <p class="setting-label">👥 プレイ人数</p>
-          <div class="toggle-group" id="playerCount">
-            <button class="toggle-btn" data-value="2">2人</button>
-            <button class="toggle-btn active" data-value="3">3人</button>
-            <button class="toggle-btn" data-value="4">4人</button>
-            <button class="toggle-btn" data-value="5">5人</button>
-          </div>
-        </div>
+#status, #status-splash, #status-progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+}
 
-        <!-- 難易度設定 -->
-        <div class="setting-row">
-          <p class="setting-label">⚡ 難易度</p>
-          <div class="toggle-group" id="difficulty">
-            <button class="toggle-btn" data-value="easy">やさしい</button>
-            <button class="toggle-btn active" data-value="normal">ふつう</button>
-            <button class="toggle-btn" data-value="hard">むずかしい</button>
-          </div>
-        </div>
+#status, #status-splash {
+	top: 0;
+	bottom: 0;
+}
 
-        <!-- 音量設定 -->
-        <div class="setting-row">
-          <p class="setting-label">🔊 音量</p>
-          <div class="volume-row">
-            <span>🔇</span>
-            <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.7">
-            <span>🔊</span>
-          </div>
-        </div>
+#status {
+	background-color: #0e1222;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	visibility: hidden;
+}
 
-        <!-- APIキー設定 -->
-        <div class="setting-row">
-          <p class="setting-label">🤖 Anthropic APIキー <span style="font-size:0.7rem;color:#e74c3c;">(AI変換に必要)</span></p>
-          <input type="password" id="apiKeyInput" class="api-key-input"
-            placeholder="sk-ant-..." autocomplete="off">
-          <p class="api-key-hint">
-            ※ APIキーは端末内にのみ保存され、外部には送信されません。<br>
-            AIアクションを使わない場合は空欄でも遊べます。
-          </p>
-        </div>
+#status-splash {
+	max-height: 100%;
+	max-width: 100%;
+	margin: auto;
+}
 
-      </div>
+#status-splash.show-image--false {
+	display: none;
+}
 
-      <button class="btn btn-start" id="startBtn">ゲームスタート ▶</button>
+#status-splash.fullsize--true {
+	height: 100%;
+	width: 100%;
+	object-fit: contain;
+}
 
-    </div><!-- /titleScreen -->
+#status-splash.use-filter--false {
+	image-rendering: pixelated;
+}
 
+#status-progress, #status-notice {
+	display: none;
+}
 
-    <!-- ==================== ゲームプレイ画面 ==================== -->
-    <div id="gameScreen" class="screen">
+#status-progress {
+	bottom: 10%;
+	width: 50%;
+	margin: 0 auto;
+}
 
-      <!-- ヘッダー -->
-      <div class="player-header">
-        <div class="player-badge" id="playerBadge">1人目</div>
-        <div class="player-progress" id="progressDots"></div>
-      </div>
+#status-notice {
+	background-color: #5b3943;
+	border-radius: 0.5rem;
+	border: 1px solid #9b3943;
+	color: #e0e0e0;
+	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+	line-height: 1.3;
+	margin: 0 2rem;
+	overflow: hidden;
+	padding: 1rem;
+	text-align: center;
+	z-index: 1;
+}
+		</style>
+		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
+<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
 
-      <!-- メインコンテンツ（動的に切り替え） -->
-      <div class="game-content" id="gameContent">
-        <!-- ui.js が動的に描画 -->
-      </div>
+	</head>
+	<body>
+		<canvas id="canvas">
+			Your browser does not support the canvas tag.
+		</canvas>
 
-    </div><!-- /gameScreen -->
+		<noscript>
+			Your browser does not support JavaScript.
+		</noscript>
 
+		<div id="status">
+			<img id="status-splash" class="show-image--false fullsize--true use-filter--true" src="index.png" alt="">
+			<progress id="status-progress"></progress>
+			<div id="status-notice"></div>
+		</div>
 
-    <!-- ==================== リザルト画面 ==================== -->
-    <div id="resultScreen" class="screen">
+		<script src="index.js"></script>
+		<script>
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":6762700,"index.wasm":39509339},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_THREADS_ENABLED = false;
+const engine = new Engine(GODOT_CONFIG);
 
-      <!-- 結果ヘッダー -->
-      <div class="result-header">
-        <div class="result-emoji" id="resultEmoji">🎉</div>
-        <h2 class="result-title correct" id="resultTitle">正解！</h2>
-        <p class="result-topic">お題：<span id="resultTopicText"></span></p>
-      </div>
+(function () {
+	const statusOverlay = document.getElementById('status');
+	const statusProgress = document.getElementById('status-progress');
+	const statusNotice = document.getElementById('status-notice');
 
-      <!-- アクション履歴 -->
-      <div class="action-history">
-        <p class="history-title">📋 各プレイヤーのアクション</p>
-        <div id="actionHistory">
-          <!-- ui.js が動的に描画 -->
-        </div>
-      </div>
+	let initializing = true;
+	let statusMode = '';
 
-      <!-- ボタン -->
-      <div class="result-buttons">
-        <button class="btn btn-primary" id="replayBtn">タイトルに戻る</button>
-        <button class="btn btn-secondary" id="continueBtn">同じ設定で続ける ▶</button>
-      </div>
+	function setStatusMode(mode) {
+		if (statusMode === mode || !initializing) {
+			return;
+		}
+		if (mode === 'hidden') {
+			statusOverlay.remove();
+			initializing = false;
+			return;
+		}
+		statusOverlay.style.visibility = 'visible';
+		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
+		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
+		statusMode = mode;
+	}
 
-    </div><!-- /resultScreen -->
+	function setStatusNotice(text) {
+		while (statusNotice.lastChild) {
+			statusNotice.removeChild(statusNotice.lastChild);
+		}
+		const lines = text.split('\n');
+		lines.forEach((line) => {
+			statusNotice.appendChild(document.createTextNode(line));
+			statusNotice.appendChild(document.createElement('br'));
+		});
+	}
 
-  </div><!-- /app -->
+	function displayFailureNotice(err) {
+		console.error(err);
+		if (err instanceof Error) {
+			setStatusNotice(err.message);
+		} else if (typeof err === 'string') {
+			setStatusNotice(err);
+		} else {
+			setStatusNotice('An unknown error occurred.');
+		}
+		setStatusMode('notice');
+		initializing = false;
+	}
 
-  <!-- ===== スクリプト読み込み ===== -->
-  <script src="config.js"></script>
-  <script src="topics.js"></script>
-  <script src="game.js"></script>
-  <script src="actions/ai-transform.js"></script>
-  <script src="actions/drawing.js"></script>
-  <script src="actions/shapes.js"></script>
-  <script src="actions/verbal.js"></script>
-  <script src="ui.js"></script>
+	const missing = Engine.getMissingFeatures({
+		threads: GODOT_THREADS_ENABLED,
+	});
 
-  <!-- ===== 初期化 ===== -->
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      // タイトル画面の初期化
-      initTitleScreen();
-
-      // ロゴタップで一回転
-      const logoImg = document.getElementById('titleLogoImg');
-      logoImg.addEventListener('click', () => {
-        if (logoImg.classList.contains('spinning')) return;
-        SoundManager.init();
-        SoundManager.playClick();
-        logoImg.classList.add('spinning');
-        logoImg.addEventListener('animationend', function handler(e) {
-          // spinOnce が終わったタイミングだけ除去
-          if (e.animationName === 'spinOnce') {
-            logoImg.classList.remove('spinning');
-            logoImg.removeEventListener('animationend', handler);
-          }
-        });
-      });
-
-      // リザルト画面のボタン
-      document.getElementById('replayBtn').addEventListener('click', () => {
-        SoundManager.playClick();
-        showScreen('titleScreen');
-      });
-
-      document.getElementById('continueBtn').addEventListener('click', () => {
-        SoundManager.playClick();
-        startGame();
-      });
-    });
-  </script>
-</body>
+	if (missing.length !== 0) {
+		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
+			let serviceWorkerRegistrationPromise;
+			try {
+				serviceWorkerRegistrationPromise = navigator.serviceWorker.getRegistration();
+			} catch (err) {
+				serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
+			}
+			// There's a chance that installing the service worker would fix the issue
+			Promise.race([
+				serviceWorkerRegistrationPromise.then((registration) => {
+					if (registration != null) {
+						return Promise.reject(new Error('Service worker already exists.'));
+					}
+					return registration;
+				}).then(() => engine.installServiceWorker()),
+				// For some reason, `getRegistration()` can stall
+				new Promise((resolve) => {
+					setTimeout(() => resolve(), 2000);
+				}),
+			]).then(() => {
+				// Reload if there was no error.
+				window.location.reload();
+			}).catch((err) => {
+				console.error('Error while registering service worker:', err);
+			});
+		} else {
+			// Display the message as usual
+			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+			displayFailureNotice(missingMsg + missing.join('\n'));
+		}
+	} else {
+		setStatusMode('progress');
+		engine.startGame({
+			'onProgress': function (current, total) {
+				if (current > 0 && total > 0) {
+					statusProgress.value = current;
+					statusProgress.max = total;
+				} else {
+					statusProgress.removeAttribute('value');
+					statusProgress.removeAttribute('max');
+				}
+			},
+		}).then(() => {
+			setStatusMode('hidden');
+		}, displayFailureNotice);
+	}
+}());
+		</script>
+	</body>
 </html>
+
