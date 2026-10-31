@@ -47,9 +47,8 @@ func _choose(id: String) -> void:
 			for a in CurrentStatus.allies:
 				a["hp"] = maxi(1, int(a.hp) - 6)
 			var c := ActionList.make_card(ActionList.random_card_id("rare"))
-			_ask_owner("%s を授かった。どちらのデッキに入れますか？" % c.name, func(char_id):
-				CurrentDeck.add_card(char_id, c.id)
-				_done("%sのデッキに %s を追加した" % [InitAllyStatus.DATA[char_id].name, c.name]))
+			CurrentDeck.add_card(c.owner, c.id)
+			_done("%s を授かった（%sのデッキに追加）" % [c.name, InitAllyStatus.DATA[c.owner].name])
 		"mush3":
 			Inventory.add_food("mush", 3)
 			_done("きのこを3つ採った")

@@ -10,6 +10,8 @@ const HOLD_TIME := 0.45
 const MOVE_CANCEL := 36.0
 
 var enabled := true
+var base_scale := 1.0  # 通常時の大きさ
+var hover_scale := 1.12  # フリックで選ばれている時の倍率
 var interactive := true  # false なら入力を受けない（戦闘の操作エリアはジェスチャーでまとめて処理）
 var highlighted := false:
 	set(v):
@@ -69,11 +71,12 @@ func _gui_input(event: InputEvent) -> void:
 
 func _update_scale() -> void:
 	pivot_offset = size / 2.0
-	var s := 1.0
+	var s := base_scale
 	if highlighted or _held:
-		s = 1.12
+		s = base_scale * hover_scale
 	elif _down and not _moved:
-		s = 0.95
+		s = base_scale * 0.95
+	z_index = 30 if (highlighted or _held) else 0
 	if not is_inside_tree():
 		scale = Vector2(s, s)
 		return

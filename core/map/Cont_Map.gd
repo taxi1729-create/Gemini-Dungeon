@@ -29,6 +29,7 @@ func _ready() -> void:
 	UiSystem.make_label(ui, "進む道を選んでください（%d / %d 階）" % [mini(f + 1, CurrentStatus.FLOORS), CurrentStatus.FLOORS],
 			Vector2(0, 84), Vector2(720, 40), 22, col.sub)
 	_build_footer(ui)
+	UiSystem.make_button(ui, "必殺技", Vector2(560, 1056), Vector2(144, 56), _open_specials.bind(ui), 22)
 
 
 func _process(delta: float) -> void:
@@ -136,3 +137,40 @@ func _build_footer(ui: CanvasLayer) -> void:
 		x += 220
 	var txt := "%dゴールド\n%s\n道具 %d個" % [Inventory.gold, Inventory.foods_text(), Inventory.items.size()]
 	UiSystem.make_label(p, txt, Vector2(450, 12), Vector2(230, 120), 18, ImageController.COL.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
+
+
+## 必殺技のセット（キャラごとに 2 つから 1 つ）。戦闘中は中央の長押しで発動する
+func _open_specials(ui: CanvasLayer) -> void:
+	var col: Dictionary = ImageController.COL
+	var box := Control.new()
+	box.size = Vector2(720, 1280)
+	box.mouse_filter = Control.MOUSE_FILTER_STOP
+	box.z_index = 100
+	ui.add_child(box)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.75)
+	dim.size = box.size
+	box.add_child(dim)
+	UiSystem.make_panel(box, Rect2(30, 280, 660, 680))
+	UiSystem.make_label(box, "必殺技をセット", Vector2(30, 300), Vector2(660, 50), 32, col.accent)
+	UiSystem.make_label(box, "戦闘中は中央を長押しして発動（AP消費）", Vector2(30, 348), Vector2(660, 36), 20, col.sub)
+	var y := 404.0
+	for a in CurrentStatus.allies:
+		UiSystem.make_label(box, a.name, Vector2(60, y), Vector2(600, 36), 24, col.text, HORIZONTAL_ALIGNMENT_LEFT)
+		var btns: Array = []
+		var x := 60.0
+		for sp in ActionList.SPECIALS[a.id]:
+			var eff: String = ("%dダメージ" % sp.power) if sp.has("power") else DeckController.effect_text({}, sp)
+			var b := UiSystem.make_button(box, "%s（AP%d）\n%s" % [sp.name, sp.ap, eff], Vector2(x, y + 40), Vector2(290, 110), Callable(), 19)
+			b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			b.set_meta("sp", sp.id)
+			btns.append(b)
+			x += 310
+		for b in btns:
+			b.pressed.connect(func():
+				CurrentStatus.special_choice[a.id] = b.get_meta("sp")
+				for o in btns:
+					o.modulate = Color.WHITE if o == b else Color(1, 1, 1, 0.4))
+			b.modulate = Color.WHITE if b.get_meta("sp") == CurrentStatus.special_choice.get(a.id, "") else Color(1, 1, 1, 0.4)
+		y += 175
+	UiSystem.make_button(box, "決定", Vector2(210, 860), Vector2(300, 80), box.queue_free, 28)

@@ -89,10 +89,12 @@ func _switch(id: String) -> void:
 		for c in g[1]:
 			var v := GuiCard.new()
 			v.set_card(c)
+			v.base_scale = sc
+			v.hover_scale = 1.15
 			v.scale = Vector2(sc, sc)
-			v.position = Vector2((i % 7) * cw, y + int(i / 7) * ch)
+			# 拡大縮小の中心はカードの中央なので、見た目の左上が揃うようにずらす
+			v.position = Vector2((i % 7) * cw, y + int(i / 7) * ch) - GuiCard.SIZE * (1.0 - sc) / 2.0
 			_grid.add_child(v)
-			v.pivot_offset = Vector2.ZERO
 			v.tapped.connect(_on_card.bind(c, v))
 			i += 1
 		y += ceili(g[1].size() / 7.0) * ch + 6

@@ -56,9 +56,11 @@ func _show_win() -> void:
 			a["hp"] = 1  # 倒れた仲間は HP1 で起き上がる
 	var drops := _process_drops()
 	UiSystem.make_label(ui, "戦利品：" + "、".join(drops), Vector2(30, 250), Vector2(660, 70), 22, col.text)
-	UiSystem.make_label(ui, "報酬カードを1枚選んでください", Vector2(20, 330), Vector2(680, 40), 24, col.sub)
+	UiSystem.make_label(ui, "報酬カードを1枚選んでください（持ち主のデッキに入ります）", Vector2(20, 330), Vector2(680, 40), 22, col.sub)
+	var owners := ["knight", "witch", ["knight", "witch"].pick_random()]
+	owners.shuffle()
 	for i in 3:
-		var c := ActionList.make_card(ActionList.random_card_id())
+		var c := ActionList.make_card(ActionList.random_card_id("", owners[i]))
 		reward_cards.append(c)
 		var v := GuiCard.new()
 		v.set_card(c)
@@ -69,13 +71,11 @@ func _show_win() -> void:
 	_desc = UiSystem.make_label(ui, "", Vector2(40, 576), Vector2(640, 100), 20, col.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
 	_desc.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	owner_box = Control.new()
-	owner_box.position = Vector2(0, 690)
-	owner_box.size = Vector2(720, 200)
+	owner_box.position = Vector2(0, 700)
+	owner_box.size = Vector2(720, 120)
 	owner_box.visible = false
 	ui.add_child(owner_box)
-	UiSystem.make_label(owner_box, "どちらのデッキに入れますか？", Vector2(0, 0), Vector2(720, 50), 24, col.text)
-	UiSystem.make_button(owner_box, "ナイト", Vector2(90, 60), Vector2(250, 84), _give.bind("knight"), 30)
-	UiSystem.make_button(owner_box, "ウィッチ", Vector2(380, 60), Vector2(250, 84), _give.bind("witch"), 30)
+	UiSystem.make_button(owner_box, "このカードをもらう", Vector2(160, 0), Vector2(400, 84), _take, 28)
 	UiSystem.make_button(ui, "デッキを見る", Vector2(160, 960), Vector2(400, 80), _open_deck, 26)
 	UiSystem.make_button(ui, "受け取らずに進む", Vector2(160, 1060), Vector2(400, 80), _leave, 26)
 
@@ -87,16 +87,18 @@ func _open_deck() -> void:
 func _on_card_selected(i: int) -> void:
 	chosen_card = reward_cards[i]
 	for k in card_views.size():
-		card_views[k].highlighted = k == i
-	_desc.text = DeckController.card_text({}, chosen_card)
+		card_views[k].modulate = Color.WHITE if k == i else Color(1, 1, 1, 0.45)
+	var owner_name: String = InitAllyStatus.DATA[chosen_card.owner].name
+	_desc.text = DeckController.card_text({}, chosen_card) + "\n→ %sのデッキに入ります" % owner_name
 	owner_box.visible = true
 
 
-func _give(char_id: String) -> void:
+func _take() -> void:
 	if chosen_card.is_empty():
 		return
-	CurrentDeck.add_card(char_id, chosen_card.id)
-	UiSystem.toast(ui, "%sのデッキに %s を追加！" % [InitAllyStatus.DATA[char_id].name, chosen_card.name], 880, ImageController.COL.good)
+	var owner: String = chosen_card.owner
+	CurrentDeck.add_card(owner, chosen_card.id)
+	UiSystem.toast(ui, "%sのデッキに %s を追加！" % [InitAllyStatus.DATA[owner].name, chosen_card.name], 860, ImageController.COL.good)
 	owner_box.visible = false
 	chosen_card = {}
 	await get_tree().create_timer(0.9).timeout

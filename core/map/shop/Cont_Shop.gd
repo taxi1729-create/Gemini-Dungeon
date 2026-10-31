@@ -86,27 +86,13 @@ func _refresh() -> void:
 func _buy_card(e: Dictionary) -> void:
 	if e.sold or Inventory.gold < e.price:
 		return
-	var box := Control.new()
-	box.size = Vector2(720, 1280)
-	box.mouse_filter = Control.MOUSE_FILTER_STOP
-	box.z_index = 100
-	ui.add_child(box)
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.7)
-	dim.size = box.size
-	box.add_child(dim)
-	UiSystem.make_panel(box, Rect2(40, 420, 640, 400))
-	UiSystem.make_label(box, "%s（%dG）\nどちらのデッキに入れますか？" % [e.card.name, e.price], Vector2(40, 440), Vector2(640, 100), 24, ImageController.COL.text)
-	for pair in [["knight", 70], ["witch", 370]]:
-		UiSystem.make_button(box, InitAllyStatus.DATA[pair[0]].name, Vector2(pair[1], 570), Vector2(280, 90), func():
-			Inventory.gold -= e.price
-			e.sold = true
-			e.view.visible = false
-			CurrentDeck.add_card(pair[0], e.card.id)
-			msg_label.text = "%sのデッキに %s を追加した" % [InitAllyStatus.DATA[pair[0]].name, e.card.name]
-			box.queue_free()
-			_refresh(), 28)
-	UiSystem.make_button(box, "やめる", Vector2(220, 700), Vector2(280, 80), box.queue_free, 24)
+	Inventory.gold -= e.price
+	e.sold = true
+	e.view.visible = false
+	var owner: String = e.card.owner
+	CurrentDeck.add_card(owner, e.card.id)
+	msg_label.text = "%sのデッキに %s を追加した" % [InitAllyStatus.DATA[owner].name, e.card.name]
+	_refresh()
 
 
 func _buy_item(e: Dictionary) -> void:

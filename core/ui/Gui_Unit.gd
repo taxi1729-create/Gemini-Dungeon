@@ -96,10 +96,6 @@ func _draw_status(IC) -> void:
 
 
 func _draw_ally_badges(IC) -> void:
-	var front: bool = int(data.get("row", 0)) == 0
-	var c := Vector2(-46, -body_height() + 6)
-	IC.round_rect(self, Rect2(c - Vector2(20, 13), Vector2(40, 26)), Color("8a2f3a") if front else Color("2f3a5a"), 8)
-	IC.text(self, "前" if front else "後", c, 16, Color.WHITE, true)
 	if targeted > 0:
 		var p := Vector2(0, -body_height() * 0.55)
 		var r := 30 + 4 * sin(_t * 8.0)

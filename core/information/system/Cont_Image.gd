@@ -9,6 +9,9 @@ const COL = {
 	"panel_hi": Color("26304d"),
 	"line": Color("3a4566"),
 	"gold": Color("e8c26a"),
+	"accent": Color("e8213a"),  # 差し色（赤）
+	"knight": Color("3d8bff"),
+	"witch": Color("b65cff"),
 	"gold_d": Color("9c7a33"),
 	"text": Color("f2ede0"),
 	"sub": Color("9aa3bd"),

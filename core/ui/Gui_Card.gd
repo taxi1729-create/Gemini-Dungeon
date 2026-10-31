@@ -12,6 +12,7 @@ var label_hint := ""  # 右下に出す操作ヒント（例: "8"）
 func _init() -> void:
 	size = SIZE
 	custom_minimum_size = SIZE
+	hover_scale = 1.5  # フリックで選んだカードは大きく見せる
 
 
 func set_card(c: Dictionary) -> void:
@@ -72,6 +73,12 @@ func _draw() -> void:
 		IC.text(self, str(card.ap), Vector2(size.x - 18, 18), 19, Color.WHITE, true, 4)
 	elif card.get("type") == "unselectable":
 		IC.text(self, "常時", Vector2(size.x - 22, 16), 14, IC.COL.good, true, 4)
+	# 持ち主のタグ（ナイト／ウィッチ）
+	var owner: String = card.get("owner", "")
+	if owner != "":
+		var tag := Rect2(size.x / 2 - 30, 3, 60, 20)
+		IC.round_rect(self, tag, IC.COL.get(owner, Color.GRAY), 4)
+		IC.text(self, "ナイト" if owner == "knight" else "ウィッチ", tag.get_center(), 12, Color.WHITE, true)
 	if not playable:
 		IC.round_rect(self, r, Color(0, 0, 0, 0.45), 12)
 	if label_hint != "":
@@ -100,8 +107,8 @@ static func summary(c: Dictionary) -> String:
 	var parts: Array = []
 	match c.get("target", ""):
 		"enemy_all": parts.append("敵全体")
-		"front_enemy_single": parts.append("正面1体")
-		"front_enemy_group": parts.append("正面の列")
+		"front_enemy_single": parts.append("近い敵")
+		"front_enemy_group": parts.append("同じ側")
 		"ally_all": parts.append("味方全体")
 		"self": parts.append("自分")
 	match c.get("effect", ""):
