@@ -1,17 +1,22 @@
 extends Node
 class_name DeckController
-## 戦闘中の1キャラ分の山札・手札（4枠：0=8上 1=4左 2=2下 3=6右）・捨て札・保留枠
+## 戦闘中の1キャラ分の山札・手札（5枠：0=8上 1=4左 2=2下 3=6右 4=1左下）・捨札・廃棄札・保留枠
+
+const HAND_SIZE := 5
 
 var draw_pile: Array = []
-var hand: Array = [null, null, null, null]
+var hand: Array = [null, null, null, null, null]
 var discard_pile: Array = []
+var exhaust_pile: Array = []  # 廃棄札（廃棄カードを使うとここへ。戦闘中は戻らない）
 var hold = null  # 保留カード（ターンをまたいで残る）
 
 
 func setup_battle_deck(master_deck_ids: Array) -> void:
 	draw_pile.clear()
 	discard_pile.clear()
-	hand = [null, null, null, null]
+	exhaust_pile.clear()
+	hand = []
+	hand.resize(HAND_SIZE)
 	hold = null
 	for card_id in master_deck_ids:
 		var c := ActionList.make_card(card_id)
@@ -20,11 +25,15 @@ func setup_battle_deck(master_deck_ids: Array) -> void:
 	draw_pile.shuffle()
 
 
-## 空いている枠をカードで埋める（最大 amount 枚）。引いた枠の番号を返す
-func draw_cards(amount: int) -> Array:
+## 空いている枠をカードで埋める（最大 amount 枚）。引いた枠の番号を返す。only_slots を渡すとその枠だけ埋める
+func draw_cards(amount: int, only_slots: Array = []) -> Array:
 	var filled: Array = []
 	for i in amount:
-		var empty_slot := hand.find(null)
+		var empty_slot := -1
+		for s in hand.size():
+			if hand[s] == null and (only_slots.is_empty() or only_slots.has(s)):
+				empty_slot = s
+				break
 		if empty_slot == -1:
 			break
 		if draw_pile.is_empty():
@@ -36,36 +45,78 @@ func draw_cards(amount: int) -> Array:
 	return filled
 
 
+## 使ったカードを捨札（廃棄なら廃棄札）へ
+func _to_used(c: Dictionary) -> void:
+	if ActionList.has_keyword(c, "exhaust"):
+		exhaust_pile.append(c)
+	else:
+		discard_pile.append(c)
+
+
 func play_and_discard(hand_index: int) -> void:
 	if hand[hand_index] != null:
-		discard_pile.append(hand[hand_index])
+		_to_used(hand[hand_index])
 		hand[hand_index] = null
 
 
 func play_hold() -> void:
 	if hold != null:
-		discard_pile.append(hold)
+		_to_used(hold)
 		hold = null
 
 
-## 手札の slot を保留枠へ。保留中のカードがあれば、そのカードは空いた slot へ戻る
-func put_on_hold(slot: int) -> void:
+## 手札の slot を保留枠へ。保留中のカードがあれば、そのカードは空いた slot へ戻る。
+## パワーカードは保留枠に入るとすぐ捨札へ行く（戻り値 true）
+func put_on_hold(slot: int) -> bool:
 	var c = hand[slot]
 	if c == null:
-		return
+		return false
 	hand[slot] = hold
 	hold = c
+	if ActionList.has_keyword(c, "power"):
+		discard_pile.append(c)
+		hold = null
+		return true
+	return false
 
 
-func discard_hand() -> void:
+## ターン終了時：保留枠が空で手札が残っていれば、ランダムに 1 枚を保留枠へ（パワーカードは除く）。保留したカードを返す
+func auto_hold():
+	if hold != null:
+		return null
+	var cand: Array = []
 	for i in hand.size():
-		if hand[i] != null:
+		if hand[i] != null and not ActionList.has_keyword(hand[i], "power"):
+			cand.append(i)
+	if cand.is_empty():
+		return null
+	var slot: int = cand.pick_random()
+	hold = hand[slot]
+	hand[slot] = null
+	return hold
+
+
+func discard_hand(slots: Array = []) -> void:
+	for i in hand.size():
+		if hand[i] != null and (slots.is_empty() or slots.has(i)):
 			discard_pile.append(hand[i])
-	hand = [null, null, null, null]
+			hand[i] = null
 
 
 func turn_end_and_discard() -> void:
 	discard_hand()
+
+
+## 手札にあるパワーカードの効果の合計 {"atk": n, "def": n}
+func power_mods() -> Dictionary:
+	var m := {"atk": 0, "def": 0}
+	for c in hand:
+		if c != null and ActionList.has_keyword(c, "power"):
+			var pe: Dictionary = c.get("power_effect", {})
+			match pe.get("status", ""):
+				"atk_buff": m.atk += int(pe.eff_val)
+				"def_buff": m.def += int(pe.eff_val)
+	return m
 
 
 func _shuffle_discard_to_draw() -> void:
@@ -81,15 +132,13 @@ static func card_text(user: Dictionary, action: Dictionary) -> String:
 	match action.get("rarity", ""):
 		"rare": head += "　★レア"
 		"super_rare": head += "　★★超レア"
+	var kw: Array = action.get("keywords", [])
+	if kw.has("power"):
+		head += "　［パワー］"
+	if kw.has("exhaust"):
+		head += "　［廃棄］"
 	lines.append(head)
-	var target_text := ""
-	match action.get("target", ""):
-		"enemy_all": target_text = "敵全体"
-		"front_enemy_single": target_text = "一番近い敵1体"
-		"front_enemy_group": target_text = "自分の側（左右）の敵全員"
-		"self": target_text = "自分"
-		"ally_all": target_text = "味方全体"
-	var row := "対象: " + target_text
+	var row := "対象: " + target_text(action.get("target", ""))
 	if action.has("ap"):
 		row += "　AP %d" % action.ap
 	lines.append(row)
@@ -97,21 +146,58 @@ static func card_text(user: Dictionary, action: Dictionary) -> String:
 	return "\n".join(lines)
 
 
+static func target_text(t: String) -> String:
+	match t:
+		"enemy_all": return "敵全体"
+		"front_enemy_single": return "目の前の敵でHPが一番低い敵"
+		"front_enemy_group": return "目の前の敵グループ全体"
+		"front_row": return "前衛の敵全体"
+		"self": return "自分"
+		"ally_all": return "味方全体"
+	return ""
+
+
 static func effect_text(user: Dictionary, action: Dictionary) -> String:
+	var parts: Array = []
+	if ActionList.has_keyword(action, "power"):
+		var pe: Dictionary = action.get("power_effect", {})
+		var st: Dictionary = StatusEffectList.DATA.get(pe.get("status", ""), {})
+		parts.append("使用不可。手札にある間 %s +%d（保留枠に入ると捨札へ）" % [st.get("name", "").replace("アップ", ""), int(pe.get("eff_val", 0))])
 	if action.has("power"):
 		var atk := ActionController.get_atk(user) if not user.is_empty() else 0
 		if atk != 0 and not action.get("fixed", false):
-			return "%d ダメージ（攻撃力 %+d）" % [action.power, atk]
-		return "%d ダメージ" % action.power
-	match action.get("effect", ""):
-		"add_shield": return "%d ブロック" % action.eff_val
-		"add_ap": return "AP +%d" % action.eff_val
-		"heal": return "HP %d 回復" % action.eff_val
-		"draw": return "%d 枚引く（空き枠まで）" % action.eff_val
-		"add_status":
-			var st: Dictionary = StatusEffectList.DATA[action.status]
-			return "%s %d（%s）" % [st.name, action.eff_val, st.desc]
-		"turnabout": return "上下左右の手札をすべて捨てて4枚引く。攻撃力 +1"
-		"extra_turn": return "ターン終了時、もう一度ターンを得る"
-		"swap": return "前後の位置を入れ替える"
-	return ""
+			parts.append("%d ダメージ（攻撃力 %+d）" % [action.power, atk])
+		else:
+			parts.append("%d ダメージ" % action.power)
+	for e in ActionList.effects_of(action):
+		var who := ""
+		match e.get("to", "target"):
+			"self": who = "自分に"
+			"ally_all": who = "味方全体に"
+		var turns := int(e.get("turns", -1))
+		var dur := ("%dターン" % turns) if turns > 0 else ""
+		match e.get("effect", ""):
+			"add_shield": parts.append("%sブロック +%d" % [who, e.eff_val])
+			"add_ap": parts.append("AP +%d" % e.eff_val)
+			"heal": parts.append("HP %d 回復" % e.eff_val)
+			"draw": parts.append("カードを %d 枚引く" % e.eff_val)
+			"swap": parts.append("味方の位置を入れ替える")
+			"double": parts.append("次に使うカード・保留カードが2回発動")
+			"turnabout": parts.append("上下左右の手札をすべて捨てて4枚引く。攻撃力 +1")
+			"extra_turn": parts.append("ターン終了時、もう一度ターンを得る")
+			"set_next_action": parts.append("次に強攻撃")
+			"add_status":
+				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
+				match e.status:
+					"taunt": parts.append("%s挑発（単体攻撃をこちらへ向けさせる）" % dur)
+					"poison": parts.append("毒 %dターン" % int(e.eff_val))
+					"fire": parts.append("火傷 %d" % int(e.eff_val))
+					"atk_down": parts.append("%s攻撃力 -%d" % [dur, int(e.eff_val)])
+					"def_down": parts.append("%s防御力 -%d" % [dur, int(e.eff_val)])
+					"ap_plus": parts.append("%sAPプラス（ターン開始時 AP+%d）" % [dur, int(e.eff_val)])
+					"ap_next": parts.append("次の自分のターン AP +%d" % int(e.eff_val))
+					"fire_guard": parts.append("攻撃してきた相手に %dターン火傷" % int(e.eff_val))
+					_: parts.append("%s%s %+d" % [who, st.get("name", ""), int(e.eff_val)])
+	if ActionList.has_keyword(action, "exhaust"):
+		parts.append("廃棄")
+	return "。".join(parts)

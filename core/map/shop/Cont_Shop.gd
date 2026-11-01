@@ -121,7 +121,10 @@ func _buy_item(e: Dictionary) -> void:
 	if e.sold or Inventory.gold < ITEM_PRICE:
 		return
 	Inventory.gold -= ITEM_PRICE
-	Inventory.items.append(e.id)
+	if not Inventory.add_item(e.id):
+		msg_label.text = "アイテムは3つまでしか持てない"
+		Inventory.gold += ITEM_PRICE
+		return
 	e.sold = true
 	e.btn.text = "売り切れ"
 	msg_label.text = "%sを買った" % Item_List.DATA[e.id].name

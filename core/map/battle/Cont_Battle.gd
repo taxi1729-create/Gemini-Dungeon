@@ -2,26 +2,30 @@ extends Node2D
 ## 戦闘シーン：進行・UI・入力（battle-spec.md）
 ##
 ## 画面（720×1280）
-##   上   : 行動順バー／ログ／敵（最大 6 体。2 段に並ぶが前後の概念はない）
+##   上   : ログ／敵（前衛 4 体・後衛 2 体。後衛は小さく描いて遠近感を出す）
 ##   中   : 味方 2 人（左＝青ターゲット／右＝赤ターゲット）
-##   下   : 説明帯／操作エリア 3 行×4 列（左 3 列がテンキー、右列がデッキ・ステータス・終了）
+##   下   : 行動順バー／説明帯／操作エリア 3 行×5 列（左からアイテム欄・テンキー 3 列・デッキ等のキー）
 ## 操作 : 指を置いたマスを起点に 8 方向へ弾くと、隣のマスの操作を実行する（5 を起点にすればテンキーどおり）
-##        例）3（固有スキル）を起点に 上＝6（カード）、左＝2（カード）、右＝ターン終了
+##        どのマスも長押しで溜め、満タンで離すと発動する。フリックで 5（必殺）に合わせて止めても溜まる
 
 signal turn_done
 
-const ENEMY_X := [[180.0, 400.0, 620.0], [80.0, 300.0, 520.0]]  # [段][列]。上下の段を左右にずらし、予告と HP バーが重ならないようにする
-const ENEMY_ROW_Y := [440.0, 280.0]
-const ENEMY_SCALE := 0.78
-const ENEMY_SLOTS := [[0, 1], [0, 0], [0, 2], [1, 1], [1, 0], [1, 2]]  # [段, 列] を埋める順
+const ENEMY_FRONT := [Vector2(270, 468), Vector2(450, 468), Vector2(105, 468), Vector2(615, 468)]  # 前衛（最大 4 体）を埋める順
+const ENEMY_BACK := [Vector2(190, 278), Vector2(530, 278)]  # 後衛（最大 2 体）
+const BOSS_POS := Vector2(360, 278)  # 強敵・ボスは後衛の中央
+const BOSS_BACK_EXTRA := Vector2(612, 278)  # ボス戦で後衛に入るもう 1 体
+const ENEMY_SCALE := 0.8  # 前衛
+const ENEMY_BACK_SCALE := 0.62  # 後衛（遠くにいるので小さく）
 const ALLY_POS := [Vector2(230, 604), Vector2(490, 604)]  # lane 0 = 左（青）, lane 1 = 右（赤）
 const VIEW_SCALE := 0.85
 
-## 操作エリアのマス（3 行×4 列）。番号はテンキー、右列は "deck" / "status" / "end"
-const GRID := [[7, 8, 9, "deck"], [4, 5, 6, "status"], [1, 2, 3, "end"]]
-const GRID_ORIGIN := Vector2(0, 706)
-const GRID_CELL := Vector2(180, 190)
-const SLOT_NUM := [8, 4, 2, 6]  # 手札の枠 → テンキー
+## 操作エリアのマス（3 行×5 列）。数字はテンキー、"itemN" はアイテム欄、右列は "deck" / "status" / "end"
+const GRID := [["item0", 7, 8, 9, "deck"], ["item1", 4, 5, 6, "status"], ["item2", 1, 2, 3, "end"]]
+const GRID_COLS := 5
+const COL_X := [0.0, 104.0, 272.0, 440.0, 608.0, 720.0]  # 列の左端（最後は右端）
+const GRID_TOP := 764.0
+const ROW_H := 172.0
+const SLOT_NUM := [8, 4, 2, 6, 1]  # 手札の枠 → テンキー（1 は 5 枚目のカード）
 const DIR8 := [Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1)]
 const DEADZONE := 48.0
 const CHARGE_DELAY := 0.12
@@ -44,12 +48,12 @@ var specials := {}  # char_id -> 必殺技の辞書
 var extra_turn := false
 var first_turn := {}
 
-var hand_cards: Array = []  # GuiCard ×4
+var hand_cards: Array = []  # GuiCard ×5
 var hold_card: GuiCard
-var btn := {}  # swap hold item unique special deck status end -> GuiSysButton
+var item_slots: Array = []  # GuiItemSlot ×3
+var btn := {}  # swap hold unique special deck status end -> GuiSysButton
 var order_bar: GuiWidget
 var log_label: Label
-var item_panel: Panel
 var overlay: Control
 var info_panel: Control  # キャラをタップした時の情報
 
@@ -67,6 +71,7 @@ var g_cur = null  # 今の指先が指すマスの中身（番号 / キー名 / 
 var g_first_card := 0  # 最初に弾いたカードの番号（保留の対象）。0 = まだ
 var g_moved := false
 var g_cut_in := false
+var g_charge_target = null  # 溜めている操作（マスの中身）。変わったら溜め直し
 
 ## 自動テスト用：true なら味方の手番を自動で進める
 var autoplay := false
@@ -99,16 +104,57 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
-	if g_active and not g_moved and _cell_value(g_origin) is int and _cell_value(g_origin) == 5 and _input_ok():
-		g_time += delta / maxf(Engine.time_scale, 0.01)
-		var c := clampf((g_time - CHARGE_DELAY) / CHARGE_TIME, 0.0, 1.0)
-		btn.special.charge = c
-		if c > 0 and g_cur == null:
-			g_cur = 5
-			_preview_action(5)
-		if c >= 1.0 and not g_cut_in:
-			g_cut_in = true
-			fx.cut_in(current.id, specials[current.id].name)
+	if not (g_active and _input_ok()):
+		return
+	# 溜める対象：指を動かしていなければ押したマス、フリック中なら 5（必殺）に合わせている時だけ
+	var target = null
+	if not g_moved:
+		target = _cell_value(g_origin)
+	elif g_cur is int and g_cur == 5:
+		target = 5
+	if typeof(target) != typeof(g_charge_target) or target != g_charge_target:
+		_set_charge(g_charge_target, 0.0)
+		g_charge_target = target
+		g_time = 0.0
+		g_cut_in = false
+	if target == null:
+		return
+	g_time += delta / maxf(Engine.time_scale, 0.01)
+	var c := clampf((g_time - CHARGE_DELAY) / CHARGE_TIME, 0.0, 1.0)
+	_set_charge(target, c)
+	if c > 0 and target is int and target == 5 and not g_moved and g_cur == null:
+		g_cur = 5
+		_preview_action(5)
+	# カットインは必殺技だけ。AP が足りない時は出さない
+	if c >= 1.0 and target is int and target == 5 and not g_cut_in:
+		g_cut_in = true
+		var sp: Dictionary = specials[current.id]
+		if int(current.ap) >= int(sp.ap):
+			fx.cut_in(current.id, sp.name)
+
+
+## マスの部品に溜めゲージを表示する
+func _set_charge(target, c: float) -> void:
+	var w = _widget_of(target)
+	if w != null and "charge" in w:
+		w.charge = c
+
+
+## マスの中身 → 表示している部品
+func _widget_of(target):
+	if target == null:
+		return null
+	if target is String:
+		if target.begins_with("item"):
+			return item_slots[int(target.substr(4))]
+		return btn.get(target)
+	match target:
+		5: return btn.special
+		7: return btn.swap
+		3: return btn.unique
+		9: return hold_card if hold_card.visible else btn.hold
+	var slot := SLOT_NUM.find(target)
+	return hand_cards[slot] if slot >= 0 else null
 
 
 # ============================================================
@@ -148,26 +194,31 @@ func _setup_units() -> void:
 	var count := AreaList.enemy_count(floor_no, kind)
 	var normal: Array = AreaList.get_enemy_pool(area, "enemies")
 	var ids: Array = []
-	var slots: Array = []
 	var boss_id := ""
 	if kind == "boss":
 		boss_id = AreaList.get_enemy_pool(area, "bosses").pick_random()
 	elif kind == "elite":
 		boss_id = AreaList.get_enemy_pool(area, "elites").pick_random()
-	var free: Array = ENEMY_SLOTS.duplicate()
+	# 並び：前衛 4 体まで → 後衛 2 体まで。強敵・ボスは後衛の中央
+	var places: Array = []  # [位置, 段]
 	if boss_id != "":
 		ids.append(boss_id)
-		slots.append([1, 1])
-		free.erase([1, 1])
-	while ids.size() < count:
+		places.append([BOSS_POS, 1])
+	var front_free: Array = ENEMY_FRONT.duplicate()
+	var back_free: Array = ENEMY_BACK.duplicate() if boss_id == "" else [BOSS_BACK_EXTRA]
+	while ids.size() < count and (not front_free.is_empty() or not back_free.is_empty()):
 		ids.append(normal.pick_random())
-		slots.append(free.pop_front())
+		if not front_free.is_empty():
+			places.append([front_free.pop_front(), 0])
+		else:
+			places.append([back_free.pop_front(), 1])
 	var enemies: Array = []
 	for i in ids.size():
 		var e := EnemyList.make_enemy(ids[i], floor_no)
-		e["pos"] = Vector2(ENEMY_X[slots[i][0]][slots[i][1]], ENEMY_ROW_Y[slots[i][0]])
+		e["pos"] = places[i][0]
+		e["row"] = places[i][1]
 		e["uid"] = _new_uid()
-		e["view_scale"] = ENEMY_SCALE
+		e["view_scale"] = ENEMY_SCALE if e.row == 0 else ENEMY_BACK_SCALE
 		enemies.append(e)
 	CurrentStatus.enemies = enemies
 	for e in enemies:
@@ -212,13 +263,12 @@ func _choose_intent(e: Dictionary) -> void:
 	e["target_lane"] = randi() % 2
 
 
-## 回り込み先：左右反対側の同じ段の位置（他の敵がいなければ）
+## 回り込み先：同じ段で、左右反対側の空いている位置
 func _flank_dest(e: Dictionary):
 	var p: Vector2 = e.pos
-	var row := 0 if p.y > 360 else 1
+	var row_pos: Array = ENEMY_FRONT if int(e.row) == 0 else ENEMY_BACK + [BOSS_BACK_EXTRA]
 	var best = null
-	for x in ENEMY_X[row]:
-		var cand := Vector2(x, ENEMY_ROW_Y[row])
+	for cand in row_pos:
 		if (cand.x < 360) == (p.x < 360):
 			continue
 		var taken := false
@@ -241,7 +291,8 @@ func _update_targets() -> void:
 		var t: String = e.intent.get("target", "")
 		var lanes: Array = []
 		if t == "front_enemy_single":
-			lanes = [int(e.target_lane)]
+			var tg := ActionController.resolve_targets(e, t, CurrentStatus.allies, CurrentStatus.enemies)
+			lanes = [int(tg[0].lane)] if not tg.is_empty() else [int(e.target_lane)]
 		elif t == "enemy_all":
 			lanes = [0, 1]
 		if lanes.is_empty():
@@ -253,19 +304,31 @@ func _update_targets() -> void:
 	fx.set_intents(list)
 
 
+func _cell_rect(c: Vector2i) -> Rect2:
+	return Rect2(COL_X[c.x], GRID_TOP + c.y * ROW_H, COL_X[c.x + 1] - COL_X[c.x], ROW_H)
+
+
 func _cell_center(c: Vector2i) -> Vector2:
-	return GRID_ORIGIN + Vector2(c.x + 0.5, c.y + 0.5) * GRID_CELL
+	return _cell_rect(c).get_center()
+
+
+func _cell_at(p: Vector2) -> Vector2i:
+	var col := 0
+	for i in GRID_COLS:
+		if p.x >= COL_X[i]:
+			col = i
+	return Vector2i(col, clampi(int((p.y - GRID_TOP) / ROW_H), 0, 2))
 
 
 func _cell_value(c: Vector2i):
-	if c.y < 0 or c.y >= GRID.size() or c.x < 0 or c.x >= 4:
+	if c.y < 0 or c.y >= GRID.size() or c.x < 0 or c.x >= GRID_COLS:
 		return null
 	return GRID[c.y][c.x]
 
 
 func _cell_of(value) -> Vector2i:
 	for r in GRID.size():
-		for col in 4:
+		for col in GRID_COLS:
 			if typeof(GRID[r][col]) == typeof(value) and GRID[r][col] == value:
 				return Vector2i(col, r)
 	return Vector2i(-1, -1)
@@ -294,9 +357,10 @@ func _build_ui() -> void:
 		line.draw_colored_polygon(ImageController.slant_pts(Rect2(470, 0, 260, 11), 10), col.red))
 	ui.add_child(line)
 
-	order_bar = GuiWidget.new("order", Rect2(8, 6, 704, 62))
+	# 行動順は操作エリアのすぐ上
+	order_bar = GuiWidget.new("order", Rect2(8, 668, 704, 52))
 	ui.add_child(order_bar)
-	log_label = UiSystem.make_label(ui, "", Vector2(110, 72), Vector2(500, 38), 22, col.text, HORIZONTAL_ALIGNMENT_CENTER, 4)
+	log_label = UiSystem.make_label(ui, "", Vector2(110, 10), Vector2(500, 38), 22, col.text, HORIZONTAL_ALIGNMENT_CENTER, 4)
 	log_label.add_theme_font_override("font", ImageController.font_bold)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(col.ink, 0.88)
@@ -309,7 +373,7 @@ func _build_ui() -> void:
 	log_label.z_index = 5
 
 	strip = Control.new()
-	strip.position = Vector2(0, 664)
+	strip.position = Vector2(0, 722)
 	strip.size = Vector2(720, 42)
 	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	strip.draw.connect(_draw_strip)
@@ -325,8 +389,8 @@ func _build_ui() -> void:
 	grid.draw.connect(func():
 		# 3×3 のマス：うっすら面を敷き、四隅に L 字の印（照準のような枠）
 		for r in 3:
-			for c in 3:
-				var rr := Rect2(_cell_center(Vector2i(c, r)) - Vector2(86, 91), Vector2(172, 182))
+			for c in range(1, 4):
+				var rr := _cell_rect(Vector2i(c, r)).grow(-4)
 				grid.draw_rect(rr, Color(1, 1, 1, 0.025))
 				var k := 16.0
 				var lc := Color(1, 1, 1, 0.22)
@@ -338,7 +402,7 @@ func _build_ui() -> void:
 					grid.draw_line(p0, p0 + Vector2(0, d.y * k), lc, 2))
 	pad.add_child(grid)
 
-	for i in 4:
+	for i in SLOT_NUM.size():
 		var c := GuiCard.new()
 		c.interactive = false
 		c.position = _cell_center(_cell_of(SLOT_NUM[i])) - GuiCard.SIZE / 2
@@ -349,12 +413,10 @@ func _build_ui() -> void:
 
 	_add_btn("swap", "入替", "swap", Color("8fc0ea"), 7)
 	_add_btn("hold", "保留", "pin", Color("e8c26a"), 9)
-	_add_btn("item", "アイテム", "potion", Color("6fd08a"), 1)
 	_add_btn("unique", "固有", "star", Color("b88cff"), 3)
 	_add_btn("special", "必殺", "burst", Color("ffb03a"), 5, Vector2(132, 132))
 	btn.swap.ap_cost = 1
 	btn.hold.subtitle = "AP 0"
-	btn.item.subtitle = "AP 0"
 	hold_card = GuiCard.new()
 	hold_card.interactive = false
 	hold_card.base_scale = 0.86
@@ -364,18 +426,25 @@ func _build_ui() -> void:
 	hold_card.visible = false
 	pad.add_child(hold_card)
 
+	# アイテム欄（テンキー 7・4・1 の左。上から 1 つ目・2 つ目・3 つ目）
+	for i in Inventory.ITEM_MAX:
+		var s := GuiItemSlot.new()
+		s.slot_index = i
+		s.size = Vector2(96, 160)
+		s.position = _cell_center(Vector2i(0, i)) - s.size / 2
+		pad.add_child(s)
+		item_slots.append(s)
+
 	var kb := [["deck", "デッキ・捨札", "cards", Color("8fb4ff")], ["status", "ステータス", "info", Color("8fc0ea")], ["end", "ターン終了", "enter", col.red]]
 	for k in kb:
 		var b := GuiSysButton.new()
 		var c := _cell_center(_cell_of(k[0]))
-		var sz := Vector2(164, 176)
+		var sz := Vector2(108, 164)
 		b.setup(k[1], k[2], k[3], "", "", sz, "key")
 		b.position = c - sz / 2
 		pad.add_child(b)
 		btn[k[0]] = b
 
-	item_panel = UiSystem.make_panel(ui, Rect2(50, 300, 620, 600))
-	item_panel.visible = false
 	_refresh_all()
 
 
@@ -455,9 +524,15 @@ func _run_turn(u: Dictionary) -> void:
 		if u.side == "enemy" or not first_turn.get(u.id, false):
 			u["shield"] = 0
 		var ticks := StatusController.trigger_start_of_turn(u)
-		if not ticks.is_empty():
-			for t in ticks:
+		var hurt := false
+		for t in ticks:
+			if t.has("damage"):
 				fx.hit(views[t.target.uid], int(t.damage), 0, "tick")
+				hurt = true
+			elif t.has("ap_gain"):
+				u["pending_ap"] = int(u.get("pending_ap", 0)) + int(t.ap_gain)
+				fx.popup(views[u.uid], "AP+%d" % t.ap_gain, ImageController.COL.ap, 28)
+		if hurt:
 			await _wait(0.45)
 			_update_deaths({})
 		if u.hp <= 0 or _all_dead(CurrentStatus.enemies) or _all_dead(CurrentStatus.allies):
@@ -471,23 +546,25 @@ func _run_turn(u: Dictionary) -> void:
 				await _wait(0.4)
 		else:
 			await _enemy_turn(u)
+		StatusController.end_of_turn(u)  # 持ち主のターンが終わったら残りターンを減らす
 	v.active = false
 	_refresh_all()
 
 
 func _ally_turn(u: Dictionary) -> void:
 	current = u
-	var gain := InitAllyStatus.AP_PER_TURN
+	var gain := InitAllyStatus.AP_PER_TURN + int(u.get("pending_ap", 0))
+	u["pending_ap"] = 0
 	if first_turn.get(u.id, false):
 		gain += int(CurrentStatus.next_battle.get("ap", 0))
 		first_turn[u.id] = false
 	u["ap"] = mini(InitAllyStatus.AP_MAX, int(u.ap) + gain)
 	var dc: DeckController = deck_controllers[u.id]
-	dc.draw_cards(4)
+	dc.draw_cards(DeckController.HAND_SIZE)
 	_log("%sの手番" % u.name)
 	phase = "player"
 	_refresh_all()
-	for i in 4:
+	for i in hand_cards.size():
 		if dc.hand[i] != null:
 			_pop_in(hand_cards[i], i * 0.04)
 	if autoplay:
@@ -496,9 +573,16 @@ func _ally_turn(u: Dictionary) -> void:
 	phase = "busy"
 	_end_gesture()
 	_close_panels()
+	# 保留枠が空で手札が残っていれば、ランダムに 1 枚を自動で保留
+	if u.hp > 0:
+		var held = dc.auto_hold()
+		if held != null:
+			_log("%sを自動で保留した" % held.name)
 	dc.turn_end_and_discard()
+	u["power_atk"] = 0
+	u["power_def"] = 0
 	_refresh_all()
-	await _wait(0.25)
+	await _wait(0.3)
 
 
 func _enemy_turn(e: Dictionary) -> void:
@@ -539,26 +623,48 @@ func _apply(user: Dictionary, action: Dictionary) -> void:
 	_refresh_all()
 
 
-## カード・スキルの実行：演出（踏み込み等）の当たりの瞬間に効果を確定する。結果はその場で入力へ戻る
+## カード・スキルの実行：結果はその場で確定し（入力の先行受付のため）、演出は後追い
 func _perform(user: Dictionary, action: Dictionary) -> void:
 	var v: GuiUnit = views[user.uid]
-	if action.has("power") and action.get("target", "") == "front_enemy_single":
-		var t := ActionController.resolve_targets(user, action.target, CurrentStatus.allies, CurrentStatus.enemies)
-		if not t.is_empty():
-			# 結果は先に確定（入力の先行受付のため）、演出は後追い
-			var events := ActionController.execute_action(user, action, CurrentStatus.allies, CurrentStatus.enemies)
-			fx.ally_attack(v, t[0].pos, func():
-				_show_events(events, action)
-				_update_deaths(user))
-			_update_targets()
-			_refresh_all()
-			return
-	var events2 := ActionController.execute_action(user, action, CurrentStatus.allies, CurrentStatus.enemies)
-	fx.cast(v, func():
-		_show_events(events2, action)
-		_update_deaths(user))
+	var single_target := ActionController.resolve_targets(user, action.get("target", "self"), CurrentStatus.allies, CurrentStatus.enemies)
+	var events := ActionController.execute_action(user, action, CurrentStatus.allies, CurrentStatus.enemies)
+	_handle_specials(user, events)
+	var show := func():
+		_show_events(events, action)
+		_update_deaths(user)
+	if action.has("power") and action.get("target", "") == "front_enemy_single" and not single_target.is_empty():
+		fx.ally_attack(v, single_target[0].pos, show)
+	else:
+		fx.cast(v, show)
 	_update_targets()
 	_refresh_all()
+
+
+## 表示側で処理する効果（ドロー・入替・連続魔法・一転攻勢・ターンスキップ）
+func _handle_specials(user: Dictionary, events: Array) -> void:
+	if user.get("side", "") != "ally":
+		return
+	var dc: DeckController = deck_controllers[user.id]
+	for ev in events:
+		if not ev.has("special"):
+			continue
+		match ev.special:
+			"draw":
+				_draw_more(dc, int(ev.val))
+			"swap":
+				_do_swap()
+			"double":
+				StatusController.apply_status(user, "double", 1, -1)
+				fx.popup(views[user.uid], "連続魔法", ImageController.COL.accent, 28)
+			"turnabout":
+				# 上下左右（8・4・2・6）の手札を捨てて 4 枚引く。攻撃力 +1
+				dc.discard_hand([0, 1, 2, 3])
+				_draw_more(dc, 4, [0, 1, 2, 3])
+				StatusController.apply_status(user, "atk_buff", maxi(1, int(ev.val)))
+				fx.popup(views[user.uid], "攻↑ 1", ImageController.COL.good, 28)
+			"extra_turn":
+				extra_turn = true
+				fx.popup(views[user.uid], "もう一度！", ImageController.COL.accent, 32)
 
 
 func _show_events(events: Array, action: Dictionary) -> void:
@@ -577,7 +683,10 @@ func _show_events(events: Array, action: Dictionary) -> void:
 			fx.popup(tv, "盾+%d" % ev.shield, col.shield, 28)
 		if ev.has("status"):
 			var st: Dictionary = StatusEffectList.DATA.get(ev.status, {})
-			fx.popup(tv, "%s %d" % [st.get("short", ""), ev.status_val], col.good if st.get("good", false) else Color("ffa060"), 26)
+			var txt: String = st.get("short", "") if ev.status in ["taunt", "double"] else "%s %d" % [st.get("short", ""), ev.status_val]
+			if ev.get("reflect", false):
+				txt = "反撃 " + txt
+			fx.popup(tv, txt, col.good if st.get("good", false) else Color("ffa060"), 26)
 		if ev.has("ap"):
 			fx.popup(tv, "AP+%d" % ev.ap, col.ap, 30)
 		if ev.has("charge"):
@@ -639,7 +748,7 @@ func _finish(result: String) -> void:
 # ============================================================
 
 func _input_ok() -> bool:
-	return phase == "player" and not item_panel.visible and overlay == null
+	return phase == "player" and overlay == null
 
 
 func _input(event: InputEvent) -> void:
@@ -661,18 +770,19 @@ func _on_press(p: Vector2) -> void:
 	if p.y < 650:
 		_tap_field(p)
 		return
-	if p.y < GRID_ORIGIN.y:
+	if p.y < GRID_TOP:
 		return
 	g_active = true
 	g_start = p
-	g_origin = Vector2i(clampi(int(p.x / GRID_CELL.x), 0, 3), clampi(int((p.y - GRID_ORIGIN.y) / GRID_CELL.y), 0, 2))
+	g_origin = _cell_at(p)
 	g_time = 0.0
 	g_cur = null
 	g_first_card = 0
 	g_moved = false
 	g_cut_in = false
+	g_charge_target = null
 	var k = _cell_value(g_origin)
-	if k is String:
+	if k is String and btn.has(k):
 		btn[k].highlighted = true
 
 
@@ -684,9 +794,8 @@ func _on_drag(p: Vector2) -> void:
 	if diff.length() > DEADZONE:
 		if not g_moved:
 			g_moved = true
-			btn.special.charge = 0.0
 			var k = _cell_value(g_origin)
-			if k is String:
+			if k is String and btn.has(k):
 				btn[k].highlighted = false
 		var idx := int(round(diff.angle() / (PI / 4))) % 8
 		if idx < 0:
@@ -717,35 +826,41 @@ func _on_release(p: Vector2) -> void:
 		return
 	var moved := g_moved
 	var intent = _intent()
-	var charge: float = btn.special.charge
 	var origin_val = _cell_value(g_origin)
-	var short := g_time < 0.35
+	var charged := g_charge_target != null and (g_time - CHARGE_DELAY) >= CHARGE_TIME
+	var charge_target = g_charge_target
+	var short := g_time < 0.35 or g_charge_target == null
 	_end_gesture()
 	if not _input_ok():
 		return
 	if moved:
-		if intent == null or (intent is int and intent == 5):
+		if intent == null:
+			return
+		if intent is int and intent == 5:
+			# フリックで必殺に合わせた時は、止めて溜めきった時だけ発動
+			if charged and charge_target is int and charge_target == 5:
+				_execute(5)
 			return
 		_execute(intent)
-	elif origin_val is int and origin_val == 5 and charge >= 1.0:
-		_execute(5)
-	elif origin_val is String:
-		_execute(origin_val)  # 右列のキーはタップで使える
-	elif short or charge <= 0.0:
+	elif charged:
+		_execute(origin_val)  # 長押しで溜めきったマスを発動
+	elif origin_val is String and btn.has(origin_val):
+		_execute(origin_val)  # 右列のキーはタップでも使える
+	elif short:
 		_tap_info(origin_val)
 
 
 func _end_gesture() -> void:
+	_set_charge(g_charge_target, 0.0)
 	g_active = false
 	g_moved = false
 	g_cur = null
 	g_first_card = 0
 	g_cut_in = false
+	g_charge_target = null
 	for k in ["deck", "status", "end"]:
 		if btn.has(k):
 			btn[k].highlighted = false
-	if btn.has("special"):
-		btn.special.charge = 0.0
 	_clear_preview()
 
 
@@ -767,25 +882,35 @@ func _action_for(num) -> Dictionary:
 	var dc: DeckController = deck_controllers[current.id]
 	if num is String:
 		match num:
-			"deck": return {"title": "デッキ・捨札", "desc": "山札・捨札・保留を確認する", "kind": "deck"}
+			"deck": return {"title": "デッキ・捨札", "desc": "山札・捨札・廃棄札・保留を確認する", "kind": "deck"}
 			"status": return {"title": "ステータス", "desc": "全員のステータスを確認する", "kind": "status"}
-			"end": return {"title": "ターン終了", "desc": "手番を終える（残りAPは持ち越し）", "kind": "end"}
+			"end": return {"title": "ターン終了", "desc": "手番を終える（残りAPは持ち越し。保留が空なら手札から1枚自動で保留）", "kind": "end"}
+		if num.begins_with("item"):
+			var i := int(num.substr(4))
+			if i >= Inventory.items.size():
+				return {"title": "アイテム", "desc": "空き（アイテムは3つまで）", "kind": "none"}
+			var it: Dictionary = Item_List.DATA[Inventory.items[i]]
+			return {"title": it.name, "desc": it.desc + "（AP0）", "action": it, "kind": "item", "index": i, "ap": 0}
 		if num.begins_with("hold:"):
 			var slot := int(num.substr(5))
 			var c = dc.hand[slot]
 			if c == null:
 				return {}
 			var t := "%s を保留" % c.name
-			if dc.hold != null:
+			if ActionList.has_keyword(c, "power"):
+				t += "（パワーカードは捨札へ行く）"
+			elif dc.hold != null:
 				t += "（%s と入れ替え）" % dc.hold.name
 			return {"title": "保留", "desc": t, "kind": "hold", "slot": slot, "ap": 0}
 		return {}
 	match num:
-		8, 4, 2, 6:
+		8, 4, 2, 6, 1:
 			var slot := SLOT_NUM.find(num)
 			var c = dc.hand[slot]
 			if c == null:
 				return {}
+			if c.get("type", "") == "unselectable":
+				return {"title": c.name, "desc": DeckController.effect_text(current, c), "kind": "none"}
 			return {"title": c.name, "desc": _short(c), "action": c, "kind": "card", "slot": slot, "ap": int(c.get("ap", 0))}
 		9:
 			if dc.hold == null:
@@ -793,26 +918,18 @@ func _action_for(num) -> Dictionary:
 			return {"title": dc.hold.name, "desc": "保留カードを使う　" + _short(dc.hold), "action": dc.hold, "kind": "hold_play", "ap": int(dc.hold.get("ap", 0))}
 		7:
 			return {"title": "入替", "desc": "左右の位置を入れ替える（AP1）。敵の矢印の色で狙われる側がわかる", "action": ActionList.SWAP, "kind": "swap", "ap": 1}
-		1:
-			return {"title": "アイテム", "desc": "道具を使う（AP0）　所持 %d 個" % Inventory.items.size(), "kind": "item", "ap": 0}
 		3:
 			var s: Dictionary = ActionList.UNIQUE_SKILLS[current.id]
 			return {"title": s.name, "desc": _short(s), "action": s, "kind": "unique", "ap": int(s.ap)}
 		5:
 			var s: Dictionary = specials[current.id]
-			return {"title": "必殺", "desc": "%s　%s（中央を長押し）" % [s.name, _short(s)], "action": s, "kind": "special", "ap": int(s.ap)}
+			return {"title": "必殺", "desc": "%s　%s（長押し）" % [s.name, _short(s)], "action": s, "kind": "special", "ap": int(s.ap)}
 	return {}
 
 
 func _short(a: Dictionary) -> String:
-	var tgt := ""
-	match a.get("target", ""):
-		"enemy_all": tgt = "敵全体に"
-		"front_enemy_single": tgt = "一番近い敵に"
-		"front_enemy_group": tgt = "自分の側の敵全員に"
-		"ally_all": tgt = "味方全体："
-		"self": tgt = "自分："
-	var s := "%s%s" % [tgt, DeckController.effect_text(current, a)]
+	var tgt := DeckController.target_text(a.get("target", ""))
+	var s := "%s：%s" % [tgt, DeckController.effect_text(current, a)] if tgt != "" else DeckController.effect_text(current, a)
 	if a.has("ap"):
 		s += "（AP%d）" % a.ap
 	return s
@@ -829,16 +946,11 @@ func _preview_action(num) -> void:
 	strip_text = info.desc + ("　AP不足" if lack else "")
 	strip_col = ImageController.COL.bad if lack else ImageController.COL.accent
 	strip.queue_redraw()
-	match info.kind:
-		"card": hand_cards[info.slot].highlighted = true
-		"hold":
-			btn.hold.highlighted = true
-			hand_cards[info.slot].highlighted = true
-		"hold_play": hold_card.highlighted = true
-		"swap": btn.swap.highlighted = true
-		"item": btn.item.highlighted = true
-		"unique": btn.unique.highlighted = true
-		"deck", "status", "end": btn[info.kind].highlighted = true
+	var w = _widget_of(num if not (num is String and num.begins_with("hold:")) else 9)
+	if w != null:
+		w.highlighted = true
+	if info.kind == "hold":
+		hand_cards[info.slot].highlighted = true
 	if info.has("action") and not lack:
 		var act: Dictionary = info.action
 		if info.kind == "swap":
@@ -856,13 +968,20 @@ func _preview_action(num) -> void:
 
 
 func _effect_label(a: Dictionary) -> String:
-	match a.get("effect", ""):
-		"add_shield": return "盾+%d" % a.eff_val
-		"add_ap": return "AP+%d" % a.eff_val
-		"heal": return "回復%d" % a.eff_val
-		"draw": return "%d枚引く" % a.eff_val
+	var effs := ActionList.effects_of(a)
+	if effs.is_empty():
+		return ""
+	var e: Dictionary = effs[0]
+	match e.get("effect", ""):
+		"add_shield": return "盾+%d" % e.eff_val
+		"add_ap": return "AP+%d" % e.eff_val
+		"heal": return "回復%d" % e.eff_val
+		"draw": return "%d枚引く" % e.eff_val
+		"swap": return "入替"
+		"double": return "連続魔法"
 		"add_status":
-			return "%s%d" % [StatusEffectList.DATA[a.status].short, a.eff_val]
+			var st: Dictionary = StatusEffectList.DATA[e.status]
+			return st.short if e.status in ["taunt"] else "%s%d" % [st.short, e.eff_val]
 		"turnabout": return "引き直し"
 		"extra_turn": return "再行動"
 	return ""
@@ -875,7 +994,9 @@ func _clear_preview() -> void:
 		c.highlighted = false
 	if hold_card:
 		hold_card.highlighted = false
-	for k in ["swap", "hold", "item", "unique", "deck", "status", "end"]:
+	for s2 in item_slots:
+		s2.highlighted = false
+	for k in ["swap", "hold", "unique", "special", "deck", "status", "end"]:
 		if btn.has(k) and not (g_active and not g_moved and _cell_value(g_origin) is String and _cell_value(g_origin) == k):
 			btn[k].highlighted = false
 	strip_text = ""
@@ -902,23 +1023,28 @@ func _execute(num) -> void:
 			current["ap"] = int(current.ap) - ap
 			_fly_card(hand_cards[info.slot], dir)
 			dc.play_and_discard(info.slot)
-			_play(info.action)
+			_play_card(info.action)
 		"hold_play":
 			current["ap"] = int(current.ap) - ap
 			_fly_card(hold_card, dir)
 			dc.play_hold()
-			_play(info.action)
+			_play_card(info.action)
 		"hold":
-			dc.put_on_hold(info.slot)
-			_log("%sを保留した" % dc.hold.name)
-			_pop_in(hold_card, 0.0)
+			var to_discard := dc.put_on_hold(info.slot)
+			if to_discard:
+				_log("パワーカードは保留できず、捨札へ")
+			else:
+				_log("%sを保留した" % dc.hold.name)
+				_pop_in(hold_card, 0.0)
 			if dc.hand[info.slot] != null:
 				_pop_in(hand_cards[info.slot], 0.05)
 		"swap":
 			current["ap"] = int(current.ap) - ap
 			_do_swap()
 		"item":
-			_open_items()
+			Inventory.remove_item_at(int(info.index))
+			_log("%sを使った！" % info.action.name)
+			_play(info.action)
 		"unique":
 			current["ap"] = int(current.ap) - ap
 			_log("%s！" % info.action.name)
@@ -946,32 +1072,29 @@ func _flick_dir(num) -> Vector2:
 	return d.normalized() if d.length() > 1 else Vector2.UP
 
 
-## カード・スキル・必殺技の効果。表示側で扱う特殊効果もここで処理する
+## カード（手札・保留）を使う。連続魔法がかかっていれば 2 回発動する
+func _play_card(card: Dictionary) -> void:
+	var times := 1
+	if StatusController.has(current, "double") and not ActionList.effects_of(card).any(func(e): return e.get("effect", "") == "double"):
+		StatusController.remove(current, "double")
+		times = 2
+		fx.popup(views[current.uid], "2回発動！", ImageController.COL.accent, 30)
+	for i in times:
+		if phase != "player":
+			break
+		_play(card)
+
+
+## カード・スキル・必殺技・アイテムの効果
 func _play(act: Dictionary) -> void:
-	var dc: DeckController = deck_controllers[current.id]
-	match act.get("effect", ""):
-		"draw":
-			_draw_more(dc, int(act.eff_val))
-			fx.cast(views[current.uid], Callable())
-		"turnabout":
-			dc.discard_hand()
-			_draw_more(dc, 4)
-			StatusController.apply_status(current, "atk_buff", int(act.eff_val))
-			fx.cast(views[current.uid], Callable())
-			fx.popup(views[current.uid], "攻↑ %d" % int(act.eff_val), ImageController.COL.good, 28)
-		"extra_turn":
-			extra_turn = true
-			fx.cast(views[current.uid], Callable())
-			fx.popup(views[current.uid], "もう一度！", ImageController.COL.accent, 32)
-		_:
-			_perform(current, act)
+	_perform(current, act)
 	if _all_dead(CurrentStatus.enemies) or current.hp <= 0:
 		phase = "busy"
 		turn_done.emit.call_deferred()
 
 
-func _draw_more(dc: DeckController, n: int) -> void:
-	for i in dc.draw_cards(n):
+func _draw_more(dc: DeckController, n: int, only_slots: Array = []) -> void:
+	for i in dc.draw_cards(n, only_slots):
 		_pop_in(hand_cards[i], i * 0.05)
 
 
@@ -1004,20 +1127,24 @@ func _tap_field(p: Vector2) -> void:
 			return
 
 
+## 吹き出し用の文章（HP・攻撃・防御・素早さはアイコンの行で別に表示される）
 func _unit_lines(u: Dictionary) -> Array:
 	var lines: Array = []
-	lines.append("HP %d / %d" % [u.hp, u.max_hp] + ("　ブロック %d" % u.shield if int(u.get("shield", 0)) > 0 else ""))
-	lines.append("攻撃 %+d　防御 %d　素早さ %d" % [ActionController.get_atk(u), ActionController.get_def(u), ActionController.get_spd(u)])
 	if u.side == "ally":
 		lines.append("AP %d / %d　位置：%s" % [u.ap, InitAllyStatus.AP_MAX, "左（青）" if int(u.lane) == 0 else "右（赤）"])
+	else:
+		lines.append("位置：%s" % ("前衛" if int(u.get("row", 0)) == 0 else "後衛"))
 	for k in u.status_effects:
-		var st: Dictionary = StatusEffectList.DATA[k]
-		lines.append("%s %d：%s" % [st.name, u.status_effects[k], st.desc])
+		var st: Dictionary = StatusEffectList.DATA.get(k, {})
+		lines.append("%s %s：%s" % [st.get("name", k), StatusController.label(u, k), st.get("desc", "")])
 	if u.side == "enemy" and not u.intent.is_empty():
 		var it: Dictionary = u.intent
 		var who := ""
 		match it.get("target", ""):
-			"front_enemy_single": who = "（%s を狙う）" % ("左・青" if int(u.target_lane) == 0 else "右・赤")
+			"front_enemy_single":
+				var tg := ActionController.resolve_targets(u, "front_enemy_single", CurrentStatus.allies, CurrentStatus.enemies)
+				if not tg.is_empty():
+					who = "（%s を狙う）" % tg[0].name
 			"enemy_all": who = "（味方全員）"
 		lines.append("次の行動：%s　%s%s" % [it.name, DeckController.effect_text(u, it), who])
 	return lines
@@ -1028,15 +1155,17 @@ func _show_unit_info(u: Dictionary) -> void:
 	var v: GuiUnit = views[u.uid]
 	var lines := _unit_lines(u)
 	var w := 470.0
-	var h := GuiInfoPanel.measure(lines, w)
+	var panel := GuiInfoPanel.new()
+	panel.unit = u
+	var h: float = GuiInfoPanel.measure(lines, w, u)
 	var head := v.position - Vector2(0, v.body_height())  # キャラの頭のあたり
 	var x := clampf(v.position.x - w / 2, 16, 720 - w - 24)
-	var y := clampf(head.y - h - 40, 92, 630 - h)
-	info_panel = GuiInfoPanel.new()
-	info_panel.setup(u.name, lines, Rect2(x, y, w, h), u.side == "enemy")
-	info_panel.tail_to = head + Vector2(0, -4) if head.y > y + h else v.position + Vector2(0, -v.body_height() * 0.5)
-	info_panel.z_index = 50
-	ui.add_child(info_panel)
+	var y := clampf(head.y - h - 40, 56, 640 - h)
+	info_panel = panel
+	panel.setup(u.name, lines, Rect2(x, y, w, h), u.side == "enemy")
+	panel.tail_to = head + Vector2(0, -4) if head.y > y + h else v.position + Vector2(0, -v.body_height() * 0.5)
+	panel.z_index = 50
+	ui.add_child(panel)
 
 
 func _close_info() -> void:
@@ -1047,8 +1176,6 @@ func _close_info() -> void:
 
 func _close_panels() -> void:
 	_close_info()
-	if item_panel:
-		item_panel.visible = false
 
 
 func _open_deck() -> void:
@@ -1057,8 +1184,8 @@ func _open_deck() -> void:
 		var dc: DeckController = deck_controllers[a.id]
 		var hand: Array = dc.hand.filter(func(c): return c != null)
 		secs[a.id] = [["手札", hand], ["保留", [dc.hold] if dc.hold != null else []],
-				["山札（順不同）", _sorted(dc.draw_pile)], ["捨札", dc.discard_pile.duplicate()]]
-	overlay = GuiDeckView.open(ui, "デッキ・捨札", Callable(), secs, current.get("id", "knight"))
+				["山札（順不同）", _sorted(dc.draw_pile)], ["捨札", dc.discard_pile.duplicate()], ["廃棄札", dc.exhaust_pile.duplicate()]]
+	overlay = GuiDeckView.open(ui, "デッキ・捨札・廃棄札", Callable(), secs, current.get("id", "knight"))
 	overlay.closed.connect(func(): overlay = null)
 
 
@@ -1069,64 +1196,9 @@ func _sorted(arr: Array) -> Array:
 
 
 func _open_status() -> void:
-	var col: Dictionary = ImageController.COL
-	overlay = Control.new()
-	overlay.size = Vector2(720, 1280)
-	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	overlay.z_index = 100
-	ui.add_child(overlay)
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.75)
-	dim.size = overlay.size
-	overlay.add_child(dim)
-	UiSystem.make_panel(overlay, Rect2(20, 80, 680, 1120))
-	UiSystem.make_banner(overlay, "ステータス", Rect2(40, 56, 330, 60), 32)
-	var lines: Array = []
-	for u in CurrentStatus.allies + CurrentStatus.enemies:
-		if u.hp <= 0:
-			continue
-		lines.append("■ " + u.name)
-		for l in _unit_lines(u):
-			lines.append("　" + l)
-	var l := UiSystem.make_label(overlay, "\n".join(lines), Vector2(44, 132), Vector2(632, 940), 18, col.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
-	l.add_theme_constant_override("line_spacing", -5)  # 敵が多くても閉じるボタンに重ならないよう行間を詰める
-	l.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	UiSystem.make_button(overlay, "閉じる", Vector2(210, 1098), Vector2(300, 76), func():
-		overlay.queue_free()
-		overlay = null, 26)
-
-
-func _open_items() -> void:
-	for c in item_panel.get_children():
-		c.queue_free()
-	UiSystem.make_banner(item_panel, "アイテム（AP 0）", Rect2(20, -22, 340, 58), 28)
-	var y := 80.0
-	if Inventory.items.is_empty():
-		UiSystem.make_label(item_panel, "道具を持っていない", Vector2(0, 200), Vector2(620, 60), 26)
-	for item_id in Inventory.items:
-		var it: Dictionary = Item_List.DATA[item_id]
-		var b := UiSystem.make_button(item_panel, "%s\n%s" % [it.name, it.desc], Vector2(30, y), Vector2(560, 96),
-				_use_item.bind(item_id), 22)
-		var ic := GuiWidget.new("icon", Rect2(14, 18, 60, 60))
-		ic.icon_kind = it.art
-		ic.icon_col = it.art_col
-		b.add_child(ic)
-		y += 106
-		if y > 440:
-			break
-	UiSystem.make_button(item_panel, "閉じる", Vector2(210, 510), Vector2(200, 70), func(): item_panel.visible = false)
-	item_panel.visible = true
-
-
-func _use_item(item_id: String) -> void:
-	item_panel.visible = false
-	if phase != "player":
-		return
-	var it: Dictionary = Item_List.DATA[item_id]
-	Inventory.remove_item(item_id)
-	_log("%sを使った！" % it.name)
-	_play(it)
-	_refresh_all()
+	var units: Array = (CurrentStatus.allies + CurrentStatus.enemies).filter(func(u): return u.hp > 0)
+	overlay = GuiStatusView.open(ui, units)
+	overlay.closed.connect(func(): overlay = null)
 
 
 func _fly_card(src: GuiCard, dir: Vector2) -> void:
@@ -1160,18 +1232,27 @@ func _pop_in(c: GuiCard, delay: float) -> void:
 func _refresh_all() -> void:
 	var is_player: bool = phase == "player" and current.get("side", "") == "ally"
 	var dc: DeckController = deck_controllers.get(current.get("id", ""), null) if is_player else null
-	for i in 4:
+	if dc != null:
+		# パワーカード：手札にある間だけ効果
+		var pm := dc.power_mods()
+		current["power_atk"] = int(pm.atk)
+		current["power_def"] = int(pm.def)
+	for i in hand_cards.size():
 		var cv: GuiCard = hand_cards[i]
 		var c = dc.hand[i] if dc != null else null
 		cv.visible = c != null
 		if c != null:
+			_set_eff(c)
 			cv.set_card(c)
-			cv.playable = int(current.ap) >= int(c.get("ap", 0))
+			cv.playable = c.get("type", "") != "unselectable" and int(current.ap) >= int(c.get("ap", 0))
 			cv.queue_redraw()
 	hold_card.visible = dc != null and dc.hold != null
 	if hold_card.visible:
+		_set_eff(dc.hold)
 		hold_card.set_card(dc.hold)
 		hold_card.playable = int(current.ap) >= int(dc.hold.get("ap", 0))
+	for i in item_slots.size():
+		item_slots[i].set_item(Inventory.items[i] if i < Inventory.items.size() else "")
 	if is_player:
 		var u: Dictionary = ActionList.UNIQUE_SKILLS[current.id]
 		btn.unique.title = u.name
@@ -1185,7 +1266,6 @@ func _refresh_all() -> void:
 		btn.special.subtitle = "長押し"
 		btn.special.dimmed = int(current.ap) < int(sp.ap)
 		btn.swap.dimmed = int(current.ap) < 1
-		btn.item.dimmed = Inventory.items.is_empty()
 		pad.modulate.a = 1.0
 	elif phase != "over":
 		pad.modulate.a = 0.5
@@ -1193,6 +1273,14 @@ func _refresh_all() -> void:
 		b.queue_redraw()
 	order_bar.queue_redraw()
 	strip.queue_redraw()
+
+
+## カードに「実際のダメージ」を書き込む（自分の攻撃力と、主な対象の防御力を反映）
+func _set_eff(c: Dictionary) -> void:
+	if c.has("power"):
+		c["power_eff"] = ActionController.effective_power(current, c, CurrentStatus.allies, CurrentStatus.enemies)
+	else:
+		c.erase("power_eff")
 
 
 func _log(txt: String) -> void:
@@ -1207,7 +1295,7 @@ func _log(txt: String) -> void:
 
 func _autoplay_turn() -> void:
 	var guard := 0
-	while phase == "player" and guard < 14:
+	while phase == "player" and guard < 16:
 		guard += 1
 		await _wait(0.08)
 		if phase != "player":
@@ -1215,18 +1303,21 @@ func _autoplay_turn() -> void:
 		var dc: DeckController = deck_controllers[current.id]
 		var done := false
 		var sp: Dictionary = specials[current.id]
-		if int(current.ap) >= int(sp.ap) and sp.get("effect", "") != "extra_turn" and guard == 1 and randf() < 0.5:
+		if int(current.ap) >= int(sp.ap) and sp.id != "turn_skip" and guard == 1 and randf() < 0.5:
 			_execute(5)
 			continue
-		if guard == 2 and dc.hand[0] != null and randf() < 0.4:
+		if guard == 2 and dc.hand[0] != null and randf() < 0.3:
 			_execute("hold:0")
 			continue
 		if guard == 3 and int(current.ap) >= 2 and randf() < 0.25:
 			_execute(3 if randf() < 0.5 else 7)
 			continue
-		for i in 4:
+		if guard == 4 and not Inventory.items.is_empty() and randf() < 0.3:
+			_execute("item0")
+			continue
+		for i in hand_cards.size():
 			var c = dc.hand[i]
-			if c != null and int(current.ap) >= int(c.get("ap", 0)):
+			if c != null and c.get("type", "") != "unselectable" and int(current.ap) >= int(c.get("ap", 0)):
 				_execute(SLOT_NUM[i])
 				done = true
 				break

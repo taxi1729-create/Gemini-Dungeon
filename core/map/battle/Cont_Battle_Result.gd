@@ -143,7 +143,9 @@ func _process_drops() -> Array:
 		got.append(FoodList.DATA[k].name)
 	if randf() < (0.6 if elite else 0.25):
 		var it: String = Item_List.DATA.keys().pick_random()
-		Inventory.items.append(it)
+		if not Inventory.add_item(it):
+			got.append("（%sは持ちきれない）" % Item_List.DATA[it].name)
+			return got
 		got.append(Item_List.DATA[it].name)
 	return got
 

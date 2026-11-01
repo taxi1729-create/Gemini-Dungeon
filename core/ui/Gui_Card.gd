@@ -7,6 +7,10 @@ const SIZE := Vector2(128, 168)
 var card: Dictionary = {}
 var playable := true  # AP不足なら false（暗く表示）
 var label_hint := ""  # 右下に出す操作ヒント（例: "8"）
+var charge := 0.0:  # 長押しの溜め（0〜1）。0 より大きい時は縁に溜めゲージを描く
+	set(v):
+		charge = v
+		queue_redraw()
 
 
 func _init() -> void:
@@ -22,7 +26,7 @@ func set_card(c: Dictionary) -> void:
 
 func _process(delta: float) -> void:
 	super(delta)
-	if not card.is_empty() and card.get("rarity", "normal") != "normal":
+	if not card.is_empty() and (card.get("rarity", "normal") != "normal" or charge >= 1.0):
 		queue_redraw()
 
 
@@ -55,6 +59,7 @@ func _draw() -> void:
 		IC.cut_rect(self, r, fc, 14, bw, border, Color(0, 0, 0, 0.6), Vector2(4, 4))
 	# 本体は黒
 	IC.cut_rect(self, r.grow(-5), IC.COL.ink, 10)
+	var unsel: bool = card.get("type", "") == "unselectable"
 	# 絵柄の窓：種類の色の斜線の上にアイコン
 	var art := Rect2(9, 27, size.x - 18, 82)
 	draw_rect(art, fc.darkened(0.62))
@@ -62,18 +67,37 @@ func _draw() -> void:
 	IC.glow(self, art.get_center(), 42, Color(fc.lightened(0.4), 0.6), 5)
 	IC.icon(self, card.get("art", "star"), art.get_center() + Vector2(0, 2), 60)
 	_draw_shine(art, rarity)
+	if unsel:
+		# パワーカード（使えない）：絵柄の窓に黒い斜線をかけて「出せない」感じに（文字は暗くしない）
+		draw_rect(art, Color(0, 0, 0, 0.35))
+		IC.stripes(self, art, Color(IC.COL.ink, 0.75), 10, 3, 1.3)
 	draw_rect(art, Color(1, 1, 1, 0.18), false, 1.0)
 	# 名前：白い斜めの帯に黒い太字
 	IC.slant(self, Rect2(4, size.y - 56, size.x - 8, 27), IC.COL.paper, 8)
 	IC.text(self, card.get("name", ""), Vector2(size.x / 2, size.y - 42), 17, IC.COL.ink, true, 0, size.x - 22)
 	# 効果の要約
 	IC.text(self, summary(card), Vector2(size.x / 2, size.y - 15), 14, IC.COL.text, true, 0, size.x - 14)
-	# 威力（左上）：赤いギザギザの星に白い数字
+	# 威力（左上）：ギザギザの星に数字。実際のダメージ（power_eff）を出し、
+	# 基本より高ければ緑の星＋▲、低ければ白い星に赤い数字＋▼、同じなら赤い星に白い数字
 	var power: int = int(card.get("power", 0))
 	if power > 0:
+		var eff: int = int(card.get("power_eff", power))
 		var pc := Vector2(17, 17)
-		IC.poly_box(self, IC.burst_pts(pc, 21, 14, 8, 3), IC.COL.red, 2.0, IC.COL.ink)
-		IC.head(self, str(power), pc + Vector2(-1, 0), 21, IC.COL.paper, 26, Color(0, 0, 0, 0), Vector2.ZERO, 4, IC.COL.ink)
+		var badge: Color = IC.COL.red
+		var num_col: Color = IC.COL.paper
+		if eff > power:
+			badge = Color("1c9a48")
+		elif eff < power:
+			badge = IC.COL.paper
+			num_col = IC.COL.red
+		IC.poly_box(self, IC.burst_pts(pc, 21, 14, 8, 3), badge, 2.0, IC.COL.ink)
+		IC.head(self, str(eff), pc + Vector2(-1, 0), 21, num_col, 26, Color(0, 0, 0, 0), Vector2.ZERO, 4, IC.COL.ink)
+		if eff != power:
+			var up := eff > power
+			var ac := Vector2(33, 30)
+			var tri := PackedVector2Array([ac + Vector2(-5, 3), ac + Vector2(5, 3), ac + Vector2(0, -5)]) if up \
+					else PackedVector2Array([ac + Vector2(-5, -3), ac + Vector2(5, -3), ac + Vector2(0, 5)])
+			IC.poly_box(self, tri, IC.COL.good if up else IC.COL.red, 2.0, IC.COL.ink)
 	# 消費AP（右上）
 	if card.has("ap"):
 		var apc: Color = IC.COL.ap if playable else Color("5a2a30")
@@ -87,12 +111,83 @@ func _draw() -> void:
 		var tag := Rect2(size.x / 2 - 30, 4, 60, 20)
 		IC.slant(self, tag, IC.COL.get(owner, Color.GRAY), 6, 2.0, IC.COL.ink)
 		IC.text(self, "ナイト" if owner == "knight" else "ウィッチ", tag.get_center(), 12, Color.WHITE, true)
-	if not playable:
+	_draw_keywords(art)
+	if not playable and not unsel:
 		draw_colored_polygon(IC.cut_pts(r, 14), Color(0, 0, 0, 0.55))
 	if label_hint != "":
 		var hr := Rect2(size.x - 30, size.y - 78, 22, 20)
 		IC.slant(self, hr, Color(IC.COL.ink, 0.8), 4)
 		IC.text(self, label_hint, hr.get_center(), 14, Color(1, 1, 1, 0.85), true)
+	if charge > 0:
+		_draw_charge(r)
+
+
+## キーワードの札（パワー／廃棄）：絵柄の窓の左下に小さな斜めタグを縦に積む（右下の操作ヒントと重ねない）
+func _draw_keywords(art: Rect2) -> void:
+	var kws: Array = card.get("keywords", [])
+	if kws.is_empty():
+		return
+	var IC = ImageController
+	var x := art.position.x - 2
+	var y := art.end.y - 19
+	for kw in kws:
+		var lb := ""
+		var face: Color = IC.COL.ink
+		var fg: Color = IC.COL.paper
+		var line: Color = IC.COL.paper
+		match String(kw):
+			"power":
+				lb = "パワー"
+				face = IC.COL.ap.darkened(0.15)
+				fg = Color.WHITE
+				line = IC.COL.ink
+			"exhaust":
+				lb = "廃棄"
+				face = IC.COL.ink
+				fg = IC.COL.red
+				line = IC.COL.red
+			_:
+				continue
+		var w := 18.0 + 12.0 * lb.length()
+		var tr := Rect2(x, y, w, 17)
+		IC.slant(self, tr, face, 5, 1.5, line)
+		IC.text(self, lb, tr.get_center() + Vector2(0, -0.5), 11, fg, true, 3, w - 8, IC.COL.ink)
+		y -= 19
+
+
+## 長押しの溜め：カードの縁に沿って上の中央から時計回りに赤いゲージ。満タンは白と赤で点滅
+func _draw_charge(r: Rect2) -> void:
+	var IC = ImageController
+	var poly := IC.cut_pts(r.grow(3), 16)
+	# 上辺の中央から始まる閉じた経路にする
+	var path := PackedVector2Array([Vector2(r.get_center().x, poly[0].y)])
+	for i in range(1, poly.size()):
+		path.append(poly[i])
+	path.append(poly[0])
+	path.append(path[0])
+	var total := 0.0
+	for i in path.size() - 1:
+		total += path[i].distance_to(path[i + 1])
+	var want := total * clampf(charge, 0.0, 1.0)
+	var out := PackedVector2Array([path[0]])
+	var acc := 0.0
+	for i in path.size() - 1:
+		var seg := path[i].distance_to(path[i + 1])
+		if acc + seg >= want:
+			out.append(path[i].lerp(path[i + 1], (want - acc) / maxf(seg, 0.001)))
+			break
+		acc += seg
+		out.append(path[i + 1])
+	if out.size() < 2:
+		return
+	var full := charge >= 1.0
+	var col: Color = IC.COL.red
+	if full and int(_t * 12) % 2 == 0:
+		col = IC.COL.paper
+	draw_polyline(out, IC.COL.ink, 10.0, true)
+	draw_polyline(out, col, 6.0, true)
+	if full:
+		draw_polyline(out, Color(1, 1, 1, 0.25 + 0.25 * sin(_t * 20.0)), 2.0, true)
 
 
 ## 絵柄の窓に斜めの光を走らせる（レア＝金、スーパーレア＝虹）
@@ -116,16 +211,25 @@ static func summary(c: Dictionary) -> String:
 	var parts: Array = []
 	match c.get("target", ""):
 		"enemy_all": parts.append("敵全体")
-		"front_enemy_single": parts.append("近い敵")
-		"front_enemy_group": parts.append("同じ側")
+		"front_enemy_single": parts.append("HP最低")
+		"front_enemy_group": parts.append("目の前")
+		"front_row": parts.append("前衛")
 		"ally_all": parts.append("味方全体")
 		"self": parts.append("自分")
-	match c.get("effect", ""):
-		"add_shield": parts.append("盾%d" % c.eff_val)
-		"add_ap": parts.append("AP+%d" % c.eff_val)
-		"heal": parts.append("回復%d" % c.eff_val)
-		"draw": parts.append("%d枚引く" % c.eff_val)
-		"add_status":
-			var st: Dictionary = StatusEffectList.DATA.get(c.status, {})
-			parts.append("%s%d" % [st.get("short", "?"), c.eff_val])
+	if ActionList.has_keyword(c, "power"):
+		var pe: Dictionary = c.get("power_effect", {})
+		parts.append("%s+%d" % ["攻" if pe.get("status", "") == "atk_buff" else "防", int(pe.get("eff_val", 0))])
+	for e in ActionList.effects_of(c):
+		match e.get("effect", ""):
+			"add_shield": parts.append("盾%d" % e.eff_val)
+			"add_ap": parts.append("AP+%d" % e.eff_val)
+			"heal": parts.append("回復%d" % e.eff_val)
+			"draw": parts.append("%d枚引く" % e.eff_val)
+			"swap": parts.append("入替")
+			"double": parts.append("2回発動")
+			"turnabout": parts.append("引き直し")
+			"extra_turn": parts.append("再行動")
+			"add_status":
+				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
+				parts.append(st.get("short", "?") if e.status in ["taunt", "fire_guard"] else "%s%d" % [st.get("short", "?"), e.eff_val])
 	return " ".join(parts)

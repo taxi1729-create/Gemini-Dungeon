@@ -57,8 +57,10 @@ func _choose(id: String) -> void:
 			_done("ゴールドを40手に入れた")
 		"item":
 			var it: String = Item_List.DATA.keys().pick_random()
-			Inventory.items.append(it)
-			_done("%sを手に入れた" % Item_List.DATA[it].name)
+			if Inventory.add_item(it):
+				_done("%sを手に入れた" % Item_List.DATA[it].name)
+			else:
+				_done("%sを見つけたが、アイテムがいっぱい（3つまで）" % Item_List.DATA[it].name)
 		"altar":
 			for a in CurrentStatus.allies:
 				a["hp"] = maxi(1, int(a.hp) - 6)
