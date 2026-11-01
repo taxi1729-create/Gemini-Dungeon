@@ -56,6 +56,9 @@ var order_bar: GuiWidget
 var log_label: Label
 var overlay: Control
 var info_panel: Control  # キャラをタップした時の情報
+var desc_bubble: GuiDescBubble  # 長押し・フリック中の説明（アイコン入り）
+var _desc_key = null  # 今吹き出しに出している操作
+var power_seen := {}  # char_id -> このターン手札に入ったパワーカード（効果は次の自分のターンまで）
 
 # 説明帯
 var strip_title := ""
@@ -122,6 +125,8 @@ func _process(delta: float) -> void:
 	g_time += delta / maxf(Engine.time_scale, 0.01)
 	var c := clampf((g_time - CHARGE_DELAY) / CHARGE_TIME, 0.0, 1.0)
 	_set_charge(target, c)
+	if c > 0:
+		_show_desc_for(target)
 	if c > 0 and target is int and target == 5 and not g_moved and g_cur == null:
 		g_cur = 5
 		_preview_action(5)
@@ -295,6 +300,7 @@ func _update_targets() -> void:
 			lanes = [int(tg[0].lane)] if not tg.is_empty() else [int(e.target_lane)]
 		elif t == "enemy_all":
 			lanes = [0, 1]
+		e["aim_lanes"] = lanes
 		if lanes.is_empty():
 			continue
 		var from: Vector2 = e.pos if e.move_to == null else e.move_to
@@ -383,24 +389,6 @@ func _build_ui() -> void:
 	pad.size = Vector2(720, 1280)
 	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(pad)
-	var grid := Control.new()
-	grid.size = Vector2(720, 1280)
-	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	grid.draw.connect(func():
-		# 3×3 のマス：うっすら面を敷き、四隅に L 字の印（照準のような枠）
-		for r in 3:
-			for c in range(1, 4):
-				var rr := _cell_rect(Vector2i(c, r)).grow(-4)
-				grid.draw_rect(rr, Color(1, 1, 1, 0.025))
-				var k := 16.0
-				var lc := Color(1, 1, 1, 0.22)
-				for corner in [[rr.position, Vector2(1, 1)], [Vector2(rr.end.x, rr.position.y), Vector2(-1, 1)],
-						[rr.end, Vector2(-1, -1)], [Vector2(rr.position.x, rr.end.y), Vector2(1, -1)]]:
-					var p0: Vector2 = corner[0]
-					var d: Vector2 = corner[1]
-					grid.draw_line(p0, p0 + Vector2(d.x * k, 0), lc, 2)
-					grid.draw_line(p0, p0 + Vector2(0, d.y * k), lc, 2))
-	pad.add_child(grid)
 
 	for i in SLOT_NUM.size():
 		var c := GuiCard.new()
@@ -445,6 +433,8 @@ func _build_ui() -> void:
 		pad.add_child(b)
 		btn[k[0]] = b
 
+	desc_bubble = GuiDescBubble.new()
+	ui.add_child(desc_bubble)
 	_refresh_all()
 
 
@@ -462,7 +452,7 @@ func _draw_strip() -> void:
 	var ap := int(current.get("ap", 0)) if current.get("side", "") == "ally" else 0
 	if strip_text != "":
 		IC.slant(strip, Rect2(8, 4, 704, 36), Color(1, 1, 1, 0.06), 14)
-		IC.text(strip, strip_title + "　" + strip_text, Vector2(360, 22), 20, strip_col, true, 0, 680)
+		IC.text(strip, strip_title + "　" + DeckController.plain(strip_text), Vector2(360, 22), 20, strip_col, true, 0, 680)
 		return
 	if current.get("side", "") == "ally":
 		# 左に赤い斜めタグで「〇〇の手番」、右に AP の菱形
@@ -560,6 +550,10 @@ func _ally_turn(u: Dictionary) -> void:
 		first_turn[u.id] = false
 	u["ap"] = mini(InitAllyStatus.AP_MAX, int(u.ap) + gain)
 	var dc: DeckController = deck_controllers[u.id]
+	# パワーカードの効果は前の自分のターンから今まで。ここで切り替える
+	u["power_atk"] = 0
+	u["power_def"] = 0
+	power_seen[u.id] = []
 	dc.draw_cards(DeckController.HAND_SIZE)
 	_log("%sの手番" % u.name)
 	phase = "player"
@@ -573,14 +567,18 @@ func _ally_turn(u: Dictionary) -> void:
 	phase = "busy"
 	_end_gesture()
 	_close_panels()
-	# 保留枠が空で手札が残っていれば、ランダムに 1 枚を自動で保留
+	# 保留枠が空で手札が残っていれば、ランダムに 1 枚を自動で保留（演出つき）
 	if u.hp > 0:
+		var slot := -1
+		var before: Array = dc.hand.duplicate()
 		var held = dc.auto_hold()
 		if held != null:
+			for i in before.size():
+				if before[i] != null and is_same(before[i], held):
+					slot = i
 			_log("%sを自動で保留した" % held.name)
+			await _anim_hold(held, hand_cards[slot] if slot >= 0 else hold_card, true)
 	dc.turn_end_and_discard()
-	u["power_atk"] = 0
-	u["power_def"] = 0
 	_refresh_all()
 	await _wait(0.3)
 
@@ -740,6 +738,12 @@ func _finish(result: String) -> void:
 	for a in CurrentStatus.allies:
 		a["shield"] = 0
 		a["status_effects"] = {}
+		a["power_atk"] = 0
+		a["power_def"] = 0
+	if result == "win" and CurrentStatus.battle_kind != "boss":
+		SaveData.save("result")  # 戦闘クリア時の自動セーブ
+	else:
+		SaveData.clear()  # 全滅・踏破でセーブを消す
 	UiSystem.goto("result")
 
 
@@ -941,6 +945,7 @@ func _preview_action(num) -> void:
 	if info.is_empty():
 		return
 	var lack := int(info.get("ap", 0)) > int(current.ap)
+	_show_desc_for(num)
 	log_label.visible = false
 	strip_title = info.title
 	strip_text = info.desc + ("　AP不足" if lack else "")
@@ -1000,6 +1005,9 @@ func _clear_preview() -> void:
 		if btn.has(k) and not (g_active and not g_moved and _cell_value(g_origin) is String and _cell_value(g_origin) == k):
 			btn[k].highlighted = false
 	strip_text = ""
+	_desc_key = null
+	if desc_bubble:
+		desc_bubble.hide_bubble()
 	if log_label:
 		log_label.visible = true
 	if strip:
@@ -1030,12 +1038,15 @@ func _execute(num) -> void:
 			dc.play_hold()
 			_play_card(info.action)
 		"hold":
+			var src: GuiCard = hand_cards[info.slot]
+			var moving: Dictionary = dc.hand[info.slot]
 			var to_discard := dc.put_on_hold(info.slot)
 			if to_discard:
 				_log("パワーカードは保留できず、捨札へ")
+				_fly_card(src, Vector2(1, -1))
 			else:
 				_log("%sを保留した" % dc.hold.name)
-				_pop_in(hold_card, 0.0)
+				_anim_hold(moving, src, false)
 			if dc.hand[info.slot] != null:
 				_pop_in(hand_cards[info.slot], 0.05)
 		"swap":
@@ -1217,6 +1228,59 @@ func _fly_card(src: GuiCard, dir: Vector2) -> void:
 	tw.chain().tween_callback(c.queue_free)
 
 
+## 保留の演出：カードを大きく見せてから保留枠へ飛ばし、「保留」の札を出す
+func _anim_hold(card: Dictionary, src: Control, auto: bool) -> void:
+	var c := GuiCard.new()
+	c.interactive = false
+	c.set_card(card)
+	c.position = src.position
+	c.scale = src.scale
+	c.z_index = 40
+	pad.add_child(c)
+	c.pivot_offset = c.size / 2
+	hold_card.modulate.a = 0.0
+	var dest: Vector2 = _cell_center(_cell_of(9)) - GuiCard.SIZE / 2
+	var center := Vector2(360, 960) - GuiCard.SIZE / 2
+	var tw := c.create_tween()
+	if auto:
+		# 自動保留：中央で大きく見せてから飛ばす
+		tw.tween_property(c, "position", center, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(c, "scale", Vector2(1.6, 1.6), 0.18)
+		tw.tween_interval(0.35)
+	else:
+		tw.tween_property(c, "scale", Vector2(1.3, 1.3), 0.08)
+	tw.tween_property(c, "position", dest, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(c, "scale", Vector2(0.86, 0.86), 0.22)
+	tw.parallel().tween_property(c, "rotation", 0.25, 0.11)
+	tw.tween_property(c, "rotation", 0.0, 0.08)
+	tw.tween_callback(func():
+		c.queue_free()
+		hold_card.modulate.a = 1.0
+		_pop_in(hold_card, 0.0)
+		AnimationController.popup_text(ui, _cell_center(_cell_of(9)) + Vector2(0, -96), ("自動保留" if auto else "保留！"), ImageController.COL.accent, 30))
+	if auto:
+		desc_bubble.show_text(("自動保留：" + card.name), DeckController.card_text(current, card), _cell_center(_cell_of(9)))
+		await tw.finished
+		await _wait(0.35)
+		desc_bubble.hide_bubble()
+
+
+## 長押し・フリック中に説明の吹き出しを出す
+func _show_desc_for(key) -> void:
+	if typeof(key) == typeof(_desc_key) and key == _desc_key:
+		return
+	_desc_key = key
+	var info := _action_for(key)
+	if info.is_empty():
+		desc_bubble.hide_bubble()
+		return
+	var body: String = info.desc
+	if info.has("action") and info.kind in ["card", "hold_play"]:
+		body = DeckController.card_text(current, info.action)
+	var cell := _cell_of(9) if (key is String and key.begins_with("hold:")) else _cell_of(key)
+	desc_bubble.show_text(info.title, body, _cell_center(cell) if cell.x >= 0 else Vector2(360, 960))
+
+
 func _pop_in(c: GuiCard, delay: float) -> void:
 	var base := Vector2.ONE * c.base_scale
 	c.scale = base * 0.5
@@ -1234,9 +1298,16 @@ func _refresh_all() -> void:
 	var dc: DeckController = deck_controllers.get(current.get("id", ""), null) if is_player else null
 	if dc != null:
 		# パワーカード：手札にある間だけ効果
-		var pm := dc.power_mods()
-		current["power_atk"] = int(pm.atk)
-		current["power_def"] = int(pm.def)
+		var seen: Array = power_seen.get(current.id, [])
+		for c in dc.hand:
+			if c != null and ActionList.has_keyword(c, "power") and not seen.any(func(x): return is_same(x, c)):
+				seen.append(c)
+				var pe: Dictionary = c.get("power_effect", {})
+				match pe.get("status", ""):
+					"atk_buff": current["power_atk"] = int(current.get("power_atk", 0)) + int(pe.eff_val)
+					"def_buff": current["power_def"] = int(current.get("power_def", 0)) + int(pe.eff_val)
+				fx.popup(views[current.uid], "%s +%d" % ["攻" if pe.get("status", "") == "atk_buff" else "防", int(pe.eff_val)], ImageController.COL.good, 26)
+		power_seen[current.id] = seen
 	for i in hand_cards.size():
 		var cv: GuiCard = hand_cards[i]
 		var c = dc.hand[i] if dc != null else null
