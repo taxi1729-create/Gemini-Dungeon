@@ -1257,7 +1257,8 @@ func _anim_hold(card: Dictionary, src: Control, auto: bool) -> void:
 		c.queue_free()
 		hold_card.modulate.a = 1.0
 		_pop_in(hold_card, 0.0)
-		AnimationController.popup_text(ui, _cell_center(_cell_of(9)) + Vector2(0, -96), ("自動保留" if auto else "保留！"), ImageController.COL.accent, 30))
+		if not auto:  # 自動保留は吹き出しで知らせるので、札は出さない
+			AnimationController.popup_text(ui, _cell_center(_cell_of(9)) + Vector2(0, -96), "保留！", ImageController.COL.accent, 30))
 	if auto:
 		desc_bubble.show_text(("自動保留：" + card.name), DeckController.card_text(current, card), _cell_center(_cell_of(9)))
 		await tw.finished

@@ -122,7 +122,7 @@ func _on_card_selected(i: int) -> void:
 	for k in card_views.size():
 		card_views[k].modulate = Color.WHITE if k == i else Color(1, 1, 1, 0.45)
 	var owner_name: String = InitAllyStatus.DATA[chosen_card.owner].name
-	_desc.text = DeckController.card_text({}, chosen_card) + "\n→ %sのデッキに入ります" % owner_name
+	_desc.text = DeckController.plain(DeckController.card_text({}, chosen_card)) + "\n→ %sのデッキに入ります" % owner_name
 	_tail = card_views[i].position + Vector2(GuiCard.SIZE.x / 2, GuiCard.SIZE.y)
 	_bubble.visible = true
 	_bubble.queue_redraw()

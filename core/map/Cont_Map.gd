@@ -181,7 +181,7 @@ func _open_specials(ui: CanvasLayer) -> void:
 		var btns: Array = []
 		var x := 60.0
 		for sp in ActionList.SPECIALS[a.id]:
-			var eff: String = ("%dダメージ" % sp.power) if sp.has("power") else DeckController.effect_text({}, sp)
+			var eff: String = ("%dダメージ" % sp.power) if sp.has("power") else DeckController.plain(DeckController.effect_text({}, sp))
 			var b := UiSystem.make_button(box, "%s（AP%d）\n%s" % [sp.name, sp.ap, eff], Vector2(x, y + 40), Vector2(290, 110), Callable(), 19)
 			b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			b.set_meta("sp", sp.id)
