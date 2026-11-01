@@ -4,7 +4,7 @@ class_name GuiItemSlot
 ## 入力は戦闘シーンがまとめて処理する（interactive = false）。長押しの溜めは charge（0〜1）で描く。
 
 const SIZE := Vector2(96, 160)
-const SLOT_MARK := ["①", "②", "③"]
+const SLOT_MARK := ["①", "②", "③"]  # 互換用（もう描かない）
 
 var item_id := ""  # 空なら空き枠
 var slot_index := 0  # 0=上, 1=中, 2=下
@@ -36,9 +36,8 @@ func _draw() -> void:
 	var r := Rect2(6, 6, size.x - 16, size.y - 16)
 	var skew := 10.0
 	var it: Dictionary = Item_List.DATA.get(item_id, {}) if item_id != "" else {}
-	var mark: String = SLOT_MARK[clampi(slot_index, 0, 2)]
 	if it.is_empty():
-		_draw_empty(r, skew, mark)
+		_draw_empty(r, skew)
 		return
 	var acc: Color = it.get("art_col", IC.COL.paper)
 	# 斜めの黒いパネル。選択中は赤く塗り、白縁＋黒のベタ影
@@ -56,23 +55,21 @@ func _draw() -> void:
 	var nb := Rect2(r.position.x - 2, r.position.y + 92, r.size.x + 4, 24)
 	IC.slant(self, nb, IC.COL.paper, 6, 2.0, IC.COL.ink)
 	IC.text(self, String(it.get("name", "")), nb.get_center(), 15, IC.COL.ink, true, 0, nb.size.x - 14)
-	# AP0 の目印（下）と枠番号（左上、控えめ）
+	# AP0 の目印（下）
 	IC.text(self, "AP0", Vector2(size.x / 2 - 3, r.end.y - 14), 13, IC.COL.ap if not highlighted else IC.COL.paper, true, 3, -1.0, IC.COL.ink)
-	IC.text(self, mark, Vector2(r.position.x + 16, r.position.y + 13), 13, Color(1, 1, 1, 0.45 if not highlighted else 0.8), true)
 	if charge > 0:
 		_draw_charge(r, skew)
 
 
-## 空き枠：点線の斜め枠と番号だけ
-func _draw_empty(r: Rect2, skew: float, mark: String) -> void:
+## 空き枠：点線の斜め枠と「空き」だけ（枠番号は描かない）
+func _draw_empty(r: Rect2, skew: float) -> void:
 	var IC = ImageController
 	var poly := IC.slant_pts(r, skew)
 	draw_colored_polygon(poly, Color(0, 0, 0, 0.35))
 	var col: Color = Color(1, 1, 1, 0.3) if not highlighted else IC.COL.red
 	for i in poly.size():
 		draw_dashed_line(poly[i], poly[(i + 1) % poly.size()], col, 2.0, 7.0)
-	IC.text(self, mark, r.get_center() + Vector2(0, -8), 20, Color(1, 1, 1, 0.28), true)
-	IC.text(self, "空き", r.get_center() + Vector2(0, 18), 13, Color(1, 1, 1, 0.28), true)
+	IC.text(self, "空き", r.get_center(), 15, Color(1, 1, 1, 0.28), true)
 
 
 ## 長押しの溜め：パネルの縁に沿って上辺から時計回りに赤いゲージ。満タンは白と赤で点滅

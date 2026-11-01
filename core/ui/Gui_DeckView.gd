@@ -13,7 +13,8 @@ var pick_cb := Callable()
 var sections := {}  # char_id -> [[見出し, [card辞書...]], ...]
 var title_text := "デッキ"
 var _grid: Control
-var _desc: Label
+var _desc: Control  # 説明（アイコン入りの文字を rich_text で描く）
+var _desc_text := "カードをタップすると説明を表示"
 var _pick_btn: Button
 var _picked := {}
 var _tab_btns := {}
@@ -38,7 +39,6 @@ func _ready() -> void:
 	bg.color = Color(0, 0, 0, 0.75)
 	bg.size = size
 	add_child(bg)
-	var col: Dictionary = ImageController.COL
 	UiSystem.make_panel(self, Rect2(20, 60, 680, 1160))
 	UiSystem.make_banner(self, title_text, Rect2(40, 34, 420, 66), 32)
 	var x := 60.0
@@ -53,9 +53,12 @@ func _ready() -> void:
 	add_child(_grid)
 	# 説明は白いギザギザ吹き出しに黒文字で
 	UiSystem.make_bubble(self, Rect2(44, 960, 632, 124), Vector2(-9999, -9999), 6)
-	_desc = UiSystem.make_label(self, "カードをタップすると説明を表示", Vector2(64, 970), Vector2(596, 106), 20, col.ink, HORIZONTAL_ALIGNMENT_LEFT, 0)
-	_desc.add_theme_font_override("font", ImageController.font_bold)
-	_desc.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	_desc = Control.new()
+	_desc.position = Vector2(64, 970)
+	_desc.size = Vector2(596, 106)
+	_desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_desc.draw.connect(_draw_desc)
+	add_child(_desc)
 	if pick_cb.is_valid():
 		_pick_btn = UiSystem.make_red_button(self, "このカードを選ぶ", Vector2(60, 1110), Vector2(290, 80), _do_pick, 24)
 		_pick_btn.disabled = true
@@ -112,7 +115,8 @@ func _switch(id: String) -> void:
 
 
 func _on_card(c: Dictionary, v: GuiCard) -> void:
-	_desc.text = DeckController.card_text(CurrentStatus.ally(current), c)
+	_desc_text = DeckController.card_text(CurrentStatus.ally(current), c)
+	_desc.queue_redraw()
 	if pick_cb.is_valid():
 		for o in _grid.get_children():
 			if o is GuiCard:
@@ -120,6 +124,15 @@ func _on_card(c: Dictionary, v: GuiCard) -> void:
 		v.highlighted = true
 		_picked = c
 		_pick_btn.disabled = false
+
+
+## 説明欄：入りきらない時は文字を小さくする
+func _draw_desc() -> void:
+	var IC = ImageController
+	var fs := 20
+	while fs > 13 and IC.rich_height(_desc_text, fs, _desc.size.x, fs * 1.32) > _desc.size.y:
+		fs -= 1
+	IC.rich_text(_desc, _desc_text, Vector2.ZERO, fs, IC.COL.ink, _desc.size.x, 0, fs * 1.32)
 
 
 func _do_pick() -> void:

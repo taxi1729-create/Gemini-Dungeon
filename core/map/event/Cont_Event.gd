@@ -13,7 +13,12 @@ func _ready() -> void:
 	add_child(GuiBackground.new("title"))
 	ui = CanvasLayer.new()
 	add_child(ui)
-	ev_id = EventList.DATA.keys().pick_random()
+	# 再読み込みで同じイベントに戻れるよう、選んだイベントをセーブに残す
+	ev_id = str(SaveData.screen.get("event_id", ""))
+	if not EventList.DATA.has(ev_id):
+		ev_id = EventList.DATA.keys().pick_random()
+		SaveData.screen["event_id"] = ev_id
+		SaveData.save("event")
 	var ev: Dictionary = EventList.DATA[ev_id]
 	var col: Dictionary = ImageController.COL
 	UiSystem.make_banner(ui, "？ EVENT", Rect2(36, 40, 200, 44), 24)
@@ -98,6 +103,8 @@ func _choose(id: String) -> void:
 		"fight":
 			CurrentStatus.battle_kind = "battle"
 			CurrentStatus.gold_multiplier = 2
+			SaveData.screen = {}
+			SaveData.save("battle")  # 再読み込みしたらこの戦闘から
 			UiSystem.goto("battle")
 		"leave":
 			_done("その場を後にした")
@@ -114,4 +121,5 @@ func _ask_owner(msg: String, cb: Callable) -> void:
 func _done(msg: String) -> void:
 	choice_box.visible = false
 	result_label.text = msg
+	SaveData.save("map")  # イベントの結果を反映した時点で保存（再読み込みしたらマップへ）
 	UiSystem.make_red_button(ui, "先へ進む", Vector2(160, 900), Vector2(400, 90), func(): UiSystem.goto("map"), 30)

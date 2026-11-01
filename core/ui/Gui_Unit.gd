@@ -304,6 +304,17 @@ func _draw_intent(IC) -> void:
 		IC.icon(self, kind, c + Vector2(-28, 0), 24, kcol)
 		if label != "":
 			IC.text(self, label, c + Vector2(-3, 1), 21, INK, true)
+	# 狙う側（data.aim_lanes）が分かる時は、その側の色の照準（左＝青、右＝赤、両方なら2つ）
+	if data.has("aim_lanes") and not (data.aim_lanes as Array).is_empty():
+		var lanes: Array = data.aim_lanes
+		draw_colored_polygon(_para(c.x + 12, c.y - 13, 30, 26, 6), Color(INK, 0.08))
+		if lanes.size() >= 2:
+			IC.icon(self, "target_one", c + Vector2(21, -5), 19, BattleFx.LANE_COL[clampi(int(lanes[0]), 0, 1)])
+			draw_circle(c + Vector2(35, 6), 9.5, PAPER)  # 2つ目の照準の下を白く抜いて重なりを分ける
+			IC.icon(self, "target_one", c + Vector2(35, 6), 19, BattleFx.LANE_COL[clampi(int(lanes[1]), 0, 1)])
+		else:
+			IC.icon(self, "target_one", c + Vector2(28, 0), 24, BattleFx.LANE_COL[clampi(int(lanes[0]), 0, 1)])
+		return
 	var tk := "target_one"
 	var tcol: Color = RED
 	match act.get("target", ""):

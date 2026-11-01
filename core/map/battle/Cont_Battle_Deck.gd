@@ -125,7 +125,7 @@ func _shuffle_discard_to_draw() -> void:
 	discard_pile.clear()
 
 
-## 説明文
+## 説明文（アイコン入り。"[i:アイコン名]" は ImageController.rich_text で描く。文字だけの場所は plain() を通す）
 static func card_text(user: Dictionary, action: Dictionary) -> String:
 	var lines: Array = []
 	var head: String = action.get("name", "")
@@ -134,27 +134,48 @@ static func card_text(user: Dictionary, action: Dictionary) -> String:
 		"super_rare": head += "　★★超レア"
 	var kw: Array = action.get("keywords", [])
 	if kw.has("power"):
-		head += "　［パワー］"
+		head += "　[i:kw_power]パワー"
 	if kw.has("exhaust"):
-		head += "　［廃棄］"
+		head += "　[i:kw_exhaust]廃棄"
 	lines.append(head)
-	var row := "対象: " + target_text(action.get("target", ""))
+	var row := target_text(action.get("target", ""))
 	if action.has("ap"):
-		row += "　AP %d" % action.ap
+		row += "　[i:ap]AP %d" % action.ap
 	lines.append(row)
-	lines.append("効果: " + effect_text(user, action))
+	lines.append(effect_text(user, action))
 	return "\n".join(lines)
 
 
-static func target_text(t: String) -> String:
+## "[i:..]" を取り除いた文字だけの説明（ログなど）
+static func plain(s: String) -> String:
+	var re := RegEx.new()
+	re.compile("\\[i:[^\\]]*\\]")
+	return re.sub(s, "", true)
+
+
+## 対象 → 対象のアイコン名
+static func target_icon(t: String) -> String:
 	match t:
-		"enemy_all": return "敵全体"
-		"front_enemy_single": return "目の前の敵でHPが一番低い敵"
-		"front_enemy_group": return "目の前の敵グループ全体"
-		"front_row": return "前衛の敵全体"
-		"self": return "自分"
-		"ally_all": return "味方全体"
+		"enemy_all": return "tgt_enemy_all"
+		"front_enemy_single": return "tgt_enemy_one"
+		"front_enemy_group": return "tgt_enemy_group"
+		"front_row": return "tgt_front_row"
+		"self": return "tgt_self"
+		"ally_all": return "tgt_ally_all"
 	return ""
+
+
+static func target_text(t: String) -> String:
+	var ic := target_icon(t)
+	var s := ""
+	match t:
+		"enemy_all": s = "敵全体"
+		"front_enemy_single": s = "目の前の敵（HP最低）"
+		"front_enemy_group": s = "目の前の敵グループ"
+		"front_row": s = "前衛の敵全体"
+		"self": s = "自分"
+		"ally_all": s = "味方全体"
+	return "" if s == "" else "[i:%s]%s" % [ic, s]
 
 
 static func effect_text(user: Dictionary, action: Dictionary) -> String:
@@ -162,42 +183,44 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 	if ActionList.has_keyword(action, "power"):
 		var pe: Dictionary = action.get("power_effect", {})
 		var st: Dictionary = StatusEffectList.DATA.get(pe.get("status", ""), {})
-		parts.append("使用不可。手札にある間 %s +%d（保留枠に入ると捨札へ）" % [st.get("name", "").replace("アップ", ""), int(pe.get("eff_val", 0))])
+		parts.append("[i:kw_power]使えない。手札にある間、次の自分のターンまで [i:%s]%s+%d（保留枠に入ると捨札へ）" % [
+				st.get("icon", "star"), str(st.get("name", "")).replace("アップ", ""), int(pe.get("eff_val", 0))])
 	if action.has("power"):
 		var atk := ActionController.get_atk(user) if not user.is_empty() else 0
 		if atk != 0 and not action.get("fixed", false):
-			parts.append("%d ダメージ（攻撃力 %+d）" % [action.power, atk])
+			parts.append("[i:stat_atk]%dダメージ（攻撃力%+d）" % [action.power, atk])
 		else:
-			parts.append("%d ダメージ" % action.power)
+			parts.append("[i:stat_atk]%dダメージ" % action.power)
 	for e in ActionList.effects_of(action):
 		var who := ""
 		match e.get("to", "target"):
 			"self": who = "自分に"
 			"ally_all": who = "味方全体に"
 		var turns := int(e.get("turns", -1))
-		var dur := ("%dターン" % turns) if turns > 0 else ""
+		var dur := ("%dターン " % turns) if turns > 0 else ""
 		match e.get("effect", ""):
-			"add_shield": parts.append("%sブロック +%d" % [who, e.eff_val])
-			"add_ap": parts.append("AP +%d" % e.eff_val)
-			"heal": parts.append("HP %d 回復" % e.eff_val)
-			"draw": parts.append("カードを %d 枚引く" % e.eff_val)
-			"swap": parts.append("味方の位置を入れ替える")
-			"double": parts.append("次に使うカード・保留カードが2回発動")
-			"turnabout": parts.append("上下左右の手札をすべて捨てて4枚引く。攻撃力 +1")
-			"extra_turn": parts.append("ターン終了時、もう一度ターンを得る")
-			"set_next_action": parts.append("次に強攻撃")
+			"add_shield": parts.append("[i:shield]%sブロック+%d" % [who, e.eff_val])
+			"add_ap": parts.append("[i:ap]AP+%d" % e.eff_val)
+			"heal": parts.append("[i:heart]HP%d回復" % e.eff_val)
+			"draw": parts.append("[i:cards]カードを%d枚引く" % e.eff_val)
+			"swap": parts.append("[i:swap]味方の位置を入れ替える")
+			"double": parts.append("[i:st_double]次に使うカード・保留カードが2回発動")
+			"turnabout": parts.append("[i:cards]上下左右の手札をすべて捨てて4枚引く　[i:atk_buff]攻撃力+1")
+			"extra_turn": parts.append("[i:hourglass]ターン終了時、もう一度ターンを得る")
+			"set_next_action": parts.append("[i:hourglass]次に強攻撃")
 			"add_status":
 				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
+				var ic := "[i:%s]" % str(st.get("icon", "star"))
 				match e.status:
-					"taunt": parts.append("%s挑発（単体攻撃をこちらへ向けさせる）" % dur)
-					"poison": parts.append("毒 %dターン" % int(e.eff_val))
-					"fire": parts.append("火傷 %d" % int(e.eff_val))
-					"atk_down": parts.append("%s攻撃力 -%d" % [dur, int(e.eff_val)])
-					"def_down": parts.append("%s防御力 -%d" % [dur, int(e.eff_val)])
-					"ap_plus": parts.append("%sAPプラス（ターン開始時 AP+%d）" % [dur, int(e.eff_val)])
-					"ap_next": parts.append("次の自分のターン AP +%d" % int(e.eff_val))
-					"fire_guard": parts.append("攻撃してきた相手に %dターン火傷" % int(e.eff_val))
-					_: parts.append("%s%s %+d" % [who, st.get("name", ""), int(e.eff_val)])
+					"taunt": parts.append("%s%s挑発（単体攻撃をこちらへ向けさせる）" % [ic, dur])
+					"poison": parts.append("%s毒%dターン" % [ic, int(e.eff_val)])
+					"fire": parts.append("%s火傷%d" % [ic, int(e.eff_val)])
+					"atk_down": parts.append("%s%s攻撃力-%d" % [ic, dur, int(e.eff_val)])
+					"def_down": parts.append("%s%s防御力-%d" % [ic, dur, int(e.eff_val)])
+					"ap_plus": parts.append("%s%sAPプラス（ターン開始時AP+%d）" % [ic, dur, int(e.eff_val)])
+					"ap_next": parts.append("%s次の自分のターンAP+%d" % [ic, int(e.eff_val)])
+					"fire_guard": parts.append("%s%s攻撃してきた相手に火傷%d" % [ic, dur, int(e.eff_val)])
+					_: parts.append("%s%s%s+%d" % [ic, who, str(st.get("name", "")).replace("アップ", ""), int(e.eff_val)])
 	if ActionList.has_keyword(action, "exhaust"):
-		parts.append("廃棄")
-	return "。".join(parts)
+		parts.append("[i:kw_exhaust]使うと廃棄")
+	return "　".join(parts)

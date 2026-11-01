@@ -13,6 +13,7 @@ var _hover := []
 
 func _ready() -> void:
 	CurrentStatus.ensure_started()
+	SaveData.save("map")  # マップに入った時の自動セーブ
 	add_child(GuiBackground.new("map"))
 	var ui := CanvasLayer.new()
 	add_child(ui)
@@ -135,6 +136,9 @@ func _on_input(event: InputEvent) -> void:
 
 func _select(f: int, i: int) -> void:
 	var t := CurrentStatus.enter_node(f, i)
+	# マスを選んだ時の自動セーブ（再読み込みしたらそのマスの画面から。戦闘ははじめから）
+	SaveData.screen = {}
+	SaveData.save(t if t in ["rest", "event", "shop"] else "battle")
 	match t:
 		"rest": UiSystem.goto("rest")
 		"event": UiSystem.goto("event")
@@ -177,7 +181,7 @@ func _open_specials(ui: CanvasLayer) -> void:
 		var btns: Array = []
 		var x := 60.0
 		for sp in ActionList.SPECIALS[a.id]:
-			var eff: String = ("%dダメージ" % sp.power) if sp.has("power") else DeckController.effect_text({}, sp)
+			var eff: String = ("%dダメージ" % sp.power) if sp.has("power") else DeckController.plain(DeckController.effect_text({}, sp))
 			var b := UiSystem.make_button(box, "%s（AP%d）\n%s" % [sp.name, sp.ap, eff], Vector2(x, y + 40), Vector2(290, 110), Callable(), 19)
 			b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			b.set_meta("sp", sp.id)
