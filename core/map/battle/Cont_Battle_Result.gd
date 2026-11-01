@@ -64,13 +64,23 @@ func _show_win() -> void:
 	for a in CurrentStatus.allies:
 		if a.hp <= 0:
 			a["hp"] = 1  # 倒れた仲間は HP1 で起き上がる
-	var drops := _process_drops()
+	# 戦利品と報酬カードはセーブに残す（再読み込みで取り直しにならないように）
+	var saved_cards: Array = SaveData.screen.get("reward") if SaveData.screen.get("reward") is Array else []
+	if saved_cards.size() != 3 or saved_cards.any(func(k): return ActionList.make_card(str(k)).is_empty()):
+		saved_cards = []
+	var drops: Array = []
+	if SaveData.screen.get("drops") is Array and not saved_cards.is_empty():
+		drops = SaveData.screen.drops
+	else:
+		drops = _process_drops()
+		saved_cards = []
 	UiSystem.make_banner(ui, "戦利品　" + "、".join(drops), Rect2(30, 262, 660, 54), 24, col.paper, col.ink, 18)
 	UiSystem.make_label(ui, "報酬カードを1枚選んでください（持ち主のデッキに入ります）", Vector2(20, 330), Vector2(680, 40), 21, col.text, HORIZONTAL_ALIGNMENT_CENTER, 4)
 	var owners := ["knight", "witch", ["knight", "witch"].pick_random()]
 	owners.shuffle()
 	for i in 3:
-		var c := ActionList.make_card(ActionList.random_card_id("", owners[i]))
+		var cid: String = str(saved_cards[i]) if not saved_cards.is_empty() else ActionList.random_card_id("", owners[i])
+		var c := ActionList.make_card(cid)
 		reward_cards.append(c)
 		var v := GuiCard.new()
 		v.set_card(c)
@@ -98,6 +108,9 @@ func _show_win() -> void:
 	UiSystem.make_red_button(owner_box, "このカードをもらう", Vector2(160, 0), Vector2(400, 84), _take, 28)
 	UiSystem.make_button(ui, "デッキを見る", Vector2(160, 960), Vector2(400, 80), _open_deck, 26)
 	UiSystem.make_button(ui, "受け取らずに進む", Vector2(160, 1060), Vector2(400, 80), _leave, 26)
+	SaveData.screen["drops"] = drops
+	SaveData.screen["reward"] = reward_cards.map(func(c): return c.id)
+	SaveData.save("result")
 
 
 func _open_deck() -> void:
@@ -121,6 +134,7 @@ func _take() -> void:
 		return
 	var owner: String = chosen_card.owner
 	CurrentDeck.add_card(owner, chosen_card.id)
+	SaveData.save("map")  # 報酬を受け取った時の自動セーブ
 	UiSystem.toast(ui, "%sのデッキに %s を追加！" % [InitAllyStatus.DATA[owner].name, chosen_card.name], 860, ImageController.COL.good)
 	owner_box.visible = false
 	chosen_card = {}
@@ -153,6 +167,7 @@ func _process_drops() -> Array:
 func _show_lose() -> void:
 	var col: Dictionary = ImageController.COL
 	_title = "DEFEAT"
+	SaveData.clear()  # 全滅したらセーブを消す
 	_title_col = col.bad
 	UiSystem.make_bubble(ui, Rect2(150, 330, 420, 90), Vector2(-9999, -9999), 1)
 	var l := UiSystem.make_label(ui, "%d 階で力尽きた…" % (CurrentStatus.current_floor + 1), Vector2(150, 330), Vector2(420, 90), 30, col.ink, HORIZONTAL_ALIGNMENT_CENTER, 0)
@@ -164,6 +179,7 @@ func _show_lose() -> void:
 func _show_clear() -> void:
 	var col: Dictionary = ImageController.COL
 	_title = "踏破！"
+	SaveData.clear()  # 踏破したらセーブを消す
 	_title_col = col.gold
 	UiSystem.make_bubble(ui, Rect2(90, 320, 540, 140), Vector2(-9999, -9999), 1)
 	var l := UiSystem.make_label(ui, "暗がりの洞窟の主を倒した！\nおめでとう！", Vector2(90, 320), Vector2(540, 140), 32, col.ink, HORIZONTAL_ALIGNMENT_CENTER, 0)
@@ -184,4 +200,5 @@ func _to_title() -> void:
 
 
 func _leave() -> void:
+	SaveData.save("map")  # 報酬を受け取らずに進んだ時の自動セーブ
 	UiSystem.goto("map")

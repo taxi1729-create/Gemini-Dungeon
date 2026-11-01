@@ -143,7 +143,7 @@ func _foot_lines(u: Dictionary, w: float) -> Array:
 	var it: Dictionary = u.get("intent", {})
 	var s := "次：—"
 	if not it.is_empty():
-		s = "次：%s　%s" % [str(it.get("name", "")), DeckController.effect_text(u, it)]
+		s = "次：%s　%s" % [str(it.get("name", "")), DeckController.plain(DeckController.effect_text(u, it))]
 	var out := _wrap(s, w, LINE_FS)
 	if out.size() > 2:
 		out = [out[0], str(out[1]).substr(0, maxi(0, str(out[1]).length() - 1)) + "…"]

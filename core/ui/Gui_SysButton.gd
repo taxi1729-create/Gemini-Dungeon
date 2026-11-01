@@ -79,8 +79,6 @@ func _draw() -> void:
 		var p := Vector2(size.x - 18, 18)
 		IC.icon(self, "ap", p, 34, IC.COL.ap if not dimmed else Color("5a2a30"))
 		IC.text(self, str(ap_cost), p + Vector2(0, 1), 17, Color.WHITE, true, 4, -1.0, IC.COL.ink)
-	if label_hint != "":
-		IC.text(self, label_hint, Vector2(14, 14), 14, Color(1, 1, 1, 0.45), true)
 
 
 ## 右列のキー：斜めの黒いパネル。選択中は赤く塗りつぶす

@@ -94,6 +94,185 @@ func _text_f(ci: CanvasItem, f: Font, s: String, center: Vector2, size: int, col
 
 
 # ============================================================
+# アイコン入りの文字（"[i:アイコン名]" の位置にアイコンを文字の高さで描く）
+# ============================================================
+
+const RICH_CLOSE := "。、，．）」』】〕・ー！？!?)]%,.：:"  # 行頭に来させない文字
+const RICH_OPEN := "（「『【〔(["  # 行末に残さない文字
+
+## アイコン 1 つ分の送り幅（文字サイズ size に対して）
+func _rich_icon_w(size: int) -> float:
+	return size * 1.3
+
+
+## 文字列を部品に分ける：[{"t": 文字 or "", "i": アイコン名 or "", "w": 幅}]。"\n" は {"nl": true}
+func _rich_atoms(s: String, size: int) -> Array:
+	var f: Font = font_bold
+	var out: Array = []
+	var i := 0
+	var n := s.length()
+	while i < n:
+		var ch := s[i]
+		if ch == "[" and s.substr(i, 3) == "[i:":
+			var e := s.find("]", i)
+			if e > i:
+				out.append({"t": "", "i": s.substr(i + 3, e - i - 3), "w": _rich_icon_w(size)})
+				i = e + 1
+				continue
+		if ch == "\n":
+			out.append({"nl": true})
+		else:
+			out.append({"t": ch, "i": "", "w": f.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x})
+		i += 1
+	return out
+
+
+## 半角の英数字（続けて並んだ数字は途中で折り返さない）
+func _rich_ascii(a: Dictionary) -> bool:
+	var t: String = a.get("t", "")
+	if t == "" or t == " ":
+		return false
+	var c := t.unicode_at(0)
+	return c < 128 and c != 32
+
+
+## a と b の間で折り返してよいか
+func _rich_can_break(a: Dictionary, b: Dictionary) -> bool:
+	if a.get("i", "") != "":
+		return false  # アイコンは次の文字とくっつける
+	if _rich_ascii(a) and _rich_ascii(b):
+		return false
+	if b.get("t", "") != "" and RICH_CLOSE.contains(b.t):
+		return false
+	if a.get("t", "") != "" and RICH_OPEN.contains(a.t):
+		return false
+	return true
+
+
+## 部品を幅 max_w の行に分ける。戻り値：行の配列（各行は部品の配列）
+func _rich_lines(s: String, size: int, max_w: float) -> Array:
+	var atoms := _rich_atoms(s, size)
+	# 全角空白の直後から次の全角空白（か改行）までを「句」とし、句が次の行に丸ごと入るなら句の頭で折り返す
+	var phrase_w := {}
+	for k in atoms.size():
+		if k > 0 and atoms[k - 1].get("t", "") == "　" and atoms[k].get("t", "") != "　":
+			var pw := 0.0
+			var j := k
+			while j < atoms.size() and not atoms[j].has("nl") and atoms[j].get("t", "") != "　":
+				pw += float(atoms[j].w)
+				j += 1
+			phrase_w[k] = pw
+	var lines: Array = []
+	var cur: Array = []
+	var cur_w := 0.0
+	# 折り返せない部品のまとまり（語）を作りながら行へ詰める
+	var word: Array = []
+	var word_w := 0.0
+	var phrase_break := false  # 次の語の前で改行する
+	for k in atoms.size() + 1:
+		var a: Dictionary = atoms[k] if k < atoms.size() else {"nl": true, "end": true}
+		var flush := a.has("nl")
+		if not flush and not word.is_empty() and _rich_can_break(word[word.size() - 1], a):
+			flush = true
+		if flush and not word.is_empty():
+			if phrase_break and not cur.is_empty():
+				lines.append(cur)
+				cur = []
+				cur_w = 0.0
+			phrase_break = false
+			if max_w > 0 and not cur.is_empty() and cur_w + word_w > max_w:
+				lines.append(cur)
+				cur = []
+				cur_w = 0.0
+				# 折り返した行の頭の空白は捨てる
+				while not word.is_empty() and (word[0].get("t", "") == "　" or word[0].get("t", "") == " "):
+					word_w -= float(word[0].w)
+					word.pop_front()
+			# 1 語が 1 行より長い時は部品ごとに折り返す
+			for w in word:
+				if max_w > 0 and not cur.is_empty() and cur_w + float(w.w) > max_w:
+					lines.append(cur)
+					cur = []
+					cur_w = 0.0
+				cur.append(w)
+				cur_w += float(w.w)
+			word = []
+			word_w = 0.0
+		if a.has("nl"):
+			if not a.has("end") or not cur.is_empty() or lines.is_empty():
+				lines.append(cur)
+			cur = []
+			cur_w = 0.0
+			continue
+		if max_w > 0 and phrase_w.has(k):
+			# 句の頭：今の行に入りきらず、次の行なら丸ごと入る時は句の前で改行（行末に全角空白が残っても見えない）
+			var rest := cur_w + word_w
+			if rest + float(phrase_w[k]) > max_w and float(phrase_w[k]) <= max_w:
+				# 直前の語（全角空白）を今の行に入れてから改行させる
+				for w in word:
+					cur.append(w)
+					cur_w += float(w.w)
+				word = []
+				word_w = 0.0
+				phrase_break = true
+		word.append(a)
+		word_w += float(a.w)
+	return lines
+
+
+func _rich_line_w(line: Array) -> float:
+	var w := 0.0
+	for a in line:
+		w += float(a.w)
+	return w
+
+
+## アイコン入りの文字を描く。pos = 1行目の左上（align=0）／上中央（align=1）。max_w を超えたら折り返す。戻り値＝描いた高さ
+## 文字の色が暗い時（白い紙の上）は、アイコンの後ろに黒い丸を敷いて明るいアイコンも見えるようにする
+func rich_text(ci: CanvasItem, s: String, pos: Vector2, size: int, col: Color, max_w: float = -1.0,
+		align: int = 0, line_h: float = 0.0) -> float:
+	var lh := line_h if line_h > 0 else size * 1.5
+	var f: Font = font_bold
+	var on_paper := col.get_luminance() < 0.5
+	var lines := _rich_lines(s, size, max_w)
+	var y := pos.y
+	for line in lines:
+		var x := pos.x
+		if align == 1:
+			x = pos.x - _rich_line_w(line) / 2.0
+		var mid := y + lh / 2.0
+		var base := mid + (f.get_ascent(size) - f.get_descent(size)) / 2.0
+		for a in line:
+			var w := float(a.w)
+			if a.i != "":
+				var c := Vector2(x + w / 2.0, mid)
+				if on_paper:
+					ci.draw_circle(c, size * 0.66, COL.ink)
+					icon(ci, a.i, c, size * 1.04)
+				else:
+					icon(ci, a.i, c, size * 1.12)
+			else:
+				ci.draw_string(f, Vector2(x, base), a.t, HORIZONTAL_ALIGNMENT_LEFT, -1, size, col)
+			x += w
+		y += lh
+	return lines.size() * lh
+
+
+## rich_text で描いた時の高さ（描かない）
+func rich_height(s: String, size: int, max_w: float, line_h: float = 0.0) -> float:
+	var lh := line_h if line_h > 0 else size * 1.5
+	return _rich_lines(s, size, max_w).size() * lh
+
+
+## rich_text の一番長い行の幅（折り返さない時。max_w を渡すと折り返した後の幅）
+func rich_width(s: String, size: int, max_w: float = -1.0) -> float:
+	var w := 0.0
+	for line in _rich_lines(s, size, max_w):
+		w = maxf(w, _rich_line_w(line))
+	return w
+
+
+# ============================================================
 # 図形ヘルパー
 # ============================================================
 
@@ -338,6 +517,11 @@ const ICON_DEFAULT = {
 	"c_flash": Color("f7f5f0"), "c_taunt": Color("ff3048"), "c_big_swing": Color("e6eef6"),
 	"c_steel": Color("b9c2cc"), "c_store": Color("ffd84a"), "c_full_strike": Color("ff5a2a"),
 	"c_stand": Color("b9c2cc"),
+	# 対象（敵＝赤い人影、味方＝白い人影）
+	"tgt_enemy_one": Color("ff4a4a"), "tgt_enemy_group": Color("ff4a4a"), "tgt_front_row": Color("ff4a4a"),
+	"tgt_enemy_all": Color("ff4a4a"), "tgt_self": Color("f7f5f0"), "tgt_ally_all": Color("f7f5f0"),
+	# キーワード（パワー／廃棄）
+	"kw_power": Color("b88cff"), "kw_exhaust": Color("e8213a"),
 }
 
 
@@ -484,9 +668,129 @@ func _icon_ext(ci: CanvasItem, kind: String, k: Color, m: Transform2D) -> bool:
 		"c_store": _i_c_store(ci, k)
 		"c_full_strike": _i_c_full_strike(ci, k, m)
 		"c_stand": _i_c_stand(ci, k)
+		# 対象（20〜28px でも見分けられるよう、人影の数と並び方で区別する）
+		"tgt_enemy_one": _i_tgt_enemy_one(ci, k)
+		"tgt_enemy_group": _i_tgt_enemy_group(ci, k)
+		"tgt_front_row": _i_tgt_front_row(ci, k)
+		"tgt_enemy_all": _i_tgt_enemy_all(ci, k)
+		"tgt_self": _i_tgt_self(ci, k)
+		"tgt_ally_all": _i_tgt_ally_all(ci, k)
+		# キーワード
+		"kw_power": _i_kw_power(ci, k)
+		"kw_exhaust": _i_kw_exhaust(ci, k)
 		_:
 			return false
 	return true
+
+
+## 人影（頭＋肩）。c = 胴の上端の中心、h = 全体の高さ。enemy なら頭に小さな角。黒い縁で重なっても分かれて見える
+func _pawn(ci: CanvasItem, c: Vector2, h: float, k: Color, enemy: bool = true) -> void:
+	var o := 0.05  # 縁の太さ
+	var head := c + Vector2(0, -h * 0.27)
+	var hr := h * 0.22
+	var body := PackedVector2Array()
+	for i in 13:
+		var a := PI + PI * i / 12.0
+		body.append(c + Vector2(cos(a) * h * 0.4, h * 0.5 + sin(a) * h * 0.5))
+	var grown := Geometry2D.offset_polygon(body, o, Geometry2D.JOIN_MITER)
+	if not grown.is_empty():
+		ci.draw_colored_polygon(grown[0], COL.ink)
+	ci.draw_circle(head, hr + o, COL.ink)
+	if enemy:
+		for sx in [-1.0, 1.0]:
+			var horn := PackedVector2Array([head + Vector2(sx * hr * 0.35, -hr * 0.6), head + Vector2(sx * hr * 1.05, -hr * 1.3),
+					head + Vector2(sx * hr * 0.95, -hr * 0.2)])
+			var hg := Geometry2D.offset_polygon(horn, o * 0.8, Geometry2D.JOIN_MITER)
+			if not hg.is_empty():
+				ci.draw_colored_polygon(hg[0], COL.ink)
+			ci.draw_colored_polygon(horn, k.lightened(0.5))
+	ci.draw_colored_polygon(body, k)
+	ci.draw_circle(head, hr, k)
+
+
+## 対象：目の前の敵 1 体（照準の中に人影 1 つ）
+func _i_tgt_enemy_one(ci: CanvasItem, k: Color) -> void:
+	ci.draw_arc(Vector2.ZERO, 0.42, 0, TAU, 28, COL.ink, 0.17, true)
+	ci.draw_arc(Vector2.ZERO, 0.42, 0, TAU, 28, k, 0.1, true)
+	for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
+		ci.draw_line(d * 0.34, d * 0.56, k, 0.1)
+	_pawn(ci, Vector2(0, 0.0), 0.54, k)
+
+
+## 対象：目の前の敵グループ（寄り集まった人影 3 つ＋足元の丸い光）
+func _i_tgt_enemy_group(ci: CanvasItem, k: Color) -> void:
+	ci.draw_colored_polygon(ell(Vector2(0, 0.38), 0.52, 0.14, 24), Color(k, 0.5))
+	_pawn(ci, Vector2(-0.24, -0.1), 0.56, k.darkened(0.2))
+	_pawn(ci, Vector2(0.24, -0.1), 0.56, k.darkened(0.2))
+	_pawn(ci, Vector2(0, 0.0), 0.6, k)
+
+
+## 対象：前衛の敵全体（横一列の人影 3 つ＋その下に太い赤線）
+func _i_tgt_front_row(ci: CanvasItem, k: Color) -> void:
+	for x in [-0.33, 0.33, 0.0]:
+		_pawn(ci, Vector2(x, -0.1), 0.5, k)
+	ci.draw_rect(Rect2(-0.54, 0.34, 1.08, 0.16), COL.ink)
+	ci.draw_rect(Rect2(-0.5, 0.37, 1.0, 0.1), k)
+
+
+## 対象：敵全体（2 列の人影＋四隅のかぎ括弧で囲む）
+func _i_tgt_enemy_all(ci: CanvasItem, k: Color) -> void:
+	for x in [-0.16, 0.16]:
+		_pawn(ci, Vector2(x, -0.2), 0.38, k.darkened(0.2))
+	for x in [-0.16, 0.16]:
+		_pawn(ci, Vector2(x, 0.06), 0.4, k)
+	var a := 0.48
+	var l := 0.22
+	var t := 0.11
+	for sx in [-1.0, 1.0]:
+		for sy in [-1.0, 1.0]:
+			var cc := Vector2(sx * a, sy * a)
+			ci.draw_line(cc + Vector2(sx * t / 2, 0), cc + Vector2(-sx * l, 0), k, t)
+			ci.draw_line(cc + Vector2(0, sy * t / 2), cc + Vector2(0, -sy * l), k, t)
+
+
+## 対象：自分（白い人影を回り込む矢印）
+func _i_tgt_self(ci: CanvasItem, k: Color) -> void:
+	_pawn(ci, Vector2(0, 0.02), 0.56, k, false)
+	var arc_col: Color = COL.red
+	ci.draw_arc(Vector2(0, 0.02), 0.44, PI * 0.95, PI * 2.25, 24, COL.ink, 0.16, true)
+	ci.draw_arc(Vector2(0, 0.02), 0.44, PI * 0.95, PI * 2.25, 24, arc_col, 0.09, true)
+	var e := Vector2(cos(PI * 2.25), sin(PI * 2.25)) * 0.44 + Vector2(0, 0.02)
+	var d := Vector2(-sin(PI * 2.25), cos(PI * 2.25))  # 弧の進む向き
+	var n := d.orthogonal()
+	var tri := PackedVector2Array([e + d * 0.2, e + n * 0.14, e - n * 0.14])
+	var tg := Geometry2D.offset_polygon(tri, 0.04, Geometry2D.JOIN_MITER)
+	if not tg.is_empty():
+		ci.draw_colored_polygon(tg[0], COL.ink)
+	ci.draw_colored_polygon(tri, arc_col)
+
+
+## 対象：味方全体（白い人影 2 つ。足元に左＝青・右＝赤の光）
+func _i_tgt_ally_all(ci: CanvasItem, k: Color) -> void:
+	ci.draw_colored_polygon(ell(Vector2(-0.23, 0.4), 0.27, 0.1, 18), COL.knight)
+	ci.draw_colored_polygon(ell(Vector2(0.23, 0.4), 0.27, 0.1, 18), COL.red)
+	_pawn(ci, Vector2(-0.23, -0.02), 0.48, k, false)
+	_pawn(ci, Vector2(0.23, -0.02), 0.48, k, false)
+
+
+## キーワード：パワー（紫の丸に白い稲妻）
+func _i_kw_power(ci: CanvasItem, k: Color) -> void:
+	ci.draw_circle(Vector2.ZERO, 0.46, COL.ink)
+	ci.draw_circle(Vector2.ZERO, 0.4, k)
+	ci.draw_colored_polygon(pts([[0.06, -0.34], [-0.2, 0.05], [-0.02, 0.05], [-0.08, 0.34], [0.2, -0.06], [0.02, -0.06]]), COL.paper)
+
+
+## キーワード：廃棄（白いカードに赤い×）
+func _i_kw_exhaust(ci: CanvasItem, k: Color) -> void:
+	var card := _rot([[-0.26, -0.38], [0.26, -0.38], [0.26, 0.38], [-0.26, 0.38]], 0.18)
+	var g := Geometry2D.offset_polygon(card, 0.05, Geometry2D.JOIN_MITER)
+	if not g.is_empty():
+		ci.draw_colored_polygon(g[0], COL.ink)
+	ci.draw_colored_polygon(card, COL.paper)
+	ci.draw_line(Vector2(-0.3, -0.3), Vector2(0.3, 0.3), COL.ink, 0.2)
+	ci.draw_line(Vector2(0.3, -0.3), Vector2(-0.3, 0.3), COL.ink, 0.2)
+	ci.draw_line(Vector2(-0.28, -0.28), Vector2(0.28, 0.28), k, 0.12)
+	ci.draw_line(Vector2(0.28, -0.28), Vector2(-0.28, 0.28), k, 0.12)
 
 
 ## 部品用の変形：icon() の変形 m の中で、off へ動かして sc 倍にする

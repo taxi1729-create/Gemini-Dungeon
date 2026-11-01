@@ -15,7 +15,12 @@ func _ready() -> void:
 	deco.draw.connect(_draw_deco)
 	ui.add_child(deco)
 	var col: Dictionary = ImageController.COL
-	UiSystem.make_red_button(ui, "冒険をはじめる", Vector2(150, 940), Vector2(420, 100), _start, 36)
+	if SaveData.has_save():
+		# セーブがある時は「続きから」を大きく、「冒険をはじめる」（セーブを消して新規）をその下に
+		UiSystem.make_red_button(ui, "続きから", Vector2(150, 900), Vector2(420, 96), _continue, 36)
+		UiSystem.make_button(ui, "冒険をはじめる", Vector2(180, 1010), Vector2(360, 70), _start, 28)
+	else:
+		UiSystem.make_red_button(ui, "冒険をはじめる", Vector2(150, 940), Vector2(420, 100), _start, 36)
 	# 操作のヒントは白いギザギザ吹き出しで
 	UiSystem.make_bubble(ui, Rect2(70, 1092, 580, 104), Vector2(110, 1250), 4)
 	var hint := UiSystem.make_label(ui, "カードをタップ、または下半分でフリックして使う\n長押しで説明・敵をタップで詳細",
@@ -64,5 +69,11 @@ func _draw_deco() -> void:
 
 
 func _start() -> void:
+	SaveData.clear()
 	CurrentStatus.start_new_game()
 	UiSystem.goto("map")
+
+
+## セーブした画面から再開
+func _continue() -> void:
+	SaveData.load_and_resume()

@@ -6,7 +6,7 @@ const SIZE := Vector2(128, 168)
 
 var card: Dictionary = {}
 var playable := true  # AP不足なら false（暗く表示）
-var label_hint := ""  # 右下に出す操作ヒント（例: "8"）
+var label_hint := ""  # 互換用（操作ヒントの数字はもう描かない）
 var charge := 0.0:  # 長押しの溜め（0〜1）。0 より大きい時は縁に溜めゲージを描く
 	set(v):
 		charge = v
@@ -75,8 +75,22 @@ func _draw() -> void:
 	# 名前：白い斜めの帯に黒い太字
 	IC.slant(self, Rect2(4, size.y - 56, size.x - 8, 27), IC.COL.paper, 8)
 	IC.text(self, card.get("name", ""), Vector2(size.x / 2, size.y - 42), 17, IC.COL.ink, true, 0, size.x - 22)
-	# 効果の要約
-	IC.text(self, summary(card), Vector2(size.x / 2, size.y - 15), 14, IC.COL.text, true, 0, size.x - 14)
+	# 効果の要約：先頭に対象のアイコン（文字より大きめ）。入りきらない時は文字を小さくする
+	var ti := DeckController.target_icon(card.get("target", ""))
+	var sm := DeckController.plain(summary(card))
+	var isz := 22.0 if ti != "" else 0.0
+	var gap := 3.0 if ti != "" and sm != "" else 0.0
+	var fs := 14
+	var f: Font = IC.font_bold
+	while fs > 9 and isz + gap + f.get_string_size(sm, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > size.x - 14:
+		fs -= 1
+	var tw := isz + gap + f.get_string_size(sm, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var sy := size.y - 15
+	var sx := size.x / 2 - tw / 2
+	if ti != "":
+		IC.icon(self, ti, Vector2(sx + isz / 2, sy), isz)
+	if sm != "":
+		draw_string(f, Vector2(sx + isz + gap, sy + (f.get_ascent(fs) - f.get_descent(fs)) / 2.0), sm, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, IC.COL.text)
 	# 威力（左上）：ギザギザの星に数字。実際のダメージ（power_eff）を出し、
 	# 基本より高ければ緑の星＋▲、低ければ白い星に赤い数字＋▼、同じなら赤い星に白い数字
 	var power: int = int(card.get("power", 0))
@@ -114,15 +128,11 @@ func _draw() -> void:
 	_draw_keywords(art)
 	if not playable and not unsel:
 		draw_colored_polygon(IC.cut_pts(r, 14), Color(0, 0, 0, 0.55))
-	if label_hint != "":
-		var hr := Rect2(size.x - 30, size.y - 78, 22, 20)
-		IC.slant(self, hr, Color(IC.COL.ink, 0.8), 4)
-		IC.text(self, label_hint, hr.get_center(), 14, Color(1, 1, 1, 0.85), true)
 	if charge > 0:
 		_draw_charge(r)
 
 
-## キーワードの札（パワー／廃棄）：絵柄の窓の左下に小さな斜めタグを縦に積む（右下の操作ヒントと重ねない）
+## キーワードの札（パワー／廃棄）：絵柄の窓の左下に小さな斜めタグを縦に積む
 func _draw_keywords(art: Rect2) -> void:
 	var kws: Array = card.get("keywords", [])
 	if kws.is_empty():
@@ -207,15 +217,10 @@ func _draw_shine(art: Rect2, rarity: String) -> void:
 		draw_colored_polygon(poly, col)
 
 
+## 効果の要約（"[i:対象のアイコン]" 入り。ImageController.rich_text で描く）
 static func summary(c: Dictionary) -> String:
 	var parts: Array = []
-	match c.get("target", ""):
-		"enemy_all": parts.append("敵全体")
-		"front_enemy_single": parts.append("HP最低")
-		"front_enemy_group": parts.append("目の前")
-		"front_row": parts.append("前衛")
-		"ally_all": parts.append("味方全体")
-		"self": parts.append("自分")
+	var ti := DeckController.target_icon(c.get("target", ""))
 	if ActionList.has_keyword(c, "power"):
 		var pe: Dictionary = c.get("power_effect", {})
 		parts.append("%s+%d" % ["攻" if pe.get("status", "") == "atk_buff" else "防", int(pe.get("eff_val", 0))])
@@ -232,4 +237,5 @@ static func summary(c: Dictionary) -> String:
 			"add_status":
 				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
 				parts.append(st.get("short", "?") if e.status in ["taunt", "fire_guard"] else "%s%d" % [st.get("short", "?"), e.eff_val])
-	return " ".join(parts)
+	var s := " ".join(parts)
+	return s if ti == "" else "[i:%s]%s" % [ti, s]

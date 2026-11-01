@@ -83,6 +83,7 @@ func _nap() -> void:
 
 func _finish(msg: String) -> void:
 	done = true
+	SaveData.save("map")  # 食べた・眠った時点で保存（再読み込みしたらマップへ）
 	_refresh()
 	UiSystem.toast(ui, msg, 520, ImageController.COL.good)
 	await get_tree().create_timer(1.4).timeout

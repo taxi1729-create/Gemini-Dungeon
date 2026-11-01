@@ -18,7 +18,6 @@ var lines: Array = []
 var is_enemy := false
 var unit: Dictionary = {}  # 表示するキャラ（setup より前に入れる）。空ならアイコンの行は出さない
 var tail_to := Vector2(-9999, -9999)  # しっぽの向く先（親の座標）。未設定ならしっぽ無し
-var _wrapped: Array = []
 
 
 func setup(t: String, l: Array, rect: Rect2, enemy: bool) -> void:
@@ -28,7 +27,6 @@ func setup(t: String, l: Array, rect: Rect2, enemy: bool) -> void:
 	position = rect.position
 	size = rect.size
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_wrapped = wrap_lines(lines, size.x - PAD_X * 2)
 
 
 ## 幅 w に収まるように 1 文字ずつ折り返した行の配列を返す（日本語は空白が無いので文字単位）
@@ -48,8 +46,17 @@ static func wrap_lines(src: Array, w: float) -> Array:
 
 
 ## 本文 lines を幅 w の吹き出しに入れた時の高さ。unit を渡すとステータスと状態異常のアイコンの行の分も足す
+## lines には "[i:アイコン名]" を入れてよい（ImageController.rich_text で描く）
 static func measure(lines: Array, w: float, unit: Dictionary = {}) -> float:
-	return TOP + icon_rows_height(unit, w - PAD_X * 2) + wrap_lines(lines, w - PAD_X * 2).size() * LINE_H + 18.0
+	return TOP + icon_rows_height(unit, w - PAD_X * 2) + body_height(lines, w - PAD_X * 2) + 18.0
+
+
+## 本文（rich_text で 1 項目ずつ折り返す）の高さ。bw = 本文の幅
+static func body_height(src: Array, bw: float) -> float:
+	var h := 0.0
+	for s in src:
+		h += ImageController.rich_height(str(s), FS, bw, LINE_H)
+	return h
 
 
 ## アイコンの行（ステータス＋状態異常）の高さ。u が空なら 0
@@ -181,12 +188,12 @@ func _draw() -> void:
 		draw_status(self, lay, Vector2(PAD_X, top), CHIP_FS, CHIP_H, IC.COL.ink, IC.COL.paper)
 		top = TOP + icon_rows_height(unit, body_w)
 		draw_line(Vector2(PAD_X, top - 4), Vector2(size.x - PAD_X, top - 4), Color(0, 0, 0, 0.25), 2)
-	var f: Font = IC.font_bold
-	for i in _wrapped.size():
-		var y := top + i * LINE_H + LINE_H * 0.5
-		draw_string(f, Vector2(PAD_X, y + FS * 0.36), _wrapped[i], HORIZONTAL_ALIGNMENT_LEFT, -1, FS, IC.COL.ink)
-		if i < _wrapped.size() - 1 and not str(_wrapped[i + 1]).begins_with("　"):
-			draw_line(Vector2(PAD_X, y + LINE_H * 0.5), Vector2(size.x - PAD_X, y + LINE_H * 0.5), Color(0, 0, 0, 0.12), 1)
+	# 本文：1 項目ずつアイコン入りで描き、項目の間に薄い線
+	var y := top
+	for i in lines.size():
+		y += IC.rich_text(self, str(lines[i]), Vector2(PAD_X, y), FS, IC.COL.ink, body_w, 0, LINE_H)
+		if i < lines.size() - 1:
+			draw_line(Vector2(PAD_X, y), Vector2(size.x - PAD_X, y), Color(0, 0, 0, 0.12), 1)
 
 
 ## 互換用：左寄せの 1 行

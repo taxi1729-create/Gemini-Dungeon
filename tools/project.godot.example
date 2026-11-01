@@ -16,6 +16,7 @@ ImageController="*res://index/core/information/system/Cont_Image.gd"
 AnimationController="*res://index/core/information/system/Cont_Anime.gd"
 UiSystem="*res://index/core/information/system/Cont_UI_System.gd"
 FlickInput="*res://index/core/information/system/Cont_Flick.gd"
+SaveData="*res://index/core/map/status/Save_Data.gd"
 
 [display]
 window/size/viewport_width=720

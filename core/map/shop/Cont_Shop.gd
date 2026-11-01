@@ -38,9 +38,27 @@ func _ready() -> void:
 	gold_label.add_theme_font_override("font", ImageController.font_head)
 	msg_label = UiSystem.make_label(ui, "", Vector2(20, 140), Vector2(680, 36), 20, col.good)
 
+	# 品ぞろえと買った物はセーブに残す（再読み込みしても同じ店のまま）
+	var saved: Dictionary = SaveData.screen.get("shop", {}) if SaveData.screen.get("shop") is Dictionary else {}
+	var card_ids: Array = saved.get("cards", []) if saved.get("cards") is Array else []
+	var item_ids: Array = saved.get("items", []) if saved.get("items") is Array else []
+	if card_ids.size() != 3 or item_ids.size() != 2 \
+			or card_ids.any(func(k): return ActionList.make_card(str(k)).is_empty()) \
+			or item_ids.any(func(k): return not Item_List.DATA.has(str(k))):
+		saved = {}
+		card_ids = []
+		for i in 3:
+			card_ids.append(ActionList.random_card_id())
+		item_ids = Item_List.DATA.keys()
+		item_ids.shuffle()
+		item_ids = item_ids.slice(0, 2)
+	var sold_cards: Array = saved.get("sold_cards") if saved.get("sold_cards") is Array else []
+	var sold_items: Array = saved.get("sold_items") if saved.get("sold_items") is Array else []
+	removed = bool(saved.get("removed", false))
+
 	_section("カード（タップで買う）", 182)
 	for i in 3:
-		var c := ActionList.make_card(ActionList.random_card_id())
+		var c := ActionList.make_card(str(card_ids[i]))
 		var v := GuiCard.new()
 		v.set_card(c)
 		v.position = Vector2(84 + i * 200, 224)
@@ -55,17 +73,17 @@ func _ready() -> void:
 		psb.shadow_size = 1
 		psb.shadow_offset = Vector2(4, 4)
 		pl.add_theme_stylebox_override("normal", psb)
-		var entry := {"card": c, "sold": false, "view": v, "price": price, "label": pl}
+		var entry := {"card": c, "sold": i < sold_cards.size() and bool(sold_cards[i]), "view": v, "price": price, "label": pl}
+		v.visible = not entry.sold
 		v.tapped.connect(_buy_card.bind(entry))
 		stock_cards.append(entry)
 
 	_section("道具（各%dG）" % ITEM_PRICE, 444)
-	var ids: Array = Item_List.DATA.keys()
-	ids.shuffle()
 	for i in 2:
-		var it: Dictionary = Item_List.DATA[ids[i]]
-		var entry := {"id": ids[i], "sold": false}
-		var b := UiSystem.make_button(ui, "%s\n%s" % [it.name, it.desc], Vector2(34 + i * 336, 486), Vector2(316, 100), Callable(), 18)
+		var iid := str(item_ids[i])
+		var it: Dictionary = Item_List.DATA[iid]
+		var entry := {"id": iid, "sold": i < sold_items.size() and bool(sold_items[i])}
+		var b := UiSystem.make_button(ui, "売り切れ" if entry.sold else "%s\n%s" % [it.name, it.desc], Vector2(34 + i * 336, 486), Vector2(316, 100), Callable(), 18)
 		b.pressed.connect(_buy_item.bind(entry))
 		entry["btn"] = b
 		stock_items.append(entry)
@@ -80,10 +98,25 @@ func _ready() -> void:
 		food_btns[k] = b
 		x += 225
 
-	remove_btn = UiSystem.make_button(ui, "カード削除（%dG・1回だけ）" % REMOVE_PRICE, Vector2(80, 770), Vector2(560, 84), _remove, 24)
+	remove_btn = UiSystem.make_button(ui, "カード削除（済）" if removed else "カード削除（%dG・1回だけ）" % REMOVE_PRICE, Vector2(80, 770), Vector2(560, 84), _remove, 24)
 	UiSystem.make_button(ui, "デッキを見る", Vector2(80, 880), Vector2(560, 80), func(): GuiDeckView.open(ui, "デッキ"), 24)
-	UiSystem.make_red_button(ui, "店を出る", Vector2(160, 1100), Vector2(400, 90), func(): UiSystem.goto("map"), 30)
+	UiSystem.make_red_button(ui, "店を出る", Vector2(160, 1100), Vector2(400, 90), func():
+		SaveData.save("map")  # 店を出た時の自動セーブ
+		UiSystem.goto("map"), 30)
+	_save_shop()
 	_refresh()
+
+
+## 品ぞろえと買った物を保存する（再開先はショップ）
+func _save_shop() -> void:
+	SaveData.screen["shop"] = {
+		"cards": stock_cards.map(func(e): return e.card.id),
+		"items": stock_items.map(func(e): return e.id),
+		"sold_cards": stock_cards.map(func(e): return e.sold),
+		"sold_items": stock_items.map(func(e): return e.sold),
+		"removed": removed,
+	}
+	SaveData.save("shop")
 
 
 ## 区切りの見出し（赤い斜めのタグ）
@@ -114,6 +147,7 @@ func _buy_card(e: Dictionary) -> void:
 	var owner: String = e.card.owner
 	CurrentDeck.add_card(owner, e.card.id)
 	msg_label.text = "%sのデッキに %s を追加した" % [InitAllyStatus.DATA[owner].name, e.card.name]
+	_save_shop()
 	_refresh()
 
 
@@ -128,6 +162,7 @@ func _buy_item(e: Dictionary) -> void:
 	e.sold = true
 	e.btn.text = "売り切れ"
 	msg_label.text = "%sを買った" % Item_List.DATA[e.id].name
+	_save_shop()
 	_refresh()
 
 
@@ -137,6 +172,7 @@ func _buy_food(k: String) -> void:
 	Inventory.gold -= FOOD_PRICE
 	Inventory.add_food(k, 1)
 	msg_label.text = "%sを買った" % FoodList.DATA[k].name
+	_save_shop()
 	_refresh()
 
 
@@ -149,4 +185,5 @@ func _remove() -> void:
 		CurrentDeck.remove_card(char_id, card_id)
 		msg_label.text = "%s を削除した" % ActionList.make_card(card_id).name
 		remove_btn.text = "カード削除（済）"
+		_save_shop()
 		_refresh())

@@ -13,6 +13,7 @@ var _hover := []
 
 func _ready() -> void:
 	CurrentStatus.ensure_started()
+	SaveData.save("map")  # マップに入った時の自動セーブ
 	add_child(GuiBackground.new("map"))
 	var ui := CanvasLayer.new()
 	add_child(ui)
@@ -135,6 +136,9 @@ func _on_input(event: InputEvent) -> void:
 
 func _select(f: int, i: int) -> void:
 	var t := CurrentStatus.enter_node(f, i)
+	# マスを選んだ時の自動セーブ（再読み込みしたらそのマスの画面から。戦闘ははじめから）
+	SaveData.screen = {}
+	SaveData.save(t if t in ["rest", "event", "shop"] else "battle")
 	match t:
 		"rest": UiSystem.goto("rest")
 		"event": UiSystem.goto("event")
