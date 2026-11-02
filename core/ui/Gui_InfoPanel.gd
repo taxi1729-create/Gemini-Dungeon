@@ -78,7 +78,7 @@ static func icon_rows_height(u: Dictionary, w: float) -> float:
 static func stat_items(u: Dictionary) -> Array:
 	var out: Array = [
 		["stat_hp", "%d/%d" % [int(u.get("hp", 0)), int(u.get("max_hp", 0))]],
-		["stat_atk", str(ActionController.get_atk(u))],
+		["stat_atk", str(ActionController.get_atk(u) + ActionController.relic_atk(u))],
 		["stat_def", str(ActionController.get_def(u))],
 		["stat_spd", str(ActionController.get_spd(u))],
 	]
@@ -132,20 +132,42 @@ static func status_text(u: Dictionary, id: String) -> String:
 static func status_layout(u: Dictionary, w: float, fs: int, row_h: float) -> Array:
 	var f: Font = ImageController.font_bold
 	var out: Array = []
-	var effects: Dictionary = u.get("status_effects", {})
 	var d := row_h - 6.0
 	var x := 0.0
 	var row := 0
-	for k in effects.keys():
-		var id := str(k)
-		var st: Dictionary = StatusEffectList.DATA.get(id, {})
-		var t := status_text(u, id)
+	for c in display_status(u):
+		var t := str(c.text)
 		var cw := d + 4.0 + f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 8.0
 		if x > 0.0 and x + cw > w:
 			row += 1
 			x = 0.0
-		out.append({"id": id, "icon": str(st.get("icon", "star")), "text": t, "good": bool(st.get("good", true)), "row": row, "x": x})
+		out.append({"id": c.id, "icon": c.icon, "text": t, "good": c.good, "row": row, "x": x})
 		x += cw + 6.0
+	return out
+
+
+## 表示する状態の並び：[{id, icon, text, label, good}]
+## 次のターンに効く状態（StatusController.RESERVE）は「予約」1 つにまとめる。
+## レリック「十連の数珠」を持つ味方は u.rosary（あと何回で発動か。0 = 次のカードで発動）を状態の様に出す
+static func display_status(u: Dictionary) -> Array:
+	var out: Array = []
+	var effects: Dictionary = u.get("status_effects", {})
+	var reserve := 0
+	for k in effects.keys():
+		var id := str(k)
+		if StatusController.RESERVE.has(id):
+			reserve += 1
+			continue
+		var st: Dictionary = StatusEffectList.DATA.get(id, {})
+		out.append({"id": id, "icon": str(st.get("icon", "star")), "text": status_text(u, id),
+				"label": str(StatusController.label(u, id)), "good": bool(st.get("good", true))})
+	if reserve > 0:
+		out.append({"id": "reserve", "icon": "st_reserve", "text": "予約" if reserve == 1 else "予約 %d" % reserve,
+				"label": "" if reserve == 1 else str(reserve), "good": true})
+	if u.has("rosary"):
+		var n := int(u.rosary)
+		out.append({"id": "rosary", "icon": "r_rosary", "text": "数珠 発動" if n <= 0 else "数珠 %d" % n,
+				"label": "!" if n <= 0 else str(n), "good": true})
 	return out
 
 

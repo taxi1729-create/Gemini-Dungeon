@@ -21,4 +21,7 @@ const DATA = {
 	"lost_monster": {"title": "迷子の魔物", "icon": "horns",
 		"text": "はぐれた魔物の群れが道をふさいでいる。倒せば多めのゴールドが手に入りそうだ。",
 		"choices": [["fight", "戦う（勝てばゴールド2倍）"], ["leave", "逃げる"]]},
+	"craftsman": {"title": "旅の細工師", "icon": "badge",
+		"text": "旅の細工師が「カードに付けるバッジを1つ、ただで作ってやろう」と言う。",
+		"choices": [["badge", "%sをもらう（付けるカードを選ぶ）"], ["leave", "立ち去る"]]},
 }

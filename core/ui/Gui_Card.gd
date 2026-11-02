@@ -3,6 +3,7 @@ class_name GuiCard
 ## 手札・報酬のカード。枠・絵柄・AP・威力を全てコードで描く。
 
 const SIZE := Vector2(128, 168)
+const POWER_COL := Color("23a85a")  # パワーカードの枠の色
 
 var card: Dictionary = {}
 var playable := true  # AP不足なら false（暗く表示）
@@ -31,6 +32,8 @@ func _process(delta: float) -> void:
 
 
 func _frame_color() -> Color:
+	if ActionList.has_keyword(card, "power"):
+		return POWER_COL  # パワーカードは緑の枠（札は出さない）
 	match card.get("type", ""):
 		"attack": return ImageController.COL.attack
 		"skill": return ImageController.COL.skill
@@ -121,7 +124,7 @@ func _draw() -> void:
 	# 消費AP（右上）。戦闘中は ap_show（APX は "X"、free は "0"）を描く
 	if card.has("ap"):
 		var apc: Color = IC.COL.ap if playable else Color("5a2a30")
-		var aps: String = str(card.get("ap_show", "X" if card.get("ap_x", false) else str(card.ap)))
+		var aps: String = str(card.get("ap_show", "X" if card.get("ap_x", false) else str(DeckController.card_ap(card))))
 		IC.icon(self, "ap", Vector2(size.x - 18, 17), 36, apc)
 		IC.text(self, aps, Vector2(size.x - 18, 18), 19, Color.WHITE, true, 4, -1.0, IC.COL.ink)
 	elif card.get("type") == "unselectable":
@@ -133,6 +136,7 @@ func _draw() -> void:
 		IC.slant(self, tag, IC.COL.get(owner, Color.GRAY), 6, 2.0, IC.COL.ink)
 		IC.text(self, "ナイト" if owner == "knight" else "ウィッチ", tag.get_center(), 12, Color.WHITE, true)
 	_draw_keywords(art)
+	_draw_badge(art)
 	if not playable and not unsel:
 		draw_colored_polygon(IC.cut_pts(r, 14), Color(0, 0, 0, 0.55))
 	if charge > 0:
@@ -147,7 +151,22 @@ static func hits_label(c: Dictionary) -> String:
 	return "×%d" % n if n > 1 else ""
 
 
-## キーワードの札（パワー／廃棄／消費）：絵柄の窓の左下に小さな斜めタグを縦に積む
+## バッジの紋章：絵柄の窓の右下に、赤い菱形の盾に白い 1 文字（BadgeList.DATA[b].short）
+func _draw_badge(art: Rect2) -> void:
+	var b := str(card.get("badge", ""))
+	if not BadgeList.DATA.has(b):
+		return
+	var IC = ImageController
+	var c := Vector2(art.end.x - 13, art.end.y - 13)
+	var pts := PackedVector2Array([c + Vector2(0, -17), c + Vector2(15, -8), c + Vector2(13, 9), c + Vector2(0, 17), c + Vector2(-13, 9), c + Vector2(-15, -8)])
+	IC.poly_box(self, pts, IC.COL.red, 2.5, IC.COL.ink)
+	draw_polyline(PackedVector2Array([c + Vector2(0, -12), c + Vector2(10, -6), c + Vector2(9, 6), c + Vector2(0, 12), c + Vector2(-9, 6), c + Vector2(-10, -6), c + Vector2(0, -12)]),
+			Color(IC.COL.paper, 0.7), 1.2, true)
+	IC.text(self, str(BadgeList.DATA[b].short), c + Vector2(0, 0.5), 16, IC.COL.paper, true, 3, 26, IC.COL.ink)
+
+
+## キーワードの札（廃棄／消費／即応／最後／陣形／転身）：絵柄の窓の左下に小さな斜めタグを縦に積む
+## パワーは札を出さない（枠の緑で示す）。即応などは条件を満たしている時（card.kw_on に入っている）だけ赤く光らせる
 func _draw_keywords(art: Rect2) -> void:
 	var kws: Array = card.get("keywords", [])
 	if kws.is_empty():
@@ -161,10 +180,13 @@ func _draw_keywords(art: Rect2) -> void:
 		var fg: Color = IC.COL.paper
 		var line: Color = IC.COL.paper
 		match String(kw):
-			"power":
-				lb = "パワー"
-				face = IC.COL.ap.darkened(0.15)
-				fg = Color.WHITE
+			"sokuou", "saigo", "jinkei", "tenshin":
+				lb = str(DeckController.KW_NAME[kw])
+				if kw == "jinkei" and card.has("kw_side"):
+					lb += str(card.kw_side)
+				var on: bool = (card.get("kw_on", []) as Array).has(kw)
+				face = IC.COL.red if on else IC.COL.paper
+				fg = IC.COL.paper if on else IC.COL.ink
 				line = IC.COL.ink
 			"exhaust":
 				lb = "廃棄"
@@ -260,6 +282,7 @@ static func summary(c: Dictionary) -> String:
 			"absorb_block": parts.append("盾吸収")
 			"add_ap": parts.append("AP+%d" % e.eff_val)
 			"heal": parts.append("回復%d" % e.eff_val)
+			"heal_pct": parts.append("回復%d%%" % int(e.eff_val))
 			"draw": parts.append("%d枚引く" % e.eff_val)
 			"swap": parts.append("入替")
 			"double": parts.append("2回発動")

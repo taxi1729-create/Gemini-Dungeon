@@ -46,7 +46,10 @@ func _ready() -> void:
 	ui.add_child(choice_box)
 	var y := 650.0
 	for c in ev.choices:
-		UiSystem.make_button(choice_box, c[1], Vector2(80, y), Vector2(560, 96), _choose.bind(c[0]), 26)
+		var label: String = c[1]
+		if c[0] == "badge":
+			label = label % BadgeList.DATA[_event_badge()].name
+		UiSystem.make_button(choice_box, label, Vector2(80, y), Vector2(560, 96), _choose.bind(c[0]), 26)
 		y += 116
 	result_label = UiSystem.make_label(ui, "", Vector2(50, 650), Vector2(620, 160), 30, col.paper, HORIZONTAL_ALIGNMENT_CENTER, 8)
 	result_label.add_theme_font_override("font", ImageController.font_head)
@@ -73,8 +76,9 @@ func _choose(id: String) -> void:
 			CurrentDeck.add_card(c.owner, c.id)
 			_done("%s を授かった（%sのデッキに追加）" % [c.name, InitAllyStatus.DATA[c.owner].name])
 		"mush3":
-			Inventory.add_food("mush", 3)
-			_done("きのこを3つ採った")
+			for i in 3:
+				Inventory.add_food("mush", 1)
+			_done("きのこ（G1）を3つ採った")
 		"eat":
 			if randf() < 0.5:
 				CurrentStatus.heal_all(10)
@@ -106,8 +110,26 @@ func _choose(id: String) -> void:
 			SaveData.screen = {}
 			SaveData.save("battle")  # 再読み込みしたらこの戦闘から
 			UiSystem.goto("battle")
+		"badge":
+			var bid := _event_badge()
+			choice_box.visible = false
+			GuiAcquire.badge(ui, bid, func(ok: bool):
+				if ok:
+					_done("%sを付けてもらった" % BadgeList.DATA[bid].name)
+				else:
+					_done("バッジを受け取らずに立ち去った"))
 		"leave":
 			_done("その場を後にした")
+
+
+## イベント「旅の細工師」のバッジ（再読み込みで変わらないようセーブに残す）
+func _event_badge() -> String:
+	var bid := str(SaveData.screen.get("event_badge", ""))
+	if not BadgeList.DATA.has(bid):
+		bid = BadgeList.random_id()
+		SaveData.screen["event_badge"] = bid
+		SaveData.save("event")
+	return bid
 
 
 func _ask_owner(msg: String, cb: Callable) -> void:

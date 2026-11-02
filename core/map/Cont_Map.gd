@@ -3,8 +3,8 @@ extends Node2D
 
 const TOP := 190.0
 const BOTTOM := 1030.0
-const ICONS = {"battle": "battle", "elite": "elite", "rest": "rest", "boss": "boss", "event": "event", "shop": "shop"}
-const NAMES = {"battle": "戦闘", "elite": "強敵", "rest": "休憩", "boss": "ボス", "event": "イベント", "shop": "ショップ"}
+const ICONS = {"battle": "battle", "elite": "elite", "rest": "rest", "boss": "boss", "event": "event", "shop": "shop", "treasure": "treasure"}
+const NAMES = {"battle": "戦闘", "elite": "強敵", "rest": "休憩", "boss": "ボス", "event": "イベント", "shop": "ショップ", "treasure": "宝箱"}
 
 var view: Control
 var _t := 0.0
@@ -138,26 +138,74 @@ func _select(f: int, i: int) -> void:
 	var t := CurrentStatus.enter_node(f, i)
 	# マスを選んだ時の自動セーブ（再読み込みしたらそのマスの画面から。戦闘ははじめから）
 	SaveData.screen = {}
-	SaveData.save(t if t in ["rest", "event", "shop"] else "battle")
+	SaveData.save(t if t in ["rest", "event", "shop", "treasure"] else "battle")
 	match t:
 		"rest": UiSystem.goto("rest")
 		"event": UiSystem.goto("event")
 		"shop": UiSystem.goto("shop")
+		"treasure": UiSystem.goto("treasure")
 		_: UiSystem.goto("battle")
 
 
 func _build_footer(ui: CanvasLayer) -> void:
-	var p := UiSystem.make_panel(ui, Rect2(16, 1120, 688, 144))
+	var p := UiSystem.make_panel(ui, Rect2(16, 1112, 688, 156))
 	var x := 22.0
 	for a in CurrentStatus.allies:
 		var col: Color = ImageController.COL.text if a.hp > 0 else ImageController.COL.bad
-		UiSystem.make_banner(p, a.name, Rect2(x - 4, 12, 150, 34), 20, ImageController.COL.get(a.id, ImageController.COL.ink), ImageController.COL.paper, 10)
-		var hp := UiSystem.make_label(p, "HP %d/%d" % [a.hp, a.max_hp], Vector2(x, 50), Vector2(200, 40), 26, col, HORIZONTAL_ALIGNMENT_LEFT, 4)
+		UiSystem.make_banner(p, a.name, Rect2(x - 4, 10, 118, 32), 20, ImageController.COL.get(a.id, ImageController.COL.ink), ImageController.COL.paper, 10)
+		var hp := UiSystem.make_label(p, "HP %d/%d" % [a.hp, a.max_hp], Vector2(x, 44), Vector2(200, 34), 26, col, HORIZONTAL_ALIGNMENT_LEFT, 4)
 		hp.add_theme_font_override("font", ImageController.font_head)
-		UiSystem.make_label(p, "デッキ %d枚" % CurrentDeck.decks[a.id].size(), Vector2(x, 92), Vector2(200, 36), 18, ImageController.COL.sub, HORIZONTAL_ALIGNMENT_LEFT, 0)
+		UiSystem.make_label(p, "デッキ%d枚" % CurrentDeck.decks[a.id].size(), Vector2(x + 124, 12), Vector2(86, 30), 15, ImageController.COL.sub, HORIZONTAL_ALIGNMENT_LEFT, 0)
 		x += 220
-	var txt := "%dゴールド\n%s\n道具 %d個" % [Inventory.gold, Inventory.foods_text(), Inventory.items.size()]
-	UiSystem.make_label(p, txt, Vector2(450, 12), Vector2(230, 120), 18, ImageController.COL.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
+	var txt := "%dゴールド\n道具 %d個" % [Inventory.gold, Inventory.items.size()]
+	UiSystem.make_label(p, txt, Vector2(462, 10), Vector2(220, 70), 20, ImageController.COL.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
+	# 食材（アイコン＋グレード）とレリック（タップで説明）
+	var belong := Control.new()
+	belong.position = Vector2(0, 84)
+	belong.size = Vector2(688, 66)
+	belong.mouse_filter = Control.MOUSE_FILTER_STOP
+	belong.draw.connect(_draw_belongings.bind(belong))
+	p.add_child(belong)
+	var bub := GuiDescBubble.new()
+	ui.add_child(bub)
+	belong.gui_input.connect(func(ev: InputEvent):
+		if not (ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT):
+			return
+		if not ev.pressed:
+			bub.hide_bubble()
+			return
+		for i in Inventory.relics.size():
+			var c := RELIC_X0 + Vector2(i * RELIC_GAP, 0)
+			if ev.position.distance_to(c) < 28:
+				var r: Dictionary = RelicList.DATA[Inventory.relics[i]]
+				bub.show_text(r.name, "[i:%s]%s" % [r.icon, r.desc], belong.global_position + c)
+				return)
+
+
+const RELIC_X0 := Vector2(400, 33)  # フッターのレリックの 1 つ目の中心（belong の座標）
+const RELIC_GAP := 60.0
+
+
+func _draw_belongings(c: Control) -> void:
+	var IC = ImageController
+	var col: Dictionary = IC.COL
+	c.draw_line(Vector2(16, 2), Vector2(672, 2), Color(1, 1, 1, 0.15), 2)
+	var x := 30.0
+	if Inventory.foods.is_empty():
+		IC.text(c, "食材なし", Vector2(80, 33), 18, col.sub, true)
+	for k in FoodList.DATA:
+		for i in Inventory.food_indices(k):
+			if x > 340:
+				break
+			IC.icon(c, FoodList.DATA[k].icon, Vector2(x, 33), 34)
+			IC.text(c, "G%d" % int(Inventory.foods[i].grade), Vector2(x + 13, 48), 13, col.paper, true, 3, -1.0, col.ink)
+			x += 38
+	for i in RelicList.MAX:
+		var p := RELIC_X0 + Vector2(i * RELIC_GAP, 0)
+		c.draw_circle(p, 25, Color(1, 1, 1, 0.06))
+		c.draw_arc(p, 25, 0, TAU, 28, col.gold if i < Inventory.relics.size() else Color(1, 1, 1, 0.25), 2, true)
+		if i < Inventory.relics.size():
+			IC.icon(c, str(RelicList.DATA[Inventory.relics[i]].icon), p, 38)
 
 
 ## 必殺技のセット（キャラごとに 2 つから 1 つ）。戦闘中は中央の長押しで発動する

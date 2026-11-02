@@ -9,7 +9,7 @@ extends Node
 const VERSION := 1
 const PATH := "user://save.json"
 const TMP_PATH := "user://save.tmp"
-const RESUMES := ["map", "battle", "event", "shop", "rest", "result"]
+const RESUMES := ["map", "battle", "event", "shop", "rest", "result", "treasure"]
 # 味方で戦闘の外へ持ち越す項目（uid・pos・lane・status_effects・shield・ap などの戦闘用の項目は保存しない）
 const ALLY_KEYS := ["id", "name", "hp", "max_hp", "spd", "def", "atk", "max_ap", "side", "art"]
 const ALLY_INT_KEYS := ["hp", "max_hp", "spd", "def", "atk", "max_ap"]
@@ -98,7 +98,8 @@ func _collect(resume: String) -> Dictionary:
 		},
 		"inventory": {
 			"items": Inventory.items.duplicate(),
-			"foods": Inventory.foods.duplicate(),
+			"foods": Inventory.foods.duplicate(true),
+			"relics": Inventory.relics.duplicate(),
 			"gold": Inventory.gold,
 		},
 		"decks": CurrentDeck.decks.duplicate(true),
@@ -173,21 +174,32 @@ func _apply(data: Dictionary) -> bool:
 		for it in inv.items:
 			if Item_List.DATA.has(str(it)) and items.size() < Inventory.ITEM_MAX:
 				items.append(str(it))
-	var foods := {}
-	for k in FoodList.DATA:
-		foods[k] = 0
-	if inv.get("foods") is Dictionary:
-		for k in inv.foods:
-			if FoodList.DATA.has(str(k)):
-				foods[str(k)] = maxi(0, int(inv.foods[k]))
-	# デッキ（知らないカードは捨てる）
+	# 食材は [{"id", "grade"}] の配列。古いセーブの辞書（{"meat": 2, ...}）は捨てる
+	var foods: Array = []
+	if inv.get("foods") is Array:
+		for f in inv.foods:
+			if f is Dictionary and FoodList.DATA.has(str(f.get("id", ""))):
+				var g := int(f.get("grade", 1)) if (f.get("grade") is float or f.get("grade") is int) else 1
+				if g >= 1:
+					foods.append({"id": str(f.id), "grade": clampi(g, 1, 3)})
+	# レリック（知らない ID・重複は捨てる。MAX まで）
+	var relics: Array = []
+	if inv.get("relics") is Array:
+		for r in inv.relics:
+			if RelicList.DATA.has(str(r)) and not relics.has(str(r)) and relics.size() < RelicList.MAX:
+				relics.append(str(r))
+	# デッキ（知らないカードは捨てる。"カードID@バッジID" の知らないバッジは外す）
 	var decks := {}
 	for a in allies:
 		var ids: Array = []
 		if dk.get(a.id) is Array:
 			for c in dk[a.id]:
-				if not ActionList.make_card(str(c)).is_empty():
-					ids.append(str(c))
+				var cid := str(c)
+				var b := ActionList.badge_of(cid)
+				if b != "" and not BadgeList.DATA.has(b):
+					cid = ActionList.base_id(cid)
+				if not ActionList.make_card(cid).is_empty():
+					ids.append(cid)
 		decks[a.id] = ids
 
 	var CS = CurrentStatus
@@ -208,6 +220,7 @@ func _apply(data: Dictionary) -> bool:
 	CS.initialized = true
 	Inventory.items = items
 	Inventory.foods = foods
+	Inventory.relics = relics
 	Inventory.gold = maxi(0, int(inv.get("gold", 0)))
 	CurrentDeck.decks = decks
 	screen = data.get("screen") if data.get("screen") is Dictionary else {}

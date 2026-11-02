@@ -12,6 +12,7 @@ const SCENES = {
 	"rest": "res://index/core/map/rest/camp.tscn",
 	"event": "res://index/core/map/event/event.tscn",
 	"shop": "res://index/core/map/shop/shop.tscn",
+	"treasure": "res://index/core/map/treasure/treasure.tscn",
 }
 
 var theme: Theme

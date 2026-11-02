@@ -182,18 +182,18 @@ func _draw_hp(IC) -> void:
 
 
 func _draw_status(IC) -> void:
-	var effects: Dictionary = data.get("status_effects", {})
+	# 予約（次のターンに効く状態）は 1 つにまとめ、数珠の残り回数も並べる（GuiInfoPanel.display_status）
+	var chips: Array = GuiInfoPanel.display_status(data)
 	var i := 0
-	var n := effects.size()
+	var n := chips.size()
 	var y := 44.0 if data.get("side") == "ally" else 42.0  # 味方は AP の列の分だけ少し下（下の操作エリアに入りすぎないよう詰める）
-	for k in effects.keys():
-		var st: Dictionary = StatusEffectList.DATA.get(k, {})
+	for ch in chips:
 		var p := Vector2(-((n - 1) * 15) + i * 30, y)
-		var good: bool = st.get("good", false)
+		var good: bool = ch.good
 		draw_circle(p, 14, INK)
 		draw_arc(p, 13, 0, TAU, 20, PAPER if good else RED, 2.0, true)
-		IC.icon(self, st.get("icon", "star"), p, 21)
-		var lb := _status_label(String(k))
+		IC.icon(self, str(ch.icon), p, 21)
+		var lb := str(ch.label)
 		if lb != "":
 			IC.text(self, lb, p + Vector2(10, 9), 13, PAPER, true, 4, -1.0, INK)
 		i += 1

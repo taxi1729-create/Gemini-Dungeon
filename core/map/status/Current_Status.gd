@@ -4,6 +4,9 @@ extends Node
 
 const FLOORS := 8  # 0〜6 が通常階、7 がボス
 const SHOP_FLOORS := [2, 4]  # 3 階と 5 階
+const TREASURE_RATE := 0.1  # 宝箱マス：2 階以降（休憩の階・ボスの階は除く）のマスの 1 割程度
+const TREASURE_MIN := 1  # 1 回の冒険で必ず 1〜2 個
+const TREASURE_MAX := 2
 
 var initialized := false
 var current_area_id := "cave"
@@ -20,7 +23,8 @@ var visited: Array = []  # [[floor, index], ...]
 var battle_kind := "battle"  # battle / elite / boss
 var last_result := ""  # win / lose
 var gold_multiplier := 1  # イベント「迷子の魔物」で 2
-var next_battle := {}  # 料理の効果 {"ap": n, "atk": n, "block": n}
+var next_battle := {}  # 料理の効果 {"ap": n, "atk": n, "def": n, "regen": ターン数, "block": n}（次の戦闘の開始時に反映）
+var battle_stats := {}  # 直前の戦闘の集計 {"overkill": 倒した時の余りの合計, "rounds": ラウンド数, "hp_lost": 味方が減らされた HP の合計}
 var special_choice := {"knight": "sky_slash", "witch": "explosion"}  # 前回セットした必殺技
 
 
@@ -111,6 +115,7 @@ func _generate_map() -> void:
 		if f in SHOP_FLOORS:
 			row[randi() % row.size()].type = "shop"
 		map_floors.append(row)
+	_place_treasures()
 	# 隣の階との接続（左右の位置関係が近いものを結ぶ）
 	for f in FLOORS - 1:
 		var a: Array = map_floors[f]
@@ -133,3 +138,23 @@ func _generate_map() -> void:
 				a[i].next.append(j)
 		for i in a.size():
 			a[i].next.sort()
+
+
+## 宝箱マスを置く：2 階以降（f = 1〜5）のショップ以外のマスを 1 割程度で宝箱にし、全体で TREASURE_MIN〜TREASURE_MAX 個にそろえる
+func _place_treasures() -> void:
+	var cand: Array = []  # [floor, index]
+	for f in range(1, FLOORS - 2):
+		for i in map_floors[f].size():
+			if map_floors[f][i].type != "shop":
+				cand.append([f, i])
+	cand.shuffle()
+	var picked: Array = cand.filter(func(_c): return randf() < TREASURE_RATE)
+	if picked.size() < TREASURE_MIN:
+		for c in cand:
+			if picked.size() >= TREASURE_MIN:
+				break
+			if not picked.has(c):
+				picked.append(c)
+	picked = picked.slice(0, TREASURE_MAX)
+	for c in picked:
+		map_floors[c[0]][c[1]].type = "treasure"

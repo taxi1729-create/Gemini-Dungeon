@@ -537,7 +537,7 @@ const ICON_DEFAULT = {
 
 
 func icon(ci: CanvasItem, kind: String, c: Vector2, s: float, col: Color = Color(0, 0, 0, 0), rot: float = 0.0) -> void:
-	var k: Color = col if col.a > 0 else ICON_DEFAULT.get(kind, Color.WHITE)
+	var k: Color = col if col.a > 0 else ICON_DEFAULT.get(kind, ICON_DEFAULT7.get(kind, Color.WHITE))
 	ci.draw_set_transform(c, rot, Vector2(s, s))
 	match kind:
 		"sword", "battle": _i_sword(ci, k)
@@ -730,7 +730,7 @@ func _icon_ext5(ci: CanvasItem, kind: String, k: Color, m: Transform2D) -> bool:
 		# 対象
 		"tgt_ally_other": _i_tgt_ally_other(ci, k)
 		_:
-			return false
+			return _icon_ext7(ci, kind, k, m)
 	return true
 
 
@@ -2247,3 +2247,441 @@ func _bg_map(ci: CanvasItem, r: Rect2, t: float) -> void:
 	for i in 30:
 		var p := Vector2(fmod(i * 173.0, r.size.x), fmod(i * 291.0, r.size.y)) + r.position
 		ci.draw_rect(Rect2(p, Vector2(2, 2)), Color(1, 1, 1, 0.08 + 0.06 * sin(t + i)))
+
+
+# ============================================================
+# 7回目の追加アイコン（レリック・バッジ・魚・極みスープ・状態・キーワード・対象・陣形変更・宝箱）
+# ============================================================
+
+const ICON_DEFAULT7 = {
+	# レリック
+	"r_blue_crest": Color("2f7cf0"), "r_red_crest": Color("e8213a"), "r_oath": Color("f2c94c"), "r_hourglass": Color("e8c26a"),
+	"r_boots": Color("a8693a"), "r_whetstone": Color("8a929c"), "r_ash_altar": Color("9a948c"), "r_chef_pot": Color("3a3a44"),
+	"r_bell": Color("f2c94c"), "r_rosary": Color("b88cff"),
+	# バッジ（メダルの色）
+	"b_sharp": Color("e8213a"), "b_guard": Color("4f86c6"), "b_light": Color("6fe3ff"), "b_draw": Color("5c8ad8"),
+	"b_fire": Color("ff8a2a"), "b_first": Color("f2c94c"), "b_front": Color("ff5a5a"), "b_back": Color("7f8fa6"),
+	"b_aid": Color("5fd07a"), "b_keep": Color("c79bff"),
+	# 食材・道具
+	"fish": Color("5aa8d8"), "item_soup": Color("ffb03a"),
+	# 状態
+	"st_regen": Color("5fd07a"), "st_reserve": Color("c79bff"),
+	# キーワード
+	"kw_sokuou": Color("ffb800"), "kw_saigo": Color("e8213a"), "kw_jinkei": Color("f7f5f0"), "kw_tenshin": Color("2f9258"),
+	# 対象
+	"tgt_back_row": Color("ff4a4a"), "tgt_random": Color("ff4a4a"),
+	# 操作・マップ・一般
+	"formation": Color("f7f5f0"), "treasure": Color("b9773d"), "chest": Color("b9773d"),
+	"relic": Color("e8213a"), "badge": Color("f2c94c"),
+}
+
+
+func _icon_ext7(ci: CanvasItem, kind: String, k: Color, m: Transform2D) -> bool:
+	match kind:
+		# レリック
+		"r_blue_crest": _i_r_blue_crest(ci, k)
+		"r_red_crest": _i_r_red_crest(ci, k, m)
+		"r_oath": _i_r_oath(ci, k)
+		"r_hourglass": _i_r_hourglass(ci, k, m)
+		"r_boots": _i_r_boots(ci, k)
+		"r_whetstone": _i_r_whetstone(ci, k)
+		"r_ash_altar": _i_r_ash_altar(ci, k)
+		"r_chef_pot": _i_r_chef_pot(ci, k)
+		"r_bell": _i_r_bell(ci, k)
+		"r_rosary": _i_r_rosary(ci, k)
+		# バッジ：メダルの上に印
+		"b_sharp", "b_guard", "b_light", "b_draw", "b_fire", "b_first", "b_front", "b_back", "b_aid", "b_keep":
+			_i_badge_medal(ci, kind, k, m)
+		# 食材・道具
+		"fish": _i_fish(ci, k)
+		"item_soup": _i_item_soup(ci, k)
+		# 状態
+		"st_regen": _i_st_regen(ci, k)
+		"st_reserve": _i_st_reserve(ci, k)
+		# キーワード
+		"kw_sokuou": _i_kw_sokuou(ci, k)
+		"kw_saigo": _i_kw_saigo(ci, k)
+		"kw_jinkei": _i_kw_jinkei(ci, k)
+		"kw_tenshin": _i_kw_tenshin(ci, k)
+		# 対象
+		"tgt_back_row": _i_tgt_back_row(ci, k)
+		"tgt_random": _i_tgt_random(ci, k)
+		# 操作・マップ・一般
+		"formation": _i_formation(ci, k)
+		"treasure": _i_chest(ci, k, false)
+		"chest": _i_chest(ci, k, true)
+		"relic": _i_relic(ci, k)
+		"badge": _i_badge_medal(ci, "badge", k, m)
+		_:
+			return false
+	return true
+
+
+# ------------------------------------------------------------
+# レリック
+# ------------------------------------------------------------
+## 紋章の盾の形（上が平ら・下が尖る）
+func _crest_pts(sc: float, off: Vector2 = Vector2.ZERO) -> PackedVector2Array:
+	var p := PackedVector2Array()
+	for v in [[-0.4, -0.42], [-0.14, -0.36], [0, -0.46], [0.14, -0.36], [0.4, -0.42], [0.38, 0.02], [0.24, 0.26], [0, 0.46], [-0.24, 0.26], [-0.38, 0.02]]:
+		p.append(Vector2(v[0], v[1]) * sc + off)
+	return p
+
+
+## 蒼の盾章：金の縁の青い紋章盾に白い山形（シェブロン）と星
+func _i_r_blue_crest(ci: CanvasItem, k: Color) -> void:
+	_ink_poly(ci, _crest_pts(1.0), COL.gold, 0.05)
+	ci.draw_colored_polygon(_crest_pts(0.82, Vector2(0, 0.01)), k)
+	ci.draw_colored_polygon(pts([[-0.3, 0.08], [0, -0.14], [0.3, 0.08], [0.3, 0.2], [0, -0.02], [-0.3, 0.2]]), COL.paper)
+	ci.draw_colored_polygon(star_pts(Vector2(0, -0.27), 0.11, 0.045), COL.paper)
+	ci.draw_colored_polygon(pts([[-0.18, 0.22], [0, 0.08], [0.18, 0.22], [0, 0.36]]), k.lightened(0.35))
+
+
+## 紅の剣章：赤い菱形の紋章に、白い剣が縦に 1 本
+func _i_r_red_crest(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	var dia := pts([[0, -0.5], [0.44, 0], [0, 0.5], [-0.44, 0]])
+	_ink_poly(ci, dia, COL.gold, 0.05)
+	ci.draw_colored_polygon(pts([[0, -0.4], [0.35, 0], [0, 0.4], [-0.35, 0]]), k)
+	ci.draw_colored_polygon(pts([[0, -0.4], [0.35, 0], [0, 0]]), k.lightened(0.18))
+	_sub(ci, m, Vector2(0, 0.02), 0.74, -PI / 4)
+	_i_sword(ci, COL.paper)
+	_sub(ci, m, Vector2.ZERO, 1.0)
+
+
+## 誓いの紋章：赤いリボンの金メダルに、白い星
+func _i_r_oath(ci: CanvasItem, k: Color) -> void:
+	for sx in [-1.0, 1.0]:
+		_ink_poly(ci, pts([[sx * 0.06, 0.04], [sx * 0.3, 0.06], [sx * 0.34, 0.48], [sx * 0.22, 0.38], [sx * 0.12, 0.5]]), COL.red, 0.04)
+	_ink_poly(ci, burst_pts(Vector2(0, -0.08), 0.38, 0.32, 14, 2), k.darkened(0.15), 0.04)
+	ci.draw_circle(Vector2(0, -0.08), 0.27, k)
+	ci.draw_arc(Vector2(0, -0.08), 0.22, 0, TAU, 24, k.darkened(0.35), 0.035, true)
+	ci.draw_colored_polygon(star_pts(Vector2(0, -0.08), 0.17, 0.07), COL.paper)
+
+
+## 大きな砂時計：金の砂時計に、緑の「＋」
+func _i_r_hourglass(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	_ink_poly(ci, pts([[-0.34, -0.48], [0.34, -0.48], [0.34, -0.38], [-0.34, -0.38]]), Color("8a5a32"), 0.035)
+	_ink_poly(ci, pts([[-0.34, 0.38], [0.34, 0.38], [0.34, 0.48], [-0.34, 0.48]]), Color("8a5a32"), 0.035)
+	var glass := pts([[-0.26, -0.38], [0.26, -0.38], [0.05, 0.0], [0.26, 0.38], [-0.26, 0.38], [-0.05, 0.0]])
+	_ink_poly(ci, glass, Color("dceaf4", 0.9), 0.04)
+	ci.draw_colored_polygon(pts([[-0.18, -0.24], [0.18, -0.24], [0.03, -0.02], [-0.03, -0.02]]), k)
+	ci.draw_colored_polygon(pts([[-0.02, 0.02], [0.02, 0.02], [0.03, 0.2], [-0.03, 0.2]]), k)
+	ci.draw_colored_polygon(pts([[-0.12, 0.24], [0.12, 0.24], [0.24, 0.37], [-0.24, 0.37]]), k)
+	ci.draw_circle(Vector2(0.3, 0.26), 0.17, COL.ink)
+	_i_plus(ci, COL.good, Vector2(0.3, 0.26), 0.12)
+
+
+## 軽い靴：茶色のブーツに白い羽
+func _i_r_boots(ci: CanvasItem, k: Color) -> void:
+	# 羽（かかと側）
+	for i in 3:
+		var y := -0.22 + i * 0.12
+		_ink_poly(ci, pts([[-0.18, y], [-0.48, y - 0.14 + i * 0.02], [-0.44, y + 0.02], [-0.18, y + 0.08]]), COL.paper, 0.03)
+	var boot := pts([[-0.2, -0.42], [0.12, -0.42], [0.12, 0.1], [0.42, 0.18], [0.46, 0.38], [-0.22, 0.38]])
+	_ink_poly(ci, boot, k, 0.05)
+	ci.draw_rect(Rect2(-0.24, -0.44, 0.4, 0.1), k.darkened(0.3))
+	ci.draw_colored_polygon(pts([[-0.22, 0.3], [0.46, 0.3], [0.46, 0.4], [-0.22, 0.4]]), COL.ink)
+	ci.draw_line(Vector2(-0.12, -0.2), Vector2(0.06, -0.2), k.lightened(0.4), 0.05)
+	ci.draw_line(Vector2(-0.12, -0.06), Vector2(0.06, -0.06), k.lightened(0.4), 0.05)
+
+
+## 砥石：灰色の石の上をすべる刃と火花
+func _i_r_whetstone(ci: CanvasItem, k: Color) -> void:
+	var stone := _rot([[-0.44, 0.08], [0.44, 0.08], [0.4, 0.4], [-0.4, 0.4]], -0.12)
+	_ink_poly(ci, stone, k, 0.05)
+	ci.draw_colored_polygon(_rot([[-0.42, 0.08], [0.42, 0.08], [0.41, 0.16], [-0.41, 0.16]], -0.12), k.lightened(0.35))
+	_blade(ci, Vector2(0.24, 0.06), -PI * 0.62, 0.62, 0.075, Color("e6eef6"))
+	for v in [[-0.26, -0.02, 0.12], [-0.38, -0.2, 0.08], [-0.12, -0.24, 0.07]]:
+		_sparkle(ci, Vector2(v[0], v[1]), v[2], Color("ffd84a"))
+
+
+## 灰の祭壇：石の祭壇に灰の山と小さな火
+func _i_r_ash_altar(ci: CanvasItem, k: Color) -> void:
+	_ink_poly(ci, pts([[-0.42, 0.0], [0.42, 0.0], [0.42, 0.1], [-0.42, 0.1]]), k.lightened(0.2), 0.04)
+	_ink_poly(ci, pts([[-0.3, 0.1], [0.3, 0.1], [0.36, 0.46], [-0.36, 0.46]]), k, 0.04)
+	ci.draw_line(Vector2(-0.18, 0.2), Vector2(-0.18, 0.4), k.darkened(0.3), 0.04)
+	ci.draw_line(Vector2(0.18, 0.2), Vector2(0.18, 0.4), k.darkened(0.3), 0.04)
+	var ash := PackedVector2Array()
+	for i in 13:
+		var a := PI + PI * i / 12.0
+		ash.append(Vector2(cos(a) * 0.3, sin(a) * 0.16))
+	_ink_poly(ci, ash, Color("5a5650"), 0.03)
+	ci.draw_colored_polygon(_teardrop(Vector2(0, -0.08), 0.13, 0.36), COL.red)
+	ci.draw_colored_polygon(_teardrop(Vector2(0, -0.06), 0.07, 0.2), Color("ffb03a"))
+	for v in [[-0.2, -0.3], [0.22, -0.36], [0.1, -0.46]]:
+		ci.draw_circle(Vector2(v[0], v[1]), 0.035, Color("cfc8bc"))
+
+
+## 料理人の鍋：黒い鍋に白い湯気
+func _i_r_chef_pot(ci: CanvasItem, k: Color) -> void:
+	for x in [-0.12, 0.08]:
+		var st := PackedVector2Array()
+		for i in 9:
+			var t := i / 8.0
+			st.append(Vector2(x + sin(t * TAU) * 0.06, -0.12 - t * 0.34))
+		ci.draw_polyline(st, COL.paper, 0.06, true)
+	ci.draw_line(Vector2(-0.48, 0.06), Vector2(0.48, 0.06), COL.ink, 0.14)
+	ci.draw_line(Vector2(-0.46, 0.06), Vector2(0.46, 0.06), Color("9aa0a8"), 0.07)
+	var pot := PackedVector2Array([Vector2(-0.38, -0.04), Vector2(0.38, -0.04)])
+	for i in 9:
+		var a := PI * i / 8.0
+		pot.append(Vector2(cos(a) * 0.38, 0.12 + sin(a) * 0.3))
+	_ink_poly(ci, pot, k, 0.05)
+	ci.draw_rect(Rect2(-0.42, -0.1, 0.84, 0.1), k.lightened(0.25))
+	ci.draw_colored_polygon(pts([[-0.24, 0.14], [-0.14, 0.14], [-0.1, 0.3], [-0.2, 0.3]]), k.lightened(0.3))
+
+
+## 行商人の鈴：金の鈴と揺れの線
+func _i_r_bell(ci: CanvasItem, k: Color) -> void:
+	ci.draw_arc(Vector2(0, -0.38), 0.08, 0, TAU, 14, COL.ink, 0.08, true)
+	ci.draw_arc(Vector2(0, -0.38), 0.08, 0, TAU, 14, k.darkened(0.2), 0.04, true)
+	var bell := PackedVector2Array()
+	for i in 11:
+		var a := PI + PI * i / 10.0
+		bell.append(Vector2(cos(a) * 0.2, -0.12 + sin(a) * 0.18))
+	bell.append(Vector2(0.26, 0.2))
+	bell.append(Vector2(0.36, 0.3))
+	bell.append(Vector2(-0.36, 0.3))
+	bell.append(Vector2(-0.26, 0.2))
+	_ink_poly(ci, bell, k, 0.05)
+	ci.draw_colored_polygon(pts([[-0.12, -0.22], [-0.06, -0.24], [-0.14, 0.2], [-0.2, 0.2]]), k.lightened(0.45))
+	ci.draw_circle(Vector2(0, 0.36), 0.08, COL.ink)
+	ci.draw_circle(Vector2(0, 0.36), 0.05, k.darkened(0.3))
+	# 揺れの線（左右に短い弧）
+	ci.draw_arc(Vector2(0, 0.0), 0.44, -0.55, 0.25, 8, COL.paper, 0.05, true)
+	ci.draw_arc(Vector2(0, 0.0), 0.44, PI - 0.25, PI + 0.55, 8, COL.paper, 0.05, true)
+
+
+## 十連の数珠：10 個の玉の輪と房
+func _i_r_rosary(ci: CanvasItem, k: Color) -> void:
+	_ink_poly(ci, pts([[-0.08, 0.3], [0.08, 0.3], [0.14, 0.5], [-0.14, 0.5]]), COL.red, 0.03)
+	for i in 10:
+		var a := -PI / 2 + TAU * i / 10.0
+		var c := Vector2(cos(a) * 0.32, sin(a) * 0.3 - 0.06)
+		ci.draw_circle(c, 0.1, COL.ink)
+		ci.draw_circle(c, 0.072, k if i != 5 else COL.paper)
+		ci.draw_circle(c + Vector2(-0.025, -0.025), 0.022, Color(1, 1, 1, 0.6))
+
+
+# ------------------------------------------------------------
+# バッジ（メダル＋印）
+# ------------------------------------------------------------
+func _i_badge_medal(ci: CanvasItem, kind: String, k: Color, m: Transform2D) -> void:
+	# 花形のメダル：黒縁 → 色 → 内側の輪
+	var g := Geometry2D.offset_polygon(burst_pts(Vector2.ZERO, 0.5, 0.44, 12, 0), 0.03, Geometry2D.JOIN_MITER)
+	if not g.is_empty():
+		ci.draw_colored_polygon(g[0], COL.ink)
+	ci.draw_colored_polygon(burst_pts(Vector2.ZERO, 0.5, 0.44, 12, 0), k)
+	ci.draw_circle(Vector2.ZERO, 0.36, COL.ink)
+	ci.draw_circle(Vector2.ZERO, 0.3, k.darkened(0.45))
+	var w: Color = COL.paper
+	match kind:
+		"b_sharp":  # 鋭：尖った刃先
+			_ink_poly(ci, pts([[0.0, -0.26], [0.12, 0.06], [0.04, 0.26], [-0.04, 0.26], [-0.12, 0.06]]), w, 0.03)
+			ci.draw_line(Vector2(0, -0.18), Vector2(0, 0.2), k, 0.04)
+		"b_guard":  # 堅：盾
+			_ink_poly(ci, pts([[-0.2, -0.22], [0.2, -0.22], [0.2, 0.0], [0, 0.26], [-0.2, 0.0]]), w, 0.03)
+			ci.draw_colored_polygon(pts([[-0.12, -0.15], [0.12, -0.15], [0.12, -0.02], [0, 0.15], [-0.12, -0.02]]), k)
+		"b_light":  # 軽：羽
+			_ink_poly(ci, pts([[0.18, -0.24], [0.08, 0.06], [-0.14, 0.2], [-0.04, -0.06]]), w, 0.03)
+			ci.draw_line(Vector2(0.16, -0.2), Vector2(-0.2, 0.26), COL.ink, 0.04, true)
+		"b_draw":  # 引：カードと上向きの矢印
+			_ink_poly(ci, _rot([[-0.13, -0.18], [0.13, -0.18], [0.13, 0.2], [-0.13, 0.2]], 0.2, Vector2(-0.04, 0.02)), w, 0.03)
+			_ink_arrow(ci, Vector2(0.16, 0.2), Vector2(0.16, -0.24), COL.good, 0.07)
+		"b_fire":  # 炎
+			ci.draw_colored_polygon(_teardrop(Vector2(0, 0.12), 0.16, 0.4), COL.ink)
+			ci.draw_colored_polygon(_teardrop(Vector2(0, 0.12), 0.13, 0.36), Color("ffb03a"))
+			ci.draw_colored_polygon(_teardrop(Vector2(0, 0.15), 0.07, 0.18), Color("fff3b0"))
+		"b_first":  # 先：数字の 1
+			_ink_poly(ci, pts([[-0.1, -0.14], [0.04, -0.26], [0.1, -0.26], [0.1, 0.18], [0.18, 0.18], [0.18, 0.26], [-0.14, 0.26], [-0.14, 0.18], [-0.04, 0.18], [-0.04, -0.1], [-0.1, -0.06]]), w, 0.03)
+		"b_front":  # 前：上向きの山形 2 つ
+			for y in [-0.12, 0.08]:
+				_ink_poly(ci, pts([[0, y - 0.14], [0.22, y + 0.08], [0.12, y + 0.08], [0, y - 0.03], [-0.12, y + 0.08], [-0.22, y + 0.08]]), w, 0.025)
+		"b_back":  # 後：下向きの山形と壁
+			_ink_poly(ci, pts([[-0.22, 0.14], [0.22, 0.14], [0.22, 0.24], [-0.22, 0.24]]), w, 0.025)
+			_ink_poly(ci, pts([[0, 0.06], [0.22, -0.16], [0.12, -0.16], [0, -0.05], [-0.12, -0.16], [-0.22, -0.16]]), w, 0.025)
+		"b_aid":  # 援：白い十字
+			_ink_poly(ci, pts([[-0.07, -0.22], [0.07, -0.22], [0.07, -0.07], [0.22, -0.07], [0.22, 0.07], [0.07, 0.07], [0.07, 0.22], [-0.07, 0.22], [-0.07, 0.07], [-0.22, 0.07], [-0.22, -0.07], [-0.07, -0.07]]), w, 0.03)
+		"b_keep":  # 残：南京錠
+			ci.draw_arc(Vector2(0, -0.08), 0.11, PI, TAU, 12, COL.ink, 0.1, true)
+			ci.draw_arc(Vector2(0, -0.08), 0.11, PI, TAU, 12, w, 0.05, true)
+			ci.draw_line(Vector2(-0.11, -0.08), Vector2(-0.11, 0.0), w, 0.05)
+			ci.draw_line(Vector2(0.11, -0.08), Vector2(0.11, 0.0), w, 0.05)
+			_ink_poly(ci, pts([[-0.18, -0.02], [0.18, -0.02], [0.18, 0.24], [-0.18, 0.24]]), w, 0.03)
+			ci.draw_circle(Vector2(0, 0.09), 0.04, COL.ink)
+			ci.draw_line(Vector2(0, 0.09), Vector2(0, 0.17), COL.ink, 0.04)
+		_:  # バッジ一般：星
+			ci.draw_colored_polygon(star_pts(Vector2(0, 0.01), 0.24, 0.1), COL.ink)
+			ci.draw_colored_polygon(star_pts(Vector2(0, 0.01), 0.19, 0.08), w)
+
+
+# ------------------------------------------------------------
+# 食材・道具・状態
+# ------------------------------------------------------------
+## 魚：青い魚（尾びれ・目・腹の白）
+func _i_fish(ci: CanvasItem, k: Color) -> void:
+	_ink_poly(ci, pts([[0.22, 0.0], [0.5, -0.24], [0.44, 0.0], [0.5, 0.24]]), k.darkened(0.2), 0.04)
+	_ink_poly(ci, ell(Vector2(-0.06, 0.0), 0.36, 0.22, 20), k, 0.04)
+	ci.draw_colored_polygon(pts([[-0.1, -0.2], [0.12, -0.32], [0.14, -0.16]]), k.darkened(0.25))
+	ci.draw_colored_polygon(ell(Vector2(-0.08, 0.08), 0.26, 0.08, 16), Color("dff0fa"))
+	ci.draw_circle(Vector2(-0.26, -0.05), 0.06, COL.paper)
+	ci.draw_circle(Vector2(-0.27, -0.05), 0.033, COL.ink)
+	ci.draw_arc(Vector2(-0.12, 0.0), 0.12, -0.9, 0.9, 8, k.darkened(0.35), 0.03, true)
+
+
+## 極みスープ：金の縁の器に湯気ときらめき
+func _i_item_soup(ci: CanvasItem, k: Color) -> void:
+	for x in [-0.12, 0.1]:
+		var st := PackedVector2Array()
+		for i in 9:
+			var t := i / 8.0
+			st.append(Vector2(x + sin(t * TAU) * 0.05, -0.06 - t * 0.32))
+		ci.draw_polyline(st, COL.paper, 0.055, true)
+	var bowl := PackedVector2Array([Vector2(-0.44, 0.0), Vector2(0.44, 0.0)])
+	for i in 11:
+		var a := PI * i / 10.0
+		bowl.append(Vector2(cos(a) * 0.44, sin(a) * 0.36))
+	_ink_poly(ci, bowl, Color("c8303c"), 0.05)
+	ci.draw_colored_polygon(ell(Vector2(0, 0.0), 0.42, 0.08, 20), k)
+	ci.draw_line(Vector2(-0.3, 0.16), Vector2(0.3, 0.16), COL.gold, 0.05)
+	ci.draw_rect(Rect2(-0.14, 0.34, 0.28, 0.1), COL.ink)
+	_sparkle(ci, Vector2(0.34, -0.3), 0.14, COL.gold)
+
+
+## 状態：リジェネ（緑のハートに回る白い矢印）
+func _i_st_regen(ci: CanvasItem, k: Color) -> void:
+	ci.draw_circle(Vector2(-0.18, -0.1), 0.24, COL.ink)
+	ci.draw_circle(Vector2(0.18, -0.1), 0.24, COL.ink)
+	ci.draw_colored_polygon(pts([[-0.44, -0.02], [0.44, -0.02], [0, 0.5]]), COL.ink)
+	_i_heart(ci, k)
+	_i_plus(ci, COL.paper, Vector2(0, -0.04), 0.16)
+	ci.draw_circle(Vector2(0.28, 0.28), 0.2, COL.ink)
+	_arc_arrow(ci, Vector2(0.28, 0.28), 0.11, PI * 0.2, PI * 1.7, k, 0.05)
+
+
+## 状態：予約（紫の札に時計）次のターンに効く状態のまとめ
+func _i_st_reserve(ci: CanvasItem, k: Color) -> void:
+	_ink_poly(ci, pts([[-0.3, -0.44], [0.3, -0.44], [0.3, 0.44], [0.0, 0.28], [-0.3, 0.44]]), k, 0.05)
+	ci.draw_rect(Rect2(-0.3, -0.44, 0.6, 0.12), k.darkened(0.35))
+	_clock_badge(ci, Vector2(0, -0.04), 0.24)
+
+
+# ------------------------------------------------------------
+# キーワード（丸い札。黒縁＋色の丸＋白い印）
+# ------------------------------------------------------------
+func _kw_disc(ci: CanvasItem, k: Color) -> void:
+	ci.draw_circle(Vector2.ZERO, 0.46, COL.ink)
+	ci.draw_circle(Vector2.ZERO, 0.4, k)
+
+
+## 即応：黄色の丸に、左右入れ替えの白い矢印と稲妻
+func _i_kw_sokuou(ci: CanvasItem, k: Color) -> void:
+	_kw_disc(ci, k)
+	_arrow_shape(ci, Vector2(-0.26, -0.14), Vector2(0.3, -0.14), COL.ink, 0.09)
+	_arrow_shape(ci, Vector2(0.26, 0.14), Vector2(-0.3, 0.14), COL.ink, 0.09)
+	ci.draw_colored_polygon(pts([[0.06, -0.32], [-0.1, 0.02], [0.0, 0.02], [-0.06, 0.32], [0.12, -0.04], [0.02, -0.04]]), COL.paper)
+
+
+## 最後：赤い丸に、最後の 1 枚（白いカード 1 枚と終わりの印）
+func _i_kw_saigo(ci: CanvasItem, k: Color) -> void:
+	_kw_disc(ci, k)
+	var card := _rot([[-0.16, -0.26], [0.16, -0.26], [0.16, 0.26], [-0.16, 0.26]], 0.12)
+	ci.draw_colored_polygon(card, COL.paper)
+	ci.draw_colored_polygon(_rot([[-0.06, -0.04], [0.06, -0.04], [0.06, 0.08], [-0.06, 0.08]], 0.12), COL.ink)
+	ci.draw_colored_polygon(_rot([[-0.05, -0.18], [0.05, -0.18], [0.03, -0.08], [-0.03, -0.08]], 0.12), COL.ink)
+
+
+## 陣形：左が青・右が赤に分かれた丸に、白い人影
+func _i_kw_jinkei(ci: CanvasItem, k: Color) -> void:
+	ci.draw_circle(Vector2.ZERO, 0.46, COL.ink)
+	var lft := PackedVector2Array()
+	var rgt := PackedVector2Array()
+	for i in 17:
+		var a := PI / 2 + PI * i / 16.0
+		lft.append(Vector2(cos(a), sin(a)) * 0.4)
+		rgt.append(Vector2(-cos(a), -sin(a)) * 0.4)
+	ci.draw_colored_polygon(lft, COL.knight)
+	ci.draw_colored_polygon(rgt, COL.red)
+	_pawn(ci, Vector2(0, -0.02), 0.5, k, false)
+
+
+## 転身：緑の丸に、人影を回り込む白い矢印（位置が変わった）
+func _i_kw_tenshin(ci: CanvasItem, k: Color) -> void:
+	_kw_disc(ci, k)
+	_pawn(ci, Vector2(0, 0.0), 0.42, COL.paper, false)
+	_arc_arrow(ci, Vector2(0, 0.0), 0.3, PI * 0.15, PI * 1.25, COL.gold, 0.06)
+
+
+# ------------------------------------------------------------
+# 対象・操作
+# ------------------------------------------------------------
+## 対象：後衛の敵全体（奥の段の小さな人影 3 つ＋その上に太い線。前衛全体は線が下）
+func _i_tgt_back_row(ci: CanvasItem, k: Color) -> void:
+	ci.draw_rect(Rect2(-0.54, -0.5, 1.08, 0.16), COL.ink)
+	ci.draw_rect(Rect2(-0.5, -0.47, 1.0, 0.1), k)
+	for x in [-0.3, 0.3, 0.0]:
+		_pawn(ci, Vector2(x, -0.06), 0.46, k.darkened(0.15) if x != 0.0 else k)
+	ci.draw_colored_polygon(ell(Vector2(0, 0.42), 0.46, 0.07, 18), Color(k, 0.35))
+
+
+## 対象：ランダムな敵（人影とサイコロ）
+func _i_tgt_random(ci: CanvasItem, k: Color) -> void:
+	_pawn(ci, Vector2(-0.12, 0.0), 0.56, k)
+	var dice := _rot([[-0.17, -0.17], [0.17, -0.17], [0.17, 0.17], [-0.17, 0.17]], 0.3, Vector2(0.26, -0.22))
+	_ink_poly(ci, dice, COL.paper, 0.05)
+	for v in [[-0.08, -0.08], [0.0, 0.0], [0.08, 0.08]]:
+		ci.draw_circle(Vector2(v[0], v[1]).rotated(0.3) + Vector2(0.26, -0.22), 0.035, COL.ink)
+
+
+## 陣形変更：前（上）と後（下）の人影と、上下入れ替えの矢印
+func _i_formation(ci: CanvasItem, k: Color) -> void:
+	ci.draw_colored_polygon(ell(Vector2(-0.22, -0.02), 0.2, 0.06, 14), COL.knight)
+	ci.draw_colored_polygon(ell(Vector2(0.16, 0.44), 0.24, 0.07, 14), COL.red)
+	_pawn(ci, Vector2(-0.22, -0.3), 0.36, k.darkened(0.15), false)
+	_pawn(ci, Vector2(0.16, 0.1), 0.44, k, false)
+	_ink_arrow(ci, Vector2(0.3, -0.06), Vector2(0.3, -0.46), COL.good, 0.07)
+	_ink_arrow(ci, Vector2(-0.36, 0.08), Vector2(-0.36, 0.46), COL.red, 0.07)
+
+
+# ------------------------------------------------------------
+# 宝箱・レリック一般
+# ------------------------------------------------------------
+## 宝箱（open = 蓋が開いて光る）
+func _i_chest(ci: CanvasItem, k: Color, open: bool) -> void:
+	var gold: Color = COL.gold
+	if open:
+		for i in 7:
+			var a := -PI / 2 + (i - 3) * 0.32
+			var d := Vector2(cos(a), sin(a))
+			ci.draw_colored_polygon(PackedVector2Array([Vector2(0, -0.04) + d.orthogonal() * 0.04, Vector2(0, -0.04) + d * 0.56, Vector2(0, -0.04) - d.orthogonal() * 0.04]), Color(gold, 0.85))
+		# 開いた蓋（奥へ倒れる）
+		_ink_poly(ci, pts([[-0.4, -0.12], [0.4, -0.12], [0.34, -0.36], [-0.34, -0.36]]), k.darkened(0.25), 0.04)
+		ci.draw_colored_polygon(ell(Vector2(0, -0.08), 0.36, 0.08, 16), Color("ffe08a"))
+		_i_coin_small(ci, Vector2(-0.1, -0.1))
+	else:
+		var lid := PackedVector2Array([Vector2(-0.42, -0.04)])
+		for i in 9:
+			var a := PI + PI * i / 8.0
+			lid.append(Vector2(cos(a) * 0.42, -0.04 + sin(a) * 0.3))
+		lid.append(Vector2(0.42, -0.04))
+		_ink_poly(ci, lid, k.lightened(0.1), 0.05)
+		ci.draw_line(Vector2(-0.22, -0.3), Vector2(-0.22, -0.04), gold, 0.07)
+		ci.draw_line(Vector2(0.22, -0.3), Vector2(0.22, -0.04), gold, 0.07)
+	var body := pts([[-0.42, -0.04], [0.42, -0.04], [0.42, 0.42], [-0.42, 0.42]])
+	_ink_poly(ci, body, k, 0.05)
+	ci.draw_rect(Rect2(-0.42, -0.04, 0.84, 0.08), gold)
+	ci.draw_line(Vector2(-0.22, 0.04), Vector2(-0.22, 0.42), gold, 0.07)
+	ci.draw_line(Vector2(0.22, 0.04), Vector2(0.22, 0.42), gold, 0.07)
+	_ink_poly(ci, pts([[-0.08, -0.02], [0.08, -0.02], [0.08, 0.18], [-0.08, 0.18]]), gold, 0.03)
+	ci.draw_circle(Vector2(0, 0.06), 0.03, COL.ink)
+
+
+## レリック一般：金の台座にはめた赤い宝石ときらめき
+func _i_relic(ci: CanvasItem, k: Color) -> void:
+	ci.draw_arc(Vector2(0, -0.2), 0.22, PI * 1.05, PI * 1.95, 14, COL.gold, 0.05, true)
+	var gem := pts([[0, -0.3], [0.32, -0.06], [0.2, 0.36], [-0.2, 0.36], [-0.32, -0.06]])
+	_ink_poly(ci, Geometry2D.offset_polygon(gem, 0.06, Geometry2D.JOIN_MITER)[0], COL.gold, 0.04)
+	ci.draw_colored_polygon(gem, k)
+	ci.draw_colored_polygon(pts([[0, -0.3], [0.32, -0.06], [0, 0.04], [-0.32, -0.06]]), k.lightened(0.3))
+	ci.draw_colored_polygon(pts([[0, 0.04], [0.2, 0.36], [-0.2, 0.36]]), k.darkened(0.25))
+	_sparkle(ci, Vector2(0.3, -0.34), 0.13, COL.paper)

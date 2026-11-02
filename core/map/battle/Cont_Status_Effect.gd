@@ -3,6 +3,25 @@ class_name StatusController
 ## 状態異常の発動・付与・時間経過（データ形は StatusEffectList の説明を参照）
 
 
+## 次のターンに効く状態。表示では「予約」1 つ（アイコン st_reserve）にまとめる（中身はそのまま）
+const RESERVE := ["ap_next", "focus", "declare", "reblock"]
+
+
+## 予約の中身（説明の文の配列）。無ければ空
+static func reserve_lines(u: Dictionary) -> Array:
+	var out: Array = []
+	for id in RESERVE:
+		if not has(u, id):
+			continue
+		var v := val(u, id)
+		match id:
+			"ap_next": out.append("[i:st_ap_next]次の自分のターン AP+%d" % v)
+			"focus": out.append("[i:st_focus]精神統一：%s必殺技の AP-%d" % ["このターン " if u.status_effects.focus.get("active", false) else "次の自分のターン ", v])
+			"declare": out.append("[i:st_declare]宣言：次の自分のターン開始時までに HP が減らなければ %dターン APプラス" % v)
+			"reblock": out.append("[i:st_reblock]リブロック：次の自分のターン開始時にブロック+%d" % v)
+	return out
+
+
 static func has(u: Dictionary, id: String) -> bool:
 	return u.get("status_effects", {}).has(id)
 
@@ -27,8 +46,8 @@ static func label(u: Dictionary, id: String) -> String:
 ## 付与。turns = -1 なら戦闘中ずっと。同じ状態は強さを足し、残りターンは長い方
 static func apply_status(target: Dictionary, status_id: String, amount: int, turns: int = -1) -> void:
 	var se: Dictionary = target.status_effects
-	if status_id in ["fire", "poison"]:
-		turns = maxi(turns, amount)  # 火傷・毒は強さ＝残りターン
+	if status_id in ["fire", "poison", "regen"]:
+		turns = maxi(turns, amount)  # 火傷・毒・リジェネは強さ＝残りターン
 	if se.has(status_id):
 		var e: Dictionary = se[status_id]
 		if status_id == "focus" and e.get("active", false):
@@ -74,8 +93,16 @@ static func trigger_start_of_turn(u: Dictionary) -> Array:
 		match k:
 			"fire", "poison":
 				var v := int(e.val)
-				u["hp"] = maxi(0, int(u.hp) - v)
-				evs.append({"target": u, "damage": v, "tick": k})
+				var before := int(u.hp)
+				u["hp"] = maxi(0, before - v)
+				# lost / overkill は戦闘の集計用
+				evs.append({"target": u, "damage": v, "tick": k, "lost": before - int(u.hp),
+						"overkill": maxi(0, v - before) if int(u.hp) <= 0 else 0})
+			"regen":
+				# リジェネ：残りターン分 HP 回復（最大 HP を超えてよい）
+				var rv := int(e.val)
+				u["hp"] = int(u.hp) + rv
+				evs.append({"target": u, "heal": rv, "tick": k})
 			"ap_plus":
 				evs.append({"target": u, "ap": int(e.val), "ap_gain": int(e.val)})
 			"ap_next":
@@ -111,7 +138,7 @@ static func end_of_turn(u: Dictionary) -> void:
 		if int(e.turns) < 0:
 			continue
 		e["turns"] = int(e.turns) - 1
-		if k in ["fire", "poison"]:
+		if k in ["fire", "poison", "regen"]:
 			e["val"] = int(e.turns)
 		if int(e.turns) <= 0:
 			remove_ids.append(k)

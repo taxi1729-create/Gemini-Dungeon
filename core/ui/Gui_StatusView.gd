@@ -172,8 +172,9 @@ func _draw_ap(u: Dictionary, p: Vector2) -> void:
 	var ap := int(u.get("ap", 0))
 	var mx := int(u.get("max_ap", 10))
 	draw_string(IC.font_bold, p + Vector2(0, LINE_FS * 0.36), "AP", HORIZONTAL_ALIGNMENT_LEFT, -1, LINE_FS, col.ink)
+	var step := minf(19.0, 190.0 / maxf(1.0, mx))  # 砂時計で上限が増えても幅に収める
 	for i in mx:
-		var c := p + Vector2(36 + i * 19, 0)
+		var c := p + Vector2(36 + i * step, 0)
 		var dia := PackedVector2Array([c + Vector2(0, -8), c + Vector2(7, 0), c + Vector2(0, 8), c + Vector2(-7, 0)])
 		draw_colored_polygon(dia, col.red if i < ap else Color(col.ink, 0.15))
-	draw_string(IC.font_bold, p + Vector2(36 + mx * 19, LINE_FS * 0.36), "%d/%d" % [ap, mx], HORIZONTAL_ALIGNMENT_LEFT, -1, LINE_FS, col.ink)
+	draw_string(IC.font_bold, p + Vector2(36 + mx * step + 4, LINE_FS * 0.36), "%d/%d" % [ap, mx], HORIZONTAL_ALIGNMENT_LEFT, -1, LINE_FS, col.ink)

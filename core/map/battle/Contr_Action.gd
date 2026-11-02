@@ -15,11 +15,27 @@ class_name ActionController
 
 
 static func get_atk(u: Dictionary) -> int:
-	return int(u.get("atk", 0)) + StatusController.val(u, "atk_buff") - StatusController.val(u, "atk_down") + int(u.get("power_atk", 0))
+	return int(u.get("atk", 0)) + StatusController.val(u, "atk_buff") - StatusController.val(u, "atk_down") + int(u.get("power_atk", 0)) + formation_atk(u)
 
 
 static func get_def(u: Dictionary) -> int:
-	return int(u.get("def", 0)) + StatusController.val(u, "def_buff") - StatusController.val(u, "def_down") + int(u.get("power_def", 0))
+	return int(u.get("def", 0)) + StatusController.val(u, "def_buff") - StatusController.val(u, "def_down") + int(u.get("power_def", 0)) + formation_def(u)
+
+
+## 陣形効果（味方だけ）：前衛（rank 0）は攻撃力+2、後衛（rank 1）は防御力+2
+const FORMATION_BONUS := 2
+
+
+static func formation_atk(u: Dictionary) -> int:
+	if u.get("side", "") == "ally" and u.has("rank") and int(u.rank) == 0:
+		return FORMATION_BONUS
+	return 0
+
+
+static func formation_def(u: Dictionary) -> int:
+	if u.get("side", "") == "ally" and u.has("rank") and int(u.rank) == 1:
+		return FORMATION_BONUS
+	return 0
 
 
 static func get_spd(u: Dictionary) -> int:
@@ -29,7 +45,93 @@ static func get_spd(u: Dictionary) -> int:
 static func calc_damage(user: Dictionary, action: Dictionary, target: Dictionary) -> int:
 	if action.get("fixed", false):
 		return int(action.get("power", 0))
-	return maxi(0, int(action.get("power", 0)) + get_atk(user) - get_def(target))
+	return maxi(0, int(action.get("power", 0)) + get_atk(user) + relic_atk(user) - get_def(target))
+
+
+## レリック「紅の剣章」：右（赤）に立つ味方は攻撃力+1（get_atk とは別に、ダメージ計算と表示で足す）
+static func relic_atk(u: Dictionary) -> int:
+	if str(u.get("side", "")) == "ally" and int(u.get("lane", 0)) == 1 and Inventory.has_relic("red_crest"):
+		return 1
+	return 0
+
+
+# ============================================================
+# カードを使う時の強化（キーワード・バッジ・レリック）
+# ============================================================
+
+## キーワードの条件を満たしているか。ctx = {"swapped": このラウンドに味方の誰かが入替をしたか, "alone": 手札・保留枠に他のカードが無いか}
+## 陣形（jinkei）は左右どちらかの効果が必ず出るので常に true
+static func keyword_on(user: Dictionary, kw: String, ctx: Dictionary) -> bool:
+	match kw:
+		"sokuou": return bool(ctx.get("swapped", false))
+		"saigo": return bool(ctx.get("alone", false))
+		"jinkei": return true
+		"tenshin":
+			var lane := int(user.get("lane", 0))
+			var rank := int(user.get("rank", 0))
+			return lane != int(user.get("start_lane", lane)) or rank != int(user.get("start_rank", rank))
+	return false
+
+
+## 今の条件で足される bonus（{"power", "effects"}）の配列
+static func active_bonuses(user: Dictionary, card: Dictionary, ctx: Dictionary) -> Array:
+	var out: Array = []
+	for kw in card.get("keywords", []):
+		var k := str(kw)
+		if k == "jinkei":
+			var b = card.get("bonus_left" if int(user.get("lane", 0)) == 0 else "bonus_right")
+			if b is Dictionary:
+				out.append(b)
+		elif k in ["sokuou", "saigo", "tenshin"] and keyword_on(user, k, ctx):
+			var b2 = card.get("bonus")
+			if b2 is Dictionary:
+				out.append(b2)
+	return out
+
+
+## 実際に発動する行動（カードのコピー）。キーワードの追加効果・バッジ・レリック（砥石・十連の数珠）を足す
+## ctx の "whet" = 砥石が効く、"rosary" = 数珠が効く（Cont_Battle が決める）
+static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}) -> Dictionary:
+	var a: Dictionary = card.duplicate(true)
+	var effs: Array = ActionList.effects_of(card).duplicate(true)
+	var is_atk: bool = card.has("power")
+	var add := 0
+	for b in active_bonuses(user, card, ctx):
+		add += int(b.get("power", 0))
+		for e in b.get("effects", []):
+			effs.append((e as Dictionary).duplicate(true))
+	var rank := int(user.get("rank", 0))
+	match str(card.get("badge", "")):
+		"sharp":
+			if is_atk:
+				add += 3
+		"front":
+			if is_atk and rank == 0:
+				add += 5
+		"fire":
+			if is_atk:
+				effs.append({"effect": "add_status", "status": "fire", "eff_val": 2})
+		"guard":
+			effs.append({"effect": "add_shield", "eff_val": 4, "to": "self"})
+		"back":
+			if rank == 1:
+				effs.append({"effect": "add_shield", "eff_val": 6, "to": "self"})
+		"aid":
+			effs.append({"effect": "add_shield", "eff_val": 3, "to": "other_ally"})
+		"draw":
+			effs.append({"effect": "draw", "eff_val": 1, "to": "self"})
+	if ctx.get("whet", false) and is_atk:
+		add += 4
+	if ctx.get("rosary", false):
+		if is_atk:
+			add += 10
+		else:
+			effs.append({"effect": "add_shield", "eff_val": 10, "to": "self"})
+	if is_atk and add != 0:
+		a["power"] = int(card.power) + add
+	a["effects"] = effs
+	a.erase("effect")
+	return a
 
 
 ## カードに表示する「実際のダメージ」（主な対象＝最初の対象に対して）。対象がいなければ攻撃力だけ反映
@@ -38,7 +140,7 @@ static func effective_power(user: Dictionary, action: Dictionary, allies: Array,
 		return 0
 	var t := resolve_targets(user, action.get("target", "self"), allies, enemies)
 	if t.is_empty():
-		return maxi(0, int(action.power) + get_atk(user))
+		return maxi(0, int(action.power) + get_atk(user) + relic_atk(user))
 	return calc_damage(user, action, t[0])
 
 
@@ -87,11 +189,14 @@ static func execute_action(user: Dictionary, action: Dictionary, allies: Array, 
 				var blocked := mini(int(t.get("shield", 0)), dmg)
 				t["shield"] = int(t.get("shield", 0)) - blocked
 				dmg -= blocked
-				t["hp"] = maxi(0, int(t.hp) - dmg)
+				var before := int(t.hp)
+				t["hp"] = maxi(0, before - dmg)
 				var killed: bool = int(t.hp) <= 0
 				if killed:
 					kills += 1
-				events.append({"target": t, "damage": dmg, "blocked": blocked, "hit_no": h, "kill": killed})
+				# lost = 実際に減った HP、overkill = 倒した時の余り（戦闘の集計に使う）
+				events.append({"target": t, "damage": dmg, "blocked": blocked, "hit_no": h, "kill": killed,
+						"lost": before - int(t.hp), "overkill": maxi(0, dmg - before) if killed else 0})
 				# ファイアガード：攻撃してきた相手に火傷
 				if StatusController.has(t, "fire_guard") and user.hp > 0 and user != t:
 					var v := StatusController.val(t, "fire_guard")
@@ -110,6 +215,8 @@ static func execute_action(user: Dictionary, action: Dictionary, allies: Array, 
 			recips = [user]
 		elif to == "ally_all":
 			recips = friends
+		elif to == "other_ally":
+			recips = friends.filter(func(f): return f != user)
 		var kind: String = eff.get("effect", "")
 		if kind in ["draw", "swap", "double", "turnabout", "extra_turn"]:
 			events.append({"target": user, "special": kind, "val": int(eff.get("eff_val", 0))})
@@ -163,6 +270,14 @@ static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: 
 			# 宣言中に回復したら、判定の基準も上げる（回復分で減った HP を隠さない）
 			if StatusController.has(t, "declare") and t.status_effects.declare.has("hp"):
 				t.status_effects.declare["hp"] = int(t.status_effects.declare.hp) + int(ev.heal)
+		"heal_pct":
+			# 最大 HP の v% 回復（上限は最大 HP）
+			var before2 := int(t.hp)
+			var amount := int(ceil(int(t.max_hp) * v / 100.0))
+			t["hp"] = maxi(before2, mini(int(t.max_hp), before2 + amount))
+			ev["heal"] = int(t.hp) - before2
+			if StatusController.has(t, "declare") and t.status_effects.declare.has("hp"):
+				t.status_effects.declare["hp"] = int(t.status_effects.declare.hp) + int(ev.heal)
 		"set_next_action":
 			t["next_action"] = eff.get("next", "strong_attack")
 			ev["charge"] = true
@@ -197,7 +312,7 @@ static func resolve_targets(user: Dictionary, target_type: String, allies: Array
 					if int(a.get("lane", 0)) == lane:
 						return [a]
 				return [foes[0]]
-			# 味方の単体攻撃：目の前の敵グループで HP が一番低い敵（同じなら近い方）
+			# 味方の単体攻撃：目の前の前衛で HP が一番低い敵（同じなら近い方）。全滅なら front_group の代わりの順
 			var group := front_group(user, foes)
 			var up: Vector2 = user.get("pos", Vector2.ZERO)
 			var best = group[0]
@@ -208,16 +323,57 @@ static func resolve_targets(user: Dictionary, target_type: String, allies: Array
 		"front_enemy_group":
 			return front_group(user, foes) if is_ally else foes
 		"front_row":
-			var row0 := foes.filter(func(e): return int(e.get("row", 0)) == 0)
-			return row0 if not row0.is_empty() else foes
+			# 前衛全体（A-2・A-3・B-3・B-2）。全滅なら後衛
+			var fr := _in_slots(foes, FRONT_SLOTS)
+			if fr.is_empty():
+				fr = _in_slots(foes, BACK_SLOTS)
+			return fr if not fr.is_empty() else foes
+		"back_row":
+			# 後衛全体（A-1・B-1・C）。全滅なら前衛全体
+			var br := _in_slots(foes, BACK_SLOTS)
+			if br.is_empty():
+				br = _in_slots(foes, FRONT_SLOTS)
+			return br if not br.is_empty() else foes
+		"random_enemy":
+			# ランダムな敵 1 体。user.rand_seq（Cont_Battle が行動のたびに引き直す）で決めるので、プレビューと実行で同じ敵になる
+			if foes.is_empty():
+				return []
+			return [foes[posmod(hash(int(user.get("rand_seq", 0))), foes.size())]]
 	return []
 
 
-## 目の前の敵グループ：自分の側（左の味方なら画面の左半分、右なら右半分）にいる敵。いなければ全員
+## 敵の位置名（battle-spec.md「配置」）。A＝左（青の味方の目の前）、B＝右（赤）、C＝中央の奥（強敵・ボス）
+const FRONT_SLOTS := ["A-2", "A-3", "B-3", "B-2"]
+const BACK_SLOTS := ["A-1", "B-1", "C"]
+## 目の前の敵：lane ごとに [目の前の前衛, 同じ側の後衛, C] の順に、生きている敵がいる最初の組
+const FRONT_CHAIN := [[["A-2", "A-3"], ["A-1"], ["C"]], [["B-3", "B-2"], ["B-1"], ["C"]]]
+
+
+## 目の前の敵グループ（front_enemy_group）：目の前の前衛（青なら A-2・A-3、赤なら B-3・B-2）。
+## 全滅していれば 同じ側の後衛（A-1／B-1）→ C → 全員 の順に代わる
 static func front_group(user: Dictionary, foes: Array) -> Array:
-	var left: bool = int(user.get("lane", 0)) == 0
-	var side := foes.filter(func(e): return is_left(e) == left)
-	return side if not side.is_empty() else foes
+	var lane := clampi(int(user.get("lane", 0)), 0, 1)
+	for slots in FRONT_CHAIN[lane]:
+		var g := _in_slots(foes, slots)
+		if not g.is_empty():
+			return g
+	return foes
+
+
+## 位置名が slots に入る敵（位置名が無い古いデータは画面の位置と row から推定）
+static func _in_slots(foes: Array, slots: Array) -> Array:
+	return foes.filter(func(e): return slots.has(slot_of(e)))
+
+
+static func slot_of(e: Dictionary) -> String:
+	if e.has("slot"):
+		return str(e.slot)
+	var x := Vector2(e.get("pos", Vector2.ZERO)).x
+	if int(e.get("row", 0)) == 0:
+		return "A-3" if x < 360.0 else "B-3"
+	if absf(x - 360.0) < 1.0:
+		return "C"
+	return "A-1" if x < 360.0 else "B-1"
 
 
 static func is_left(u: Dictionary) -> bool:
