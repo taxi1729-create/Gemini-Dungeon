@@ -323,6 +323,23 @@ func _update_targets() -> void:
 		for a in ActionController.resolve_targets(e, t, CurrentStatus.allies, CurrentStatus.enemies):
 			views[a.uid].targeted += 1
 	fx.set_intents(list)
+	_update_intent_values()
+
+
+## 敵の予告の数字（実際に受けるダメージ）を data.intent_dmg = [{"lane", "dmg"}] に入れる（左＝lane 0 から順）。
+## 味方の防御力・防御力アップ/ダウン・パワーの防御力を反映し、ブロックは引かない。
+## 単体攻撃は狙われる味方 1 人分（挑発・回り込みの移動先も resolve_targets が反映）、全体攻撃は立っている味方ごと
+func _update_intent_values() -> void:
+	for e in CurrentStatus.enemies:
+		var act: Dictionary = e.get("intent", {})
+		var out: Array = []
+		if e.hp > 0 and act.has("power"):
+			var tg := ActionController.resolve_targets(e, act.get("target", ""), CurrentStatus.allies, CurrentStatus.enemies)
+			tg = tg.filter(func(a): return a.get("side", "") == "ally")
+			tg.sort_custom(func(a, b): return int(a.get("lane", 0)) < int(b.get("lane", 0)))
+			for a in tg:
+				out.append({"lane": int(a.get("lane", 0)), "dmg": ActionController.calc_damage(e, act, a)})
+		e["intent_dmg"] = out
 
 
 func _cell_rect(c: Vector2i) -> Rect2:
@@ -1469,6 +1486,7 @@ func _refresh_all() -> void:
 					"def_buff": current["power_def"] = int(current.get("power_def", 0)) + int(pe.eff_val)
 				fx.popup(views[current.uid], "%s +%d" % ["攻" if pe.get("status", "") == "atk_buff" else "防", int(pe.eff_val)], ImageController.COL.good, 26)
 		power_seen[current.id] = seen
+	_update_intent_values()  # パワー・状態の変化を敵の予告の数字に反映
 	for i in hand_cards.size():
 		var cv: GuiCard = hand_cards[i]
 		var c = dc.hand[i] if dc != null else null
@@ -1497,6 +1515,7 @@ func _refresh_all() -> void:
 		btn.special.ap_cost = _special_cost(sp)  # 精神統一中は減った値
 		btn.special.subtitle = "長押し"
 		btn.special.dimmed = int(current.ap) < _special_cost(sp)
+		btn.special.badge = _special_badge(sp)
 		btn.swap.dimmed = int(current.ap) < 1
 		pad.modulate.a = 1.0
 	elif phase != "over":
@@ -1516,6 +1535,18 @@ func _set_eff(c: Dictionary) -> void:
 		c["power_eff"] = ActionController.effective_power(current, c, CurrentStatus.allies, CurrentStatus.enemies)
 	else:
 		c.erase("power_eff")
+
+
+## 必殺技ボタンの左上の効果量：攻撃は主な対象への実際のダメージ（カードの power_eff と同じ計算）、
+## ブロックは盾の量。数値の無い必殺技は {}（出さない）
+func _special_badge(sp: Dictionary) -> Dictionary:
+	if sp.has("power"):
+		return {"kind": "power", "val": ActionController.effective_power(current, sp, CurrentStatus.allies, CurrentStatus.enemies),
+				"base": int(sp.power)}
+	for eff in ActionList.effects_of(sp):
+		if eff.get("effect", "") == "add_shield":
+			return {"kind": "shield", "val": int(eff.get("eff_val", 0))}
+	return {}
 
 
 func _log(txt: String) -> void:

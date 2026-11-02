@@ -267,21 +267,38 @@ func _draw_intent(IC) -> void:
 		return
 	var y := -body_height() - 20
 	var c := Vector2(0, y + sin(_t * 3.0) * 3)
+	# 攻撃の数字は実際に受けるダメージ（Cont_Battle が data.intent_dmg = [{"lane", "dmg"}] に入れる。
+	# 味方の防御力・防御力アップ/ダウン・パワーを反映、ブロックは引かない）
+	var dmgs: Array = data.get("intent_dmg", [])
+	var two: bool = act.has("power") and dmgs.size() >= 2  # 全体攻撃で左右 2 つの数字を出す
+	var wx := 1.3 if two else 1.0  # 2 つの数字の時は吹き出しを横に広げる
 	# ギザギザの白い吹き出し（黒縁）としっぽ
 	var shape := _bubble_shape()
 	var tail := PackedVector2Array([c + Vector2(-10, 18), c + Vector2(8, 18), c + Vector2(-2, 36)])
-	draw_set_transform(c, 0.0, Vector2(1.09, 1.16))
+	draw_set_transform(c, 0.0, Vector2(1.09 * wx, 1.16))
 	draw_colored_polygon(shape, INK)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	draw_colored_polygon(PackedVector2Array([tail[0] + Vector2(-4, -2), tail[1] + Vector2(4, -2), tail[2] + Vector2(0, 5)]), INK)
-	draw_set_transform(c, 0.0, Vector2.ONE)
+	draw_set_transform(c, 0.0, Vector2(wx, 1.0))
 	draw_colored_polygon(shape, PAPER)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	draw_colored_polygon(tail, PAPER)
 	# 左：効果、右：対象
+	if two:
+		_draw_intent_two(IC, c, dmgs)
+		return
 	if act.has("power"):
+		var v := maxi(0, int(act.power) + ActionController.get_atk(data))
+		if dmgs.size() == 1:
+			v = int((dmgs[0] as Dictionary).get("dmg", v))
 		IC.icon(self, "sword", c + Vector2(-28, 0), 24, INK)
-		IC.text(self, str(maxi(0, int(act.power) + ActionController.get_atk(data))), c + Vector2(-3, 1), 21, INK, true)
+		IC.text(self, str(v), c + Vector2(-3, 1), 21, INK, true)
+		if dmgs.size() == 1 and act.get("target", "") == "enemy_all":
+			# 全体攻撃で片方が倒れている時：残っている側の照準を 1 つだけ
+			var ln := clampi(int((dmgs[0] as Dictionary).get("lane", 0)), 0, 1)
+			draw_colored_polygon(_para(c.x + 12, c.y - 13, 30, 26, 6), Color(INK, 0.08))
+			IC.icon(self, "target_one", c + Vector2(28, 0), 24, BattleFx.LANE_COL[ln])
+			return
 	else:
 		var kind := "star"
 		var label := ""
@@ -325,6 +342,19 @@ func _draw_intent(IC) -> void:
 	# 対象アイコンの下に赤い斜めの下地
 	draw_colored_polygon(_para(c.x + 12, c.y - 13, 30, 26, 6), Color(RED, 0.18) if tcol == RED else Color(INK, 0.08))
 	IC.icon(self, tk, c + Vector2(28, 0), 24, tcol)
+
+
+## 全体攻撃の予告：剣のアイコンと、左右（青・赤の照準）それぞれの味方へのダメージを並べる（吹き出しは横に広げてある）
+func _draw_intent_two(IC, c: Vector2, dmgs: Array) -> void:
+	IC.icon(self, "sword", c + Vector2(-51, 0), 20, INK)
+	var xs: Array = [-27.0, 19.0]  # 照準の位置（左の組・右の組）。数字は照準の右に置き、組の間を少し空ける
+	for i in mini(2, dmgs.size()):
+		var d: Dictionary = dmgs[i]
+		var ln := clampi(int(d.get("lane", 0)), 0, 1)
+		var p := c + Vector2(float(xs[i]), 0)
+		draw_colored_polygon(_para(p.x - 12, p.y - 12, 41, 24, 5), Color(BattleFx.LANE_COL[ln], 0.16))
+		IC.icon(self, "target_one", p, 18, BattleFx.LANE_COL[ln])
+		IC.text(self, str(int(d.get("dmg", 0))), p + Vector2(20, 1), 19, INK, true)
 
 
 func _draw_preview(IC) -> void:

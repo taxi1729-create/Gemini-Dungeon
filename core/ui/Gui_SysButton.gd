@@ -15,6 +15,11 @@ var charge := 0.0:  # 中央長押しの溜め（0〜1）
 	set(v):
 		charge = v
 		queue_redraw()
+## 左上の効果量（必殺技）：{"kind": "power", "val": 実際のダメージ, "base": 基本の威力} / {"kind": "shield", "val": n} / {}（出さない）
+var badge := {}:
+	set(v):
+		badge = v
+		queue_redraw()
 var dimmed := false:
 	set(v):
 		dimmed = v
@@ -75,10 +80,43 @@ func _draw() -> void:
 	IC.head(self, title, c + Vector2(0, 16 if sub_on else 22), 19, fg, size.x - 24, Color(0, 0, 0, 0), Vector2.ZERO, 5, IC.COL.ink)
 	if sub_on:
 		IC.text(self, subtitle, c + Vector2(0, 39), 14, Color(fg, 0.85), true, 4, size.x - 30, IC.COL.ink)
+	_draw_badge()
 	if ap_cost >= 0:
 		var p := Vector2(size.x - 18, 18)
 		IC.icon(self, "ap", p, 34, IC.COL.ap if not dimmed else Color("5a2a30"))
 		IC.text(self, str(ap_cost), p + Vector2(0, 1), 17, Color.WHITE, true, 4, -1.0, IC.COL.ink)
+
+
+## 左上の効果量。攻撃はカードと同じ赤いギザギザの星（基本より高ければ緑＋▲、低ければ白地に赤字＋▼）、
+## ブロックは盾のアイコンに数字。暗い時（dimmed）は AP 表示と同様に暗くする
+func _draw_badge() -> void:
+	if badge.is_empty():
+		return
+	var IC = ImageController
+	var pc := Vector2(18, 18)  # 丸の外側の左上の角（右上の AP と左右対称）
+	var dark := 0.6 if dimmed else 0.0  # 暗くする量
+	var val := int(badge.get("val", 0))
+	if badge.get("kind", "") == "shield":
+		IC.icon(self, "shield", pc, 36, Color("4f86c6").darkened(dark))  # 盾の既定色（ImageController.ICON_DEFAULT と同じ）
+		IC.text(self, str(val), pc + Vector2(0, 1), 17, Color.WHITE.darkened(dark), true, 4, -1.0, IC.COL.ink)
+		return
+	var base := int(badge.get("base", val))
+	var face: Color = IC.COL.red
+	var num_col: Color = IC.COL.paper
+	if val > base:
+		face = Color("1c9a48")
+	elif val < base:
+		face = IC.COL.paper
+		num_col = IC.COL.red
+	IC.poly_box(self, IC.burst_pts(pc, 21, 14, 8, 3), face.darkened(dark), 2.0, IC.COL.ink)
+	IC.head(self, str(val), pc + Vector2(-1, 0), 21, num_col.darkened(dark), 26, Color(0, 0, 0, 0), Vector2.ZERO, 4, IC.COL.ink)
+	if val != base:
+		var up := val > base
+		var ac := Vector2(pc.x + 16, pc.y + 13)
+		var tri := PackedVector2Array([ac + Vector2(-5, 3), ac + Vector2(5, 3), ac + Vector2(0, -5)]) if up \
+				else PackedVector2Array([ac + Vector2(-5, -3), ac + Vector2(5, -3), ac + Vector2(0, 5)])
+		var tc: Color = IC.COL.good if up else IC.COL.red
+		IC.poly_box(self, tri, tc.darkened(dark), 2.0, IC.COL.ink)
 
 
 ## 右列のキー：斜めの黒いパネル。選択中は赤く塗りつぶす
