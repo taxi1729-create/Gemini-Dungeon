@@ -201,21 +201,56 @@ static func has_keyword(a: Dictionary, k: String) -> bool:
 	return a.get("keywords", []).has(k)
 
 
-## カードIDからカード辞書（rarity・id 付きのコピー）を作る
+## カードIDからカード辞書（rarity・id 付きのコピー）を作る。
+## "カードID@バッジID" ならバッジ付き（c.badge = バッジID、c.deck_id = 元の文字列。c.id はカードIDだけ）
 static func make_card(card_id: String) -> Dictionary:
+	var base := base_id(card_id)
+	var badge := badge_of(card_id)
 	for rarity in ["common", "rare", "super_rare"]:
-		if ALLY_CARDS[rarity].has(card_id):
-			var c: Dictionary = ALLY_CARDS[rarity][card_id].duplicate(true)
-			c["id"] = card_id
+		if ALLY_CARDS[rarity].has(base):
+			var c: Dictionary = ALLY_CARDS[rarity][base].duplicate(true)
+			c["id"] = base
+			c["deck_id"] = card_id
 			c["rarity"] = "normal" if rarity == "common" else rarity
 			if not c.has("keywords"):
 				c["keywords"] = []
+			if badge != "" and BadgeList.DATA.has(badge):
+				c["badge"] = badge
 			return c
 	return {}
 
 
+## "カードID@バッジID" → カードID
+static func base_id(deck_id: String) -> String:
+	var i := deck_id.find("@")
+	return deck_id if i < 0 else deck_id.substr(0, i)
+
+
+## "カードID@バッジID" → バッジID（無ければ ""）
+static func badge_of(deck_id: String) -> String:
+	var i := deck_id.find("@")
+	return "" if i < 0 else deck_id.substr(i + 1)
+
+
+static func with_badge(deck_id: String, badge_id: String) -> String:
+	return base_id(deck_id) + ("@" + badge_id if badge_id != "" else "")
+
+
 static func owner_of(card_id: String) -> String:
 	return make_card(card_id).get("owner", "knight")
+
+
+## 報酬・宝箱・ショップ用：レア以上のカードID
+static func random_rare_id(owner: String = "") -> String:
+	return random_card_id("rare", owner)
+
+
+## バッジ付きのカードID（付けられるバッジをランダムに。付けられなければバッジなし）
+static func random_badged_id(min_tier: String = "", owner: String = "") -> String:
+	var cid := random_card_id(min_tier, owner)
+	var c := make_card(cid)
+	var ok: Array = BadgeList.DATA.keys().filter(func(b): return BadgeList.can_attach(b, c))
+	return cid if ok.is_empty() else with_badge(cid, ok.pick_random())
 
 
 ## 報酬用にランダムなカードIDを選ぶ（レアほど出にくい）。owner を指定するとそのキャラのカードだけ

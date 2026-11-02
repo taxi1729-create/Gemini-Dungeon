@@ -31,6 +31,8 @@ const DATA = {
 		"desc": "攻撃してきた相手に火傷を与える"},
 	"double": {"name": "連続魔法", "short": "連続", "timing": "all", "icon": "st_double", "good": true, "label": "none",
 		"desc": "次に使うカード・保留カードが2回発動する"},
+	"regen": {"name": "リジェネ", "short": "再生", "timing": "start_turn", "icon": "st_regen", "good": true, "label": "val",
+		"desc": "ターン開始時に残りターン分 HP 回復（最大HPを超えられる）。毎ターン1減る"},
 	"barricade": {"name": "バリケード", "short": "柵", "timing": "all", "icon": "st_barricade", "good": true, "label": "none",
 		"desc": "ブロックがターン開始時に取り除かれない（戦闘中ずっと）"},
 	"focus": {"name": "精神統一", "short": "統一", "timing": "start_turn", "icon": "st_focus", "good": true, "label": "val",
