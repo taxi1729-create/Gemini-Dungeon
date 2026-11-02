@@ -31,6 +31,10 @@ static func apply_status(target: Dictionary, status_id: String, amount: int, tur
 		turns = maxi(turns, amount)  # 火傷・毒は強さ＝残りターン
 	if se.has(status_id):
 		var e: Dictionary = se[status_id]
+		if status_id == "focus" and e.get("active", false):
+			# 精神統一が効いているターンに重ねた分は、次の自分のターンに効く
+			e["pend"] = int(e.get("pend", 0)) + amount
+			return
 		if status_id == "taunt":
 			e["val"] = amount  # 挑発は最後に挑発したキャラ
 		else:
@@ -44,11 +48,29 @@ static func remove(u: Dictionary, id: String) -> void:
 	u.status_effects.erase(id)
 
 
-## ターン開始時（火傷・毒のダメージ、AP プラス）。ダメージはブロックを無視
+## 精神統一：このターン必殺技の AP をいくつ減らすか（付けたターンには効かない）
+static func focus_cut(u: Dictionary) -> int:
+	var e = u.get("status_effects", {}).get("focus")
+	if e is Dictionary and e.get("active", false):
+		return int(e.val)
+	return 0
+
+
+## ターン開始時（宣言の判定、火傷・毒のダメージ、AP プラス、リブロック、精神統一）。ダメージはブロックを無視
+## 呼ぶ前にブロックを 0 に戻しておくこと（リブロックはその後に足す）
 static func trigger_start_of_turn(u: Dictionary) -> Array:
 	var evs: Array = []
-	for k in u.status_effects.keys():
-		var e: Dictionary = u.status_effects[k]
+	var se: Dictionary = u.status_effects
+	# 宣言：火傷・毒より前に判定する。成否どちらでも消える
+	if se.has("declare"):
+		var d: Dictionary = se.declare
+		var ok: bool = int(u.hp) >= int(d.get("hp", u.hp))
+		se.erase("declare")
+		if ok:
+			apply_status(u, "ap_plus", 1, int(d.val))  # このターンから val ターン、AP+1
+		evs.append({"target": u, "declare": ok})
+	for k in se.keys():
+		var e: Dictionary = se[k]
 		match k:
 			"fire", "poison":
 				var v := int(e.val)
@@ -58,14 +80,32 @@ static func trigger_start_of_turn(u: Dictionary) -> Array:
 				evs.append({"target": u, "ap": int(e.val), "ap_gain": int(e.val)})
 			"ap_next":
 				evs.append({"target": u, "ap": int(e.val), "ap_gain": int(e.val)})
-	if u.status_effects.has("ap_next"):
-		u.status_effects.erase("ap_next")
+			"reblock":
+				var v := int(e.val)
+				u["shield"] = int(u.get("shield", 0)) + v
+				evs.append({"target": u, "shield": v, "reblock": true})
+			"focus":
+				e["active"] = true
+				evs.append({"target": u, "focus": int(e.val)})
+	if se.has("ap_next"):
+		se.erase("ap_next")
+	if se.has("reblock"):
+		se.erase("reblock")
 	return evs
 
 
 ## 持ち主のターン終了時：残りターンを 1 減らす（火傷・毒は強さも 1 減る）
 static func end_of_turn(u: Dictionary) -> void:
 	var remove_ids: Array = []
+	# 精神統一：効いたターンの終わりで消える（そのターン中に重ねた分は次のターンへ）
+	var f = u.status_effects.get("focus")
+	if f is Dictionary and f.get("active", false):
+		if int(f.get("pend", 0)) > 0:
+			f["val"] = int(f.pend)
+			f["pend"] = 0
+			f["active"] = false
+		else:
+			u.status_effects.erase("focus")
 	for k in u.status_effects.keys():
 		var e: Dictionary = u.status_effects[k]
 		if int(e.turns) < 0:

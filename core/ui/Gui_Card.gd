@@ -112,11 +112,18 @@ func _draw() -> void:
 			var tri := PackedVector2Array([ac + Vector2(-5, 3), ac + Vector2(5, 3), ac + Vector2(0, -5)]) if up \
 					else PackedVector2Array([ac + Vector2(-5, -3), ac + Vector2(5, -3), ac + Vector2(0, 5)])
 			IC.poly_box(self, tri, IC.COL.good if up else IC.COL.red, 2.0, IC.COL.ink)
-	# 消費AP（右上）
+	# 多段攻撃：威力の星の下に「×2」「×X」の小さな札
+	var hits := hits_label(card)
+	if power > 0 and hits != "":
+		var hr := Rect2(2, 37, 30, 15)
+		IC.slant(self, hr, IC.COL.ink, 4, 1.5, IC.COL.paper)
+		IC.text(self, hits, hr.get_center() + Vector2(0, -0.5), 13, IC.COL.paper, true, 0, 26)
+	# 消費AP（右上）。戦闘中は ap_show（APX は "X"、free は "0"）を描く
 	if card.has("ap"):
 		var apc: Color = IC.COL.ap if playable else Color("5a2a30")
+		var aps: String = str(card.get("ap_show", "X" if card.get("ap_x", false) else str(card.ap)))
 		IC.icon(self, "ap", Vector2(size.x - 18, 17), 36, apc)
-		IC.text(self, str(card.ap), Vector2(size.x - 18, 18), 19, Color.WHITE, true, 4, -1.0, IC.COL.ink)
+		IC.text(self, aps, Vector2(size.x - 18, 18), 19, Color.WHITE, true, 4, -1.0, IC.COL.ink)
 	elif card.get("type") == "unselectable":
 		IC.text(self, "常時", Vector2(size.x - 22, 16), 14, IC.COL.good, true, 4)
 	# 持ち主のタグ（ナイト／ウィッチ）：持ち主の色の斜めタグ
@@ -132,7 +139,15 @@ func _draw() -> void:
 		_draw_charge(r)
 
 
-## キーワードの札（パワー／廃棄）：絵柄の窓の左下に小さな斜めタグを縦に積む
+## 多段攻撃の回数の表示（"×2" / "×X"。多段でなければ ""）
+static func hits_label(c: Dictionary) -> String:
+	if c.get("hits_x", false):
+		return "×X"
+	var n := int(c.get("hits", 1))
+	return "×%d" % n if n > 1 else ""
+
+
+## キーワードの札（パワー／廃棄／消費）：絵柄の窓の左下に小さな斜めタグを縦に積む
 func _draw_keywords(art: Rect2) -> void:
 	var kws: Array = card.get("keywords", [])
 	if kws.is_empty():
@@ -156,6 +171,11 @@ func _draw_keywords(art: Rect2) -> void:
 				face = IC.COL.ink
 				fg = IC.COL.red
 				line = IC.COL.red
+			"consume":
+				lb = "消費"
+				face = Color("ff8a2a").darkened(0.1)
+				fg = Color.WHITE
+				line = IC.COL.ink
 			_:
 				continue
 		var w := 18.0 + 12.0 * lb.length()
@@ -224,9 +244,20 @@ static func summary(c: Dictionary) -> String:
 	if ActionList.has_keyword(c, "power"):
 		var pe: Dictionary = c.get("power_effect", {})
 		parts.append("%s+%d" % ["攻" if pe.get("status", "") == "atk_buff" else "防", int(pe.get("eff_val", 0))])
+	# 多段攻撃は「5×2」「8×X」（数字は実際のダメージ）
+	var hl := hits_label(c)
+	if hl != "" and int(c.get("power", 0)) > 0:
+		parts.append("%d%s" % [int(c.get("power_eff", c.power)), hl])
+	if c.get("kill_ap", 0) > 0:
+		parts.append("撃破AP+%d" % int(c.kill_ap))
+	match String(c.get("on_kill", "")):
+		"reuse": parts.append("撃破で再使用")
+		"reuse_free": parts.append("撃破でAP0再使用")
 	for e in ActionList.effects_of(c):
+		var xs := "×X" if e.get("x", false) else ""
 		match e.get("effect", ""):
-			"add_shield": parts.append("盾%d" % e.eff_val)
+			"add_shield": parts.append("盾%d%s" % [e.eff_val, xs])
+			"absorb_block": parts.append("盾吸収")
 			"add_ap": parts.append("AP+%d" % e.eff_val)
 			"heal": parts.append("回復%d" % e.eff_val)
 			"draw": parts.append("%d枚引く" % e.eff_val)
@@ -236,6 +267,7 @@ static func summary(c: Dictionary) -> String:
 			"extra_turn": parts.append("再行動")
 			"add_status":
 				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
-				parts.append(st.get("short", "?") if e.status in ["taunt", "fire_guard"] else "%s%d" % [st.get("short", "?"), e.eff_val])
+				var only_name: bool = e.status in ["taunt", "fire_guard"] or st.get("label", "") == "none"
+				parts.append(st.get("short", "?") if only_name else "%s%d" % [st.get("short", "?"), e.eff_val])
 	var s := " ".join(parts)
 	return s if ti == "" else "[i:%s]%s" % [ti, s]

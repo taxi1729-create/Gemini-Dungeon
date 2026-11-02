@@ -9,7 +9,7 @@ class_name ActionController
 ##   各キャラの画面上の位置は pos（Vector2）
 ##
 ## イベントの形
-##   {"target", "damage", "blocked"} / {"target", "shield"} / {"target", "status", "status_val"} / {"target", "heal"} / {"target", "ap"}
+##   {"target", "damage", "blocked", "hit_no"(何回目のヒットか 0〜), "kill"(このヒットで倒したか)} / {"target", "shield"} / {"target", "status", "status_val"} / {"target", "heal"} / {"target", "ap"}
 ##   {"target", "charge"} / {"target"(攻撃した側), "status": "fire", "reflect": true}
 ##   {"target": 使用者, "special": "draw" / "swap" / "double" / "turnabout" / "extra_turn", "val": n} … 表示側（Cont_Battle）が処理する
 
@@ -42,41 +42,66 @@ static func effective_power(user: Dictionary, action: Dictionary, allies: Array,
 	return calc_damage(user, action, t[0])
 
 
-## 予想：[{target, damage(ブロック後), kill}]
-static func preview(user: Dictionary, action: Dictionary, allies: Array, enemies: Array) -> Array:
+## 多段攻撃の回数（hits_x なら X 回）
+static func hit_count(action: Dictionary, x: int = 1) -> int:
+	if action.get("hits_x", false):
+		return maxi(0, x)
+	return maxi(1, int(action.get("hits", 1)))
+
+
+## 予想：[{target, damage(ブロック後・全ヒットの合計), kill}]。x は APX の X
+static func preview(user: Dictionary, action: Dictionary, allies: Array, enemies: Array, x: int = 1) -> Array:
 	var out: Array = []
+	var n := hit_count(action, x)
 	for t in resolve_targets(user, action.get("target", "self"), allies, enemies):
 		var ev := {"target": t}
 		if action.has("power"):
 			var dmg := calc_damage(user, action, t)
-			var after := maxi(0, dmg - int(t.get("shield", 0)))
-			ev["damage"] = after
-			ev["kill"] = after >= int(t.hp)
+			# 1 回ごとにブロックが削れていく
+			var sh := int(t.get("shield", 0))
+			var total := 0
+			for i in n:
+				var b := mini(sh, dmg)
+				sh -= b
+				total += dmg - b
+			ev["damage"] = total
+			ev["kill"] = total >= int(t.hp)
 		out.append(ev)
 	return out
 
 
-static func execute_action(user: Dictionary, action: Dictionary, allies: Array, enemies: Array) -> Array:
+## x は APX の X（hits_x の回数と、効果の "x": true の倍率に使う）
+static func execute_action(user: Dictionary, action: Dictionary, allies: Array, enemies: Array, x: int = 1) -> Array:
 	var events: Array = []
 	var targets := resolve_targets(user, action.get("target", "self"), allies, enemies)
 	var is_ally: bool = user.get("side", "ally") == "ally"
 	var friends := (allies if is_ally else enemies).filter(func(e): return e.hp > 0)
-	# ダメージ
+	# ダメージ（hits 回。1 回ごとに攻撃力・防御力・ブロックを計算）
+	var kills := 0
 	if action.has("power"):
-		for t in targets:
-			if t.hp <= 0:
-				continue
-			var dmg := calc_damage(user, action, t)
-			var blocked := mini(int(t.get("shield", 0)), dmg)
-			t["shield"] = int(t.get("shield", 0)) - blocked
-			dmg -= blocked
-			t["hp"] = maxi(0, int(t.hp) - dmg)
-			events.append({"target": t, "damage": dmg, "blocked": blocked})
-			# ファイアガード：攻撃してきた相手に火傷
-			if StatusController.has(t, "fire_guard") and user.hp > 0 and user != t:
-				var v := StatusController.val(t, "fire_guard")
-				StatusController.apply_status(user, "fire", v, v)
-				events.append({"target": user, "status": "fire", "status_val": v, "reflect": true})
+		for h in hit_count(action, x):
+			for t in targets:
+				if t.hp <= 0 or user.hp <= 0:
+					continue
+				var dmg := calc_damage(user, action, t)
+				var blocked := mini(int(t.get("shield", 0)), dmg)
+				t["shield"] = int(t.get("shield", 0)) - blocked
+				dmg -= blocked
+				t["hp"] = maxi(0, int(t.hp) - dmg)
+				var killed: bool = int(t.hp) <= 0
+				if killed:
+					kills += 1
+				events.append({"target": t, "damage": dmg, "blocked": blocked, "hit_no": h, "kill": killed})
+				# ファイアガード：攻撃してきた相手に火傷
+				if StatusController.has(t, "fire_guard") and user.hp > 0 and user != t:
+					var v := StatusController.val(t, "fire_guard")
+					StatusController.apply_status(user, "fire", v, v)
+					events.append({"target": user, "status": "fire", "status_val": v, "reflect": true, "hit_no": h})
+	# 倒した数に応じて AP（kill_ap）
+	if kills > 0 and int(action.get("kill_ap", 0)) > 0 and user.hp > 0:
+		var gain := kills * int(action.kill_ap)
+		user["ap"] = mini(int(user.get("max_ap", 10)), int(user.get("ap", 0)) + gain)
+		events.append({"target": user, "ap": gain})
 	# 効果
 	for eff in ActionList.effects_of(action):
 		var to: String = eff.get("to", "target")
@@ -89,17 +114,28 @@ static func execute_action(user: Dictionary, action: Dictionary, allies: Array, 
 		if kind in ["draw", "swap", "double", "turnabout", "extra_turn"]:
 			events.append({"target": user, "special": kind, "val": int(eff.get("eff_val", 0))})
 			continue
+		if kind == "absorb_block":
+			# 対象の敵のブロックの合計を自分のブロックに足す（敵のブロックはそのまま）
+			var total := 0
+			for t in recips:
+				if t.hp > 0:
+					total += int(t.get("shield", 0))
+			user["shield"] = int(user.get("shield", 0)) + total
+			events.append({"target": user, "shield": total})
+			continue
 		for t in recips:
 			if t.hp <= 0:
 				continue
 			var ev := {"target": t}
-			_apply_effect(user, t, eff, ev)
+			_apply_effect(user, t, eff, ev, x)
 			events.append(ev)
 	return events
 
 
-static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: Dictionary) -> void:
+static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: Dictionary, x: int = 1) -> void:
 	var v := int(eff.get("eff_val", 0))
+	if eff.get("x", false):
+		v *= x
 	match eff.get("effect", ""):
 		"add_ap":
 			t["ap"] = mini(int(t.get("max_ap", 10)), int(t.get("ap", 0)) + v)
@@ -116,12 +152,17 @@ static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: 
 			if sid == "taunt":
 				v = int(user.get("uid", 0))  # 挑発してきたキャラ
 			StatusController.apply_status(t, sid, v, turns)
+			if sid == "declare" and not t.status_effects.declare.has("hp"):
+				t.status_effects.declare["hp"] = int(t.hp)  # 宣言：この HP から減らなければ成功
 			ev["status"] = sid
-			ev["status_val"] = int(eff.get("eff_val", v)) if sid != "taunt" else 1
+			ev["status_val"] = v if sid != "taunt" else 1
 		"heal":
 			var before := int(t.hp)
 			t["hp"] = mini(int(t.max_hp), before + v)
 			ev["heal"] = int(t.hp) - before
+			# 宣言中に回復したら、判定の基準も上げる（回復分で減った HP を隠さない）
+			if StatusController.has(t, "declare") and t.status_effects.declare.has("hp"):
+				t.status_effects.declare["hp"] = int(t.status_effects.declare.hp) + int(ev.heal)
 		"set_next_action":
 			t["next_action"] = eff.get("next", "strong_attack")
 			ev["charge"] = true
@@ -136,6 +177,8 @@ static func resolve_targets(user: Dictionary, target_type: String, allies: Array
 			return [user]
 		"ally_all":
 			return friends
+		"other_ally":
+			return friends.filter(func(f): return f != user)
 		"enemy_all":
 			return foes
 		"front_enemy_single":

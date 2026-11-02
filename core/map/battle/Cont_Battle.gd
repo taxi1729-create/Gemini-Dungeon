@@ -30,6 +30,7 @@ const DIR8 := [Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1), Vector2i(-1, 1), 
 const DEADZONE := 48.0
 const CHARGE_DELAY := 0.12
 const CHARGE_TIME := 0.9
+const HIT_GAP := 0.14  # 多段攻撃のヒットの間隔（秒）
 
 var field: Node2D
 var ui: CanvasLayer
@@ -134,7 +135,7 @@ func _process(delta: float) -> void:
 	if c >= 1.0 and target is int and target == 5 and not g_cut_in:
 		g_cut_in = true
 		var sp: Dictionary = specials[current.id]
-		if int(current.ap) >= int(sp.ap):
+		if int(current.ap) >= _special_cost(sp):
 			fx.cut_in(current.id, sp.name)
 
 
@@ -525,17 +526,27 @@ func _run_turn(u: Dictionary) -> void:
 	var again := true
 	while again and u.hp > 0:
 		again = false
-		if u.side == "enemy" or not first_turn.get(u.id, false):
+		# ブロックはターン開始時に 0 に戻る（バリケード中は戻さない）
+		if (u.side == "enemy" or not first_turn.get(u.id, false)) and not StatusController.has(u, "barricade"):
 			u["shield"] = 0
 		var ticks := StatusController.trigger_start_of_turn(u)
 		var hurt := false
 		for t in ticks:
-			if t.has("damage"):
+			if t.has("declare"):
+				if t.declare:
+					fx.popup(views[u.uid], "APプラス！", ImageController.COL.good, 30)
+				else:
+					fx.popup(views[u.uid], "宣言失敗", ImageController.COL.bad, 28)
+			elif t.has("damage"):
 				fx.hit(views[t.target.uid], int(t.damage), 0, "tick")
 				hurt = true
 			elif t.has("ap_gain"):
 				u["pending_ap"] = int(u.get("pending_ap", 0)) + int(t.ap_gain)
 				fx.popup(views[u.uid], "AP+%d" % t.ap_gain, ImageController.COL.ap, 28)
+			elif t.has("reblock"):
+				fx.popup(views[u.uid], "盾+%d" % int(t.shield), ImageController.COL.shield, 28)
+			elif t.has("focus"):
+				fx.popup(views[u.uid], "必殺AP-%d" % int(t.focus), ImageController.COL.accent, 26)
 		if hurt:
 			await _wait(0.45)
 			_update_deaths({})
@@ -635,21 +646,29 @@ func _apply(user: Dictionary, action: Dictionary) -> void:
 	_refresh_all()
 
 
-## カード・スキルの実行：結果はその場で確定し（入力の先行受付のため）、演出は後追い
-func _perform(user: Dictionary, action: Dictionary) -> void:
+## カード・スキルの実行：結果はその場で確定し（入力の先行受付のため）、演出は後追い。x は APX の X。イベントを返す
+func _perform(user: Dictionary, action: Dictionary, x: int = 1) -> Array:
 	var v: GuiUnit = views[user.uid]
 	var single_target := ActionController.resolve_targets(user, action.get("target", "self"), CurrentStatus.allies, CurrentStatus.enemies)
-	var events := ActionController.execute_action(user, action, CurrentStatus.allies, CurrentStatus.enemies)
+	var events := ActionController.execute_action(user, action, CurrentStatus.allies, CurrentStatus.enemies, x)
 	_handle_specials(user, events)
+	var last_hit := 0
+	for ev in events:
+		last_hit = maxi(last_hit, int(ev.get("hit_no", 0)))
 	var show := func():
 		_show_events(events, action)
-		_update_deaths(user)
+		# 多段攻撃は最後のヒットの数字が出てから倒れる
+		if last_hit > 0:
+			get_tree().create_timer(HIT_GAP * last_hit).timeout.connect(func(): _update_deaths(user))
+		else:
+			_update_deaths(user)
 	if action.has("power") and action.get("target", "") == "front_enemy_single" and not single_target.is_empty():
 		fx.ally_attack(v, single_target[0].pos, show)
 	else:
 		fx.cast(v, show)
 	_update_targets()
 	_refresh_all()
+	return events
 
 
 ## 表示側で処理する効果（ドロー・入替・連続魔法・一転攻勢・ターンスキップ）
@@ -687,14 +706,21 @@ func _show_events(events: Array, action: Dictionary) -> void:
 		var tv: GuiUnit = views[t.uid]
 		if ev.has("damage"):
 			var kind := "slash" if action.get("target", "") in ["front_enemy_single", "front_enemy_group"] else "burst"
-			fx.hit(tv, int(ev.damage), int(ev.get("blocked", 0)), kind)
+			var hn := int(ev.get("hit_no", 0))
+			if hn > 0:
+				# 多段攻撃：ヒットごとに少しずらして数字を出す
+				var dmg := int(ev.damage)
+				var blk := int(ev.get("blocked", 0))
+				get_tree().create_timer(HIT_GAP * hn).timeout.connect(func(): fx.hit(tv, dmg, blk, kind))
+			else:
+				fx.hit(tv, int(ev.damage), int(ev.get("blocked", 0)), kind)
 		if ev.has("heal"):
 			fx.popup(tv, "+%d" % ev.heal, col.good, 34)
 		if ev.has("shield"):
 			fx.popup(tv, "盾+%d" % ev.shield, col.shield, 28)
 		if ev.has("status"):
 			var st: Dictionary = StatusEffectList.DATA.get(ev.status, {})
-			var txt: String = st.get("short", "") if ev.status in ["taunt", "double"] else "%s %d" % [st.get("short", ""), ev.status_val]
+			var txt: String = st.get("short", "") if (ev.status in ["taunt", "double"] or st.get("label", "") == "none") else "%s %d" % [st.get("short", ""), ev.status_val]
 			if ev.get("reflect", false):
 				txt = "反撃 " + txt
 			fx.popup(tv, txt, col.good if st.get("good", false) else Color("ffa060"), 26)
@@ -928,11 +954,11 @@ func _action_for(num) -> Dictionary:
 				return {}
 			if c.get("type", "") == "unselectable":
 				return {"title": c.name, "desc": DeckController.effect_text(current, c), "kind": "none"}
-			return {"title": c.name, "desc": _short(c), "action": c, "kind": "card", "slot": slot, "ap": int(c.get("ap", 0))}
+			return _card_info(c, slot, "card", _short(c))
 		9:
 			if dc.hold == null:
 				return {"title": "保留", "desc": "カードへ弾き、離さず9へ滑らせると保留（AP0）", "kind": "none"}
-			return {"title": dc.hold.name, "desc": "保留カードを使う　" + _short(dc.hold), "action": dc.hold, "kind": "hold_play", "ap": int(dc.hold.get("ap", 0))}
+			return _card_info(dc.hold, -1, "hold_play", "保留カードを使う　" + _short(dc.hold))
 		7:
 			return {"title": "入替", "desc": "左右の位置を入れ替える（AP1）。敵の矢印の色で狙われる側がわかる", "action": ActionList.SWAP, "kind": "swap", "ap": 1}
 		3:
@@ -940,15 +966,62 @@ func _action_for(num) -> Dictionary:
 			return {"title": s.name, "desc": _short(s), "action": s, "kind": "unique", "ap": int(s.ap)}
 		5:
 			var s: Dictionary = specials[current.id]
-			return {"title": "必殺", "desc": "%s　%s（長押し）" % [s.name, _short(s)], "action": s, "kind": "special", "ap": int(s.ap)}
+			return {"title": "必殺", "desc": "%s　%s（長押し）" % [s.name, _short(s)], "action": s, "kind": "special", "ap": _special_cost(s)}
 	return {}
+
+
+## カード（手札・保留）の操作情報。ap = 払う AP、need = 使うのに必要な AP、no_consume = 消費するカードが無い
+func _card_info(c: Dictionary, slot: int, kind: String, desc: String) -> Dictionary:
+	var dc: DeckController = deck_controllers[current.id]
+	var cost := _card_cost(c)
+	var need := cost
+	if c.get("ap_x", false) and not c.get("free", false):
+		need = maxi(1, int(c.get("ap", 1)))
+	var no_consume: bool = ActionList.has_keyword(c, "consume") and not dc.has_consume_target(slot)
+	return {"title": c.name, "desc": desc, "action": c, "kind": kind, "slot": slot, "ap": cost, "need": need, "no_consume": no_consume}
+
+
+## カードを使う時に払う AP（free は 0、APX は今の AP 全部）
+func _card_cost(c: Dictionary) -> int:
+	if c.get("free", false):
+		return 0
+	if c.get("ap_x", false):
+		return int(current.get("ap", 0))
+	return int(c.get("ap", 0))
+
+
+## 必殺技の AP（精神統一中は減る。0 未満にしない）
+func _special_cost(sp: Dictionary) -> int:
+	return maxi(0, int(sp.get("ap", 0)) - StatusController.focus_cut(current))
+
+
+## カードを今使えないわけ（"" = 使える / "ap" = AP不足 / "consume" = 消費するカードがない）。slot = -1 は保留枠
+func _card_block(c: Dictionary, slot: int) -> String:
+	if c.get("type", "") == "unselectable":
+		return "unselectable"
+	var info := _card_info(c, slot, "", "")
+	if int(info.need) > int(current.get("ap", 0)):
+		return "ap"
+	if info.no_consume:
+		return "consume"
+	return ""
+
+
+## AP の表示（APX は "X"、free は "0"）
+func _ap_label(a: Dictionary) -> String:
+	if a.get("free", false):
+		return "0"
+	if a.get("ap_x", false):
+		return "X"
+	return str(a.get("ap", 0))
 
 
 func _short(a: Dictionary) -> String:
 	var tgt := DeckController.target_text(a.get("target", ""))
 	var s := "%s：%s" % [tgt, DeckController.effect_text(current, a)] if tgt != "" else DeckController.effect_text(current, a)
 	if a.has("ap"):
-		s += "（AP%d）" % a.ap
+		var is_sp: bool = current.get("side", "") == "ally" and specials.get(current.get("id", ""), {}).get("id", "-") == a.get("id", "")
+		s += "（AP%s）" % (str(_special_cost(a)) if is_sp else _ap_label(a))
 	return s
 
 
@@ -957,11 +1030,13 @@ func _preview_action(num) -> void:
 	var info := _action_for(num)
 	if info.is_empty():
 		return
-	var lack := int(info.get("ap", 0)) > int(current.ap)
+	var lack_ap := int(info.get("need", info.get("ap", 0))) > int(current.ap)
+	var lack_cons: bool = info.get("no_consume", false)
+	var lack := lack_ap or lack_cons
 	_show_desc_for(num)
 	log_label.visible = false
 	strip_title = info.title
-	strip_text = info.desc + ("　AP不足" if lack else "")
+	strip_text = info.desc + ("　AP不足" if lack_ap else ("　消費するカードがない" if lack_cons else ""))
 	strip_col = ImageController.COL.bad if lack else ImageController.COL.accent
 	strip.queue_redraw()
 	var w = _widget_of(num if not (num is String and num.begins_with("hold:")) else 9)
@@ -975,23 +1050,30 @@ func _preview_action(num) -> void:
 			for a in CurrentStatus.allies:
 				views[a.uid].preview = {"on": true, "label": "→右" if int(a.lane) == 0 else "→左"}
 			return
-		for ev in ActionController.preview(current, act, CurrentStatus.allies, CurrentStatus.enemies):
+		var x := int(current.ap) if (act.get("ap_x", false) and not act.get("free", false)) else 1
+		for ev in ActionController.preview(current, act, CurrentStatus.allies, CurrentStatus.enemies, x):
 			var p := {"on": true}
 			if ev.has("damage"):
 				p["damage"] = ev.damage
 				p["kill"] = ev.kill
 			else:
-				p["label"] = _effect_label(act)
+				p["label"] = _effect_label(act, x)
 			views[ev.target.uid].preview = p
 
 
-func _effect_label(a: Dictionary) -> String:
+func _effect_label(a: Dictionary, x: int = 1) -> String:
 	var effs := ActionList.effects_of(a)
 	if effs.is_empty():
 		return ""
 	var e: Dictionary = effs[0]
+	var v := int(e.get("eff_val", 0)) * (x if e.get("x", false) else 1)
 	match e.get("effect", ""):
-		"add_shield": return "盾+%d" % e.eff_val
+		"add_shield": return "盾+%d" % v
+		"absorb_block":
+			var total := 0
+			for t in ActionController.resolve_targets(current, a.get("target", "self"), CurrentStatus.allies, CurrentStatus.enemies):
+				total += int(t.get("shield", 0))
+			return "盾吸収+%d" % total
 		"add_ap": return "AP+%d" % e.eff_val
 		"heal": return "回復%d" % e.eff_val
 		"draw": return "%d枚引く" % e.eff_val
@@ -999,7 +1081,7 @@ func _effect_label(a: Dictionary) -> String:
 		"double": return "連続魔法"
 		"add_status":
 			var st: Dictionary = StatusEffectList.DATA[e.status]
-			return st.short if e.status in ["taunt"] else "%s%d" % [st.short, e.eff_val]
+			return st.short if (e.status in ["taunt"] or st.get("label", "") == "none") else "%s%d" % [st.short, v]
 		"turnabout": return "補充"
 		"extra_turn": return "再行動"
 	return ""
@@ -1033,23 +1115,19 @@ func _execute(num) -> void:
 	if info.is_empty() or info.kind == "none":
 		return
 	var ap := int(info.get("ap", 0))
-	if ap > int(current.ap):
+	if int(info.get("need", ap)) > int(current.ap):
 		_log("APが足りない！")
+		AnimationController.shake(pad, 6)
+		return
+	if info.get("no_consume", false):
+		_log("消費するカードがない")
 		AnimationController.shake(pad, 6)
 		return
 	var dc: DeckController = deck_controllers[current.id]
 	var dir := _flick_dir(num)
 	match info.kind:
-		"card":
-			current["ap"] = int(current.ap) - ap
-			_fly_card(hand_cards[info.slot], dir)
-			dc.play_and_discard(info.slot)
-			_play_card(info.action)
-		"hold_play":
-			current["ap"] = int(current.ap) - ap
-			_fly_card(hold_card, dir)
-			dc.play_hold()
-			_play_card(info.action)
+		"card", "hold_play":
+			_use_card(info, dc, dir)
 		"hold":
 			var src: GuiCard = hand_cards[info.slot]
 			var moving: Dictionary = dc.hand[info.slot]
@@ -1072,7 +1150,7 @@ func _execute(num) -> void:
 			_log("%s！" % info.action.name)
 			_play(info.action)
 		"special":
-			current["ap"] = int(current.ap) - ap
+			current["ap"] = maxi(0, int(current.ap) - ap)
 			_log("必殺！ %s！" % info.action.name)
 			fx.shake(10.0)
 			_play(info.action)
@@ -1094,25 +1172,66 @@ func _flick_dir(num) -> Vector2:
 	return d.normalized() if d.length() > 1 else Vector2.UP
 
 
-## カード（手札・保留）を使う。連続魔法がかかっていれば 2 回発動する
-func _play_card(card: Dictionary) -> void:
+## 手札・保留のカードを使う：AP（APX は全部）を払い、消費、発動、倒したらもう一度使える
+func _use_card(info: Dictionary, dc: DeckController, dir: Vector2) -> void:
+	var c: Dictionary = info.action
+	var slot := int(info.slot)  # -1 = 保留枠
+	var x := 1
+	if c.get("ap_x", false) and not c.get("free", false):
+		x = int(current.ap)
+	current["ap"] = maxi(0, int(current.ap) - int(info.ap))
+	# 消費：ほかの手札からランダムに 1 枚を捨札へ
+	if ActionList.has_keyword(c, "consume"):
+		var cs := dc.consume_random(slot)
+		if cs >= 0:
+			var gone: GuiCard = hand_cards[cs]
+			_fly_card(gone, Vector2(0, 1))
+			gone.visible = false
+			var gone_card: Dictionary = dc.discard_pile.back()
+			_log("消費：%sを捨てた" % gone_card.get("name", ""))
+	if slot >= 0:
+		_fly_card(hand_cards[slot], dir)
+		dc.play_and_discard(slot)
+	else:
+		_fly_card(hold_card, dir)
+		dc.play_hold()
+	var kills := _play_card(c, x)
+	# 倒したら捨札へ行かず元の枠に戻る（reuse_free はこのターンの間 AP 0）
+	var ok_kind: String = c.get("on_kill", "")
+	if kills > 0 and ok_kind in ["reuse", "reuse_free"]:
+		var back := dc.return_card(c, slot)
+		if back != -2:
+			if ok_kind == "reuse_free":
+				c["free"] = true
+			fx.popup(views[current.uid], "もう一度！" if ok_kind == "reuse" else "もう一度！ AP0", ImageController.COL.accent, 30)
+			_refresh_all()
+			_pop_in(hand_cards[back] if back >= 0 else hold_card, 0.25)
+
+
+## カード（手札・保留）を使う。連続魔法がかかっていれば 2 回発動する（X は 2 回とも同じ）。倒した敵の数を返す
+func _play_card(card: Dictionary, x: int = 1) -> int:
 	var times := 1
 	if StatusController.has(current, "double") and not ActionList.effects_of(card).any(func(e): return e.get("effect", "") == "double"):
 		StatusController.remove(current, "double")
 		times = 2
 		fx.popup(views[current.uid], "2回発動！", ImageController.COL.accent, 30)
+	var kills := 0
 	for i in times:
 		if phase != "player":
 			break
-		_play(card)
+		for ev in _play(card, x):
+			if ev.get("kill", false):
+				kills += 1
+	return kills
 
 
-## カード・スキル・必殺技・アイテムの効果
-func _play(act: Dictionary) -> void:
-	_perform(current, act)
+## カード・スキル・必殺技・アイテムの効果。イベントを返す
+func _play(act: Dictionary, x: int = 1) -> Array:
+	var events := _perform(current, act, x)
 	if _all_dead(CurrentStatus.enemies) or current.hp <= 0:
 		phase = "busy"
 		turn_done.emit.call_deferred()
+	return events
 
 
 func _draw_more(dc: DeckController, n: int, only_slots: Array = []) -> void:
@@ -1337,13 +1456,13 @@ func _refresh_all() -> void:
 		if c != null:
 			_set_eff(c)
 			cv.set_card(c)
-			cv.playable = c.get("type", "") != "unselectable" and int(current.ap) >= int(c.get("ap", 0))
+			cv.playable = _card_block(c, i) == ""
 			cv.queue_redraw()
 	hold_card.visible = dc != null and dc.hold != null
 	if hold_card.visible:
 		_set_eff(dc.hold)
 		hold_card.set_card(dc.hold)
-		hold_card.playable = int(current.ap) >= int(dc.hold.get("ap", 0))
+		hold_card.playable = _card_block(dc.hold, -1) == ""
 	for i in item_slots.size():
 		item_slots[i].set_item(Inventory.items[i] if i < Inventory.items.size() else "")
 	if is_player:
@@ -1355,9 +1474,9 @@ func _refresh_all() -> void:
 		var sp: Dictionary = specials[current.id]
 		btn.special.title = sp.name
 		btn.special.icon_kind = sp.art
-		btn.special.ap_cost = int(sp.ap)
+		btn.special.ap_cost = _special_cost(sp)  # 精神統一中は減った値
 		btn.special.subtitle = "長押し"
-		btn.special.dimmed = int(current.ap) < int(sp.ap)
+		btn.special.dimmed = int(current.ap) < _special_cost(sp)
 		btn.swap.dimmed = int(current.ap) < 1
 		pad.modulate.a = 1.0
 	elif phase != "over":
@@ -1370,6 +1489,9 @@ func _refresh_all() -> void:
 
 ## カードに「実際のダメージ」を書き込む（自分の攻撃力と、主な対象の防御力を反映）
 func _set_eff(c: Dictionary) -> void:
+	# 右上の AP の表示（通常は数字、APX は "X"、このターン AP 0 なら "0"）
+	if c.has("ap") or c.get("free", false):
+		c["ap_show"] = _ap_label(c)
 	if c.has("power"):
 		c["power_eff"] = ActionController.effective_power(current, c, CurrentStatus.allies, CurrentStatus.enemies)
 	else:
@@ -1396,7 +1518,7 @@ func _autoplay_turn() -> void:
 		var dc: DeckController = deck_controllers[current.id]
 		var done := false
 		var sp: Dictionary = specials[current.id]
-		if int(current.ap) >= int(sp.ap) and sp.id != "turn_skip" and guard == 1 and randf() < 0.5:
+		if int(current.ap) >= _special_cost(sp) and sp.id != "turn_skip" and guard == 1 and randf() < 0.5:
 			_execute(5)
 			continue
 		if guard == 2 and dc.hand[0] != null and randf() < 0.3:
@@ -1410,11 +1532,11 @@ func _autoplay_turn() -> void:
 			continue
 		for i in hand_cards.size():
 			var c = dc.hand[i]
-			if c != null and c.get("type", "") != "unselectable" and int(current.ap) >= int(c.get("ap", 0)):
+			if c != null and _card_block(c, i) == "":
 				_execute(SLOT_NUM[i])
 				done = true
 				break
-		if not done and dc.hold != null and int(current.ap) >= int(dc.hold.get("ap", 0)):
+		if not done and dc.hold != null and _card_block(dc.hold, -1) == "":
 			_execute(9)
 			done = true
 		if not done:

@@ -522,6 +522,17 @@ const ICON_DEFAULT = {
 	"tgt_enemy_all": Color("ff4a4a"), "tgt_self": Color("f7f5f0"), "tgt_ally_all": Color("f7f5f0"),
 	# キーワード（パワー／廃棄）
 	"kw_power": Color("b88cff"), "kw_exhaust": Color("e8213a"),
+	# 5回目の追加：カードの絵柄（ナイト）
+	"c_chop": Color("e6eef6"), "c_flurry": Color("ffb03a"), "c_rampart": Color("b9c2cc"), "c_parry": Color("4f86c6"),
+	"c_focus": Color("6fe3ff"), "c_barricade": Color("c9773d"), "c_dance": Color("e6eef6"), "c_declare": Color("e8213a"),
+	"c_holy": Color("ffd84a"), "c_mushin": Color("ff3048"),
+	# 5回目の追加：カードの絵柄（ウィッチ）
+	"c_ap_pass": Color("b88cff"), "c_golem": Color("a8957e"), "c_reblock": Color("4f86c6"), "c_drain": Color("e8484a"),
+	"c_absorb": Color("c79bff"), "c_quake": Color("c9935a"), "c_absorb_block": Color("4f86c6"), "c_energy": Color("ffd84a"),
+	"c_inferno": Color("ff5a2a"), "c_overload": Color("c79bff"),
+	# 5回目の追加：状態・キーワード・対象
+	"st_barricade": Color("c9773d"), "st_focus": Color("6fe3ff"), "st_declare": Color("e8213a"), "st_reblock": Color("4f86c6"),
+	"kw_consume": Color("ff8a2a"), "kw_apx": Color("b88cff"), "tgt_ally_other": Color("f7f5f0"),
 }
 
 
@@ -679,8 +690,472 @@ func _icon_ext(ci: CanvasItem, kind: String, k: Color, m: Transform2D) -> bool:
 		"kw_power": _i_kw_power(ci, k)
 		"kw_exhaust": _i_kw_exhaust(ci, k)
 		_:
+			return _icon_ext5(ci, kind, k, m)
+	return true
+
+
+## 5回目に追加したアイコン（新カード 20 枚の絵柄・状態 4 種・キーワード 2 種・対象 1 種）
+func _icon_ext5(ci: CanvasItem, kind: String, k: Color, m: Transform2D) -> bool:
+	match kind:
+		# カードの絵柄（ナイト）
+		"c_chop": _i_c_chop(ci, k, m)
+		"c_flurry": _i_c_flurry(ci, k)
+		"c_rampart": _i_c_rampart(ci, k)
+		"c_parry": _i_c_parry(ci, k, m)
+		"c_focus": _i_c_focus(ci, k)
+		"c_barricade": _i_c_barricade(ci, k, m)
+		"c_dance": _i_c_dance(ci, k)
+		"c_declare": _i_c_declare(ci, k)
+		"c_holy": _i_c_holy(ci, k, m)
+		"c_mushin": _i_c_mushin(ci, k)
+		# カードの絵柄（ウィッチ）
+		"c_ap_pass": _i_c_ap_pass(ci, k, m)
+		"c_golem": _i_c_golem(ci, k)
+		"c_reblock": _i_c_reblock(ci, k, m)
+		"c_drain": _i_c_drain(ci, k, m)
+		"c_absorb": _i_c_absorb(ci, k, m)
+		"c_quake": _i_c_quake(ci, k)
+		"c_absorb_block": _i_c_absorb_block(ci, k, m)
+		"c_energy": _i_c_energy(ci, k, m)
+		"c_inferno": _i_c_inferno(ci, k, m)
+		"c_overload": _i_c_overload(ci, k)
+		# 状態（小さく出るので太い形だけ）
+		"st_barricade": _i_st_barricade(ci, k)
+		"st_focus": _i_st_focus(ci, k)
+		"st_declare": _i_st_declare(ci, k)
+		"st_reblock": _i_st_reblock(ci, k, m)
+		# キーワード
+		"kw_consume": _i_kw_consume(ci, k)
+		"kw_apx": _i_kw_apx(ci, k, m)
+		# 対象
+		"tgt_ally_other": _i_tgt_ally_other(ci, k)
+		_:
 			return false
 	return true
+
+
+# ------------------------------------------------------------
+# 5回目の追加アイコンの部品
+# ------------------------------------------------------------
+
+## 黒い縁付きの多角形（縁 → 面）
+func _ink_poly(ci: CanvasItem, poly: PackedVector2Array, k: Color, o: float = 0.05) -> void:
+	var g: Array = Geometry2D.offset_polygon(poly, o, Geometry2D.JOIN_MITER)
+	if not g.is_empty():
+		ci.draw_colored_polygon(g[0], COL.ink)
+	ci.draw_colored_polygon(poly, k)
+
+
+## 斬撃の筋（a→b の細長い三日月形）。下に赤、上に k の 2 層で描く
+func _slash_streak(ci: CanvasItem, a: Vector2, b: Vector2, w: float, k: Color, under: Color = COL.red) -> void:
+	var n := (b - a).normalized().orthogonal()
+	var mid := (a + b) / 2.0
+	_ink_poly(ci, PackedVector2Array([a, mid + n * w * 1.5, b, mid - n * w * 0.2]), under, 0.035)
+	ci.draw_colored_polygon(PackedVector2Array([a, mid + n * w, b, mid]), k)
+
+
+## 黒い縁付きの矢印（from → to）
+func _ink_arrow(ci: CanvasItem, from: Vector2, to: Vector2, k: Color, w: float) -> void:
+	var d := (to - from).normalized()
+	var n := d.orthogonal()
+	ci.draw_line(from, to - d * 0.12, COL.ink, w + 0.08, true)
+	_ink_poly(ci, PackedVector2Array([to + d * 0.03, to - d * 0.22 + n * 0.16, to - d * 0.22 - n * 0.16]), k, 0.04)
+	ci.draw_line(from, to - d * 0.14, k, w, true)
+
+
+## 円弧の矢印（中心 c、半径 r、a0 → a1 へ回る。先に矢じり）
+func _arc_arrow(ci: CanvasItem, c: Vector2, r: float, a0: float, a1: float, k: Color, w: float) -> void:
+	ci.draw_arc(c, r, a0, a1, 24, COL.ink, w + 0.07, true)
+	ci.draw_arc(c, r, a0, a1, 24, k, w, true)
+	var e := c + Vector2(cos(a1), sin(a1)) * r
+	var sgn := 1.0 if a1 > a0 else -1.0
+	var d := Vector2(-sin(a1), cos(a1)) * sgn  # 弧の進む向き
+	var n := d.orthogonal()
+	_ink_poly(ci, PackedVector2Array([e + d * 0.2, e + n * (w + 0.09), e - n * (w + 0.09)]), k, 0.04)
+
+
+## 刃（根元 base から ang の向きへ長さ len の剣身）
+func _blade(ci: CanvasItem, base: Vector2, ang: float, ln: float, wd: float, k: Color) -> void:
+	var p := _rot([[0, -ln], [wd, -ln + wd * 1.4], [wd, 0], [-wd, 0], [-wd, -ln + wd * 1.4]], ang, base)
+	_ink_poly(ci, p, k, 0.04)
+	ci.draw_colored_polygon(_rot([[0, -ln + 0.03], [wd * 0.35, -ln + wd * 1.4], [wd * 0.35, -0.02], [0, -0.02]], ang, base), COL.paper)
+
+
+## 切り刻み：剣と、獣の爪跡のような 3 本の斬撃
+func _i_c_chop(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	_sub(ci, m, Vector2(-0.14, 0.06), 0.82)
+	_i_sword(ci, k)
+	_sub(ci, m, Vector2.ZERO, 1.0)
+	for i in 3:
+		var o := Vector2(-0.12 + i * 0.17, 0.0)
+		_slash_streak(ci, o + Vector2(0.02, -0.44), o + Vector2(0.24, 0.42), 0.06, COL.paper)
+
+
+## 乱撃：続けて当たる 2 つの衝撃（大小の爆発に斬撃）
+func _i_c_flurry(ci: CanvasItem, k: Color) -> void:
+	for v in [[-0.16, -0.14, 0.3], [0.2, 0.18, 0.24]]:
+		var c := Vector2(v[0], v[1])
+		var r: float = v[2]
+		_ink_poly(ci, burst_pts(c, r, r * 0.5, 9, int(r * 10.0)), k, 0.04)
+		ci.draw_colored_polygon(burst_pts(c, r * 0.55, r * 0.28, 9, 3), Color("ffe08a"))
+		_slash_streak(ci, c + Vector2(-r * 1.15, r * 0.7), c + Vector2(r * 1.15, -r * 0.7), 0.05, COL.paper)
+
+
+## 城壁：凸凹の付いた石の壁と門
+func _i_c_rampart(ci: CanvasItem, k: Color) -> void:
+	var wall := pts([[-0.46, -0.22], [-0.3, -0.22], [-0.3, -0.06], [-0.16, -0.06], [-0.16, -0.22], [0.08, -0.22], [0.08, -0.06],
+			[0.22, -0.06], [0.22, -0.22], [0.46, -0.22], [0.46, 0.44], [-0.46, 0.44]])
+	# 塔（左右の高い所）
+	_ink_poly(ci, pts([[-0.46, -0.44], [-0.24, -0.44], [-0.24, 0.44], [-0.46, 0.44]]), k.darkened(0.1), 0.05)
+	_ink_poly(ci, pts([[0.24, -0.44], [0.46, -0.44], [0.46, 0.44], [0.24, 0.44]]), k.darkened(0.1), 0.05)
+	_ink_poly(ci, wall, k, 0.05)
+	# 石積みの目地
+	for row in 3:
+		var y := 0.02 + row * 0.14
+		ci.draw_line(Vector2(-0.46, y), Vector2(0.46, y), k.darkened(0.45), 0.03)
+		var off := 0.0 if row % 2 == 0 else 0.1
+		for i in 5:
+			var x := -0.38 + off + i * 0.2
+			ci.draw_line(Vector2(x, y), Vector2(x, y + 0.14), k.darkened(0.45), 0.03)
+	# 塔の上の凸凹
+	for x in [-0.46, -0.31, 0.24, 0.39]:
+		ci.draw_rect(Rect2(x, -0.5, 0.07, 0.08), k.darkened(0.1))
+	# 門（黒いアーチ）
+	var gate := PackedVector2Array()
+	for i in 9:
+		var a := PI + PI * i / 8.0
+		gate.append(Vector2(cos(a) * 0.12, -0.0 + sin(a) * 0.12 + 0.2))
+	gate.append(Vector2(0.12, 0.44))
+	gate.append(Vector2(-0.12, 0.44))
+	ci.draw_colored_polygon(gate, COL.ink)
+	ci.draw_colored_polygon(ell(Vector2(-0.37, -0.3), 0.04, 0.07), Color(1, 1, 1, 0.5))
+
+
+## 受け流し：盾に当たった攻撃が、矢印になって逸れていく
+func _i_c_parry(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	_sub(ci, m, Vector2(-0.16, 0.06), 0.78)
+	_i_shield(ci, k)
+	_sub(ci, m, Vector2.ZERO, 1.0)
+	# 飛んでくる攻撃（白）→ 盾で跳ね返って右下へ
+	_ink_arrow(ci, Vector2(0.48, -0.46), Vector2(0.1, -0.06), COL.paper, 0.07)
+	_ink_arrow(ci, Vector2(0.12, -0.02), Vector2(0.44, 0.42), COL.red, 0.08)
+	_sparkle(ci, Vector2(0.08, -0.06), 0.2, Color("ffe08a"))
+
+
+## 精神統一：閉じた目と、額に光る点。周りに集中の輪
+func _i_c_focus(ci: CanvasItem, k: Color) -> void:
+	for i in 3:
+		ci.draw_arc(Vector2.ZERO, 0.24 + i * 0.1, 0, TAU, 32, Color(k, 0.85 - i * 0.25), 0.04, true)
+	glow(ci, Vector2(0, -0.12), 0.24, Color(k, 0.9), 5)
+	ci.draw_circle(Vector2(0, -0.12), 0.07, COL.paper)
+	# 閉じた目（下向きの弧＋まつ毛）
+	ci.draw_arc(Vector2(0, 0.02), 0.2, PI * 0.12, PI * 0.88, 14, COL.ink, 0.12, true)
+	ci.draw_arc(Vector2(0, 0.02), 0.2, PI * 0.12, PI * 0.88, 14, COL.paper, 0.06, true)
+	for a in [0.32, 0.5, 0.68]:
+		var p := Vector2(cos(PI * a), sin(PI * a)) * 0.2 + Vector2(0, 0.02)
+		ci.draw_line(p, p + Vector2(cos(PI * a), sin(PI * a)) * 0.1, COL.paper, 0.04, true)
+
+
+## 木の柵（横板＋交差した尖った杭）。バリケードのカードと状態で共通
+func _barricade_shape(ci: CanvasItem, k: Color, sc: float) -> void:
+	var dk := k.darkened(0.35)
+	_ink_poly(ci, pts([[-0.48 * sc, -0.06 * sc], [0.48 * sc, -0.06 * sc], [0.48 * sc, 0.1 * sc], [-0.48 * sc, 0.1 * sc]]), dk, 0.05)
+	for a in [PI / 4, -PI / 4]:
+		var stake := _rot([[0, -0.6 * sc], [0.09 * sc, -0.46 * sc], [0.09 * sc, 0.52 * sc], [-0.09 * sc, 0.52 * sc], [-0.09 * sc, -0.46 * sc]], a)
+		_ink_poly(ci, stake, k, 0.05)
+		ci.draw_colored_polygon(_rot([[0, -0.6 * sc], [0.09 * sc, -0.46 * sc], [-0.09 * sc, -0.46 * sc]], a), COL.paper)
+	ci.draw_circle(Vector2.ZERO, 0.06 * sc, COL.ink)
+
+
+## バリケード：消えずに残る盾（後ろ）と木の柵
+func _i_c_barricade(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	_sub(ci, m, Vector2(0, -0.06), 0.9)
+	_i_shield(ci, ICON_DEFAULT.shield)
+	_sub(ci, m, Vector2(0, 0.08), 0.86)
+	_barricade_shape(ci, k, 1.0)
+	_sub(ci, m, Vector2.ZERO, 1.0)
+
+
+## 演舞：円を描いて舞う 3 本の剣と赤い軌跡
+func _i_c_dance(ci: CanvasItem, k: Color) -> void:
+	ci.draw_arc(Vector2.ZERO, 0.42, 0, TAU, 40, Color(COL.red, 0.55), 0.1, true)
+	for i in 3:
+		var a := TAU * i / 3.0 - PI / 2
+		var a0 := a + 0.5
+		ci.draw_arc(Vector2.ZERO, 0.42, a0, a0 + 1.2, 14, COL.red, 0.07, true)
+		# 剣（柄は中心寄り、切っ先は外向き。刃は少し傾けて回転の勢いを出す）
+		var d := Vector2(cos(a + 0.35), sin(a + 0.35))
+		var base := d * 0.16
+		_blade(ci, base, a + 0.35 + PI / 2, 0.34, 0.06, k.darkened(0.08))
+		var n := d.orthogonal()
+		ci.draw_line(base - n * 0.11, base + n * 0.11, COL.ink, 0.09)
+		ci.draw_line(base - n * 0.1, base + n * 0.1, ICON_DEFAULT.star, 0.05)
+		ci.draw_line(base, base - d * 0.12, Color("7a4a2a"), 0.05)
+	ci.draw_circle(Vector2.ZERO, 0.06, COL.red)
+
+
+## 旗（竿＋赤い旗に白い星）。宣言のカードと状態で共通
+func _flag_shape(ci: CanvasItem, k: Color, bold: bool) -> void:
+	var pw := 0.1 if bold else 0.07
+	ci.draw_line(Vector2(-0.3, -0.46), Vector2(-0.3, 0.5), COL.ink, pw + 0.08)
+	ci.draw_line(Vector2(-0.3, -0.44), Vector2(-0.3, 0.5), Color("dfe6ee"), pw)
+	var flag := pts([[-0.26, -0.42], [0.04, -0.48], [0.24, -0.38], [0.46, -0.42], [0.44, 0.02], [0.22, 0.06], [0.02, -0.04], [-0.26, 0.02]])
+	_ink_poly(ci, flag, k, 0.05)
+	ci.draw_colored_polygon(star_pts(Vector2(0.1, -0.2), 0.15 if bold else 0.13, 0.06), COL.paper)
+	ci.draw_circle(Vector2(-0.3, -0.48), 0.06, ICON_DEFAULT.star)
+
+
+## 宣言：旗を立てて、後ろに放射の光
+func _i_c_declare(ci: CanvasItem, k: Color) -> void:
+	for i in 10:
+		var a := -PI * 0.95 + PI * 0.9 * i / 9.0
+		var d := Vector2(cos(a), sin(a))
+		ci.draw_line(Vector2(0.08, -0.2) + d * 0.36, Vector2(0.08, -0.2) + d * 0.54, Color(ICON_DEFAULT.star, 0.8), 0.04)
+	_flag_shape(ci, k, false)
+	# 足元の台
+	_ink_poly(ci, pts([[-0.46, 0.38], [-0.14, 0.38], [-0.1, 0.5], [-0.5, 0.5]]), COL.steel.lightened(0.3), 0.04)
+
+
+## 聖なる加護：金色の光の輪の下に白い盾、後ろに光の筋
+func _i_c_holy(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	glow(ci, Vector2(0, 0.04), 0.5, Color(k, 0.8), 6)
+	for i in 12:
+		var a := TAU * i / 12.0
+		var d := Vector2(cos(a), sin(a))
+		ci.draw_line(Vector2(0, 0.06) + d * 0.3, Vector2(0, 0.06) + d * 0.5, Color(k, 0.75), 0.04)
+	_sub(ci, m, Vector2(0, 0.1), 0.78)
+	_i_shield(ci, Color("e9edf2"))
+	_sub(ci, m, Vector2.ZERO, 1.0)
+	ci.draw_colored_polygon(pts([[-0.035, -0.12], [0.035, -0.12], [0.035, 0.0], [0.12, 0.0], [0.12, 0.07], [0.035, 0.07], [0.035, 0.3],
+			[-0.035, 0.3], [-0.035, 0.07], [-0.12, 0.07], [-0.12, 0.0], [-0.035, 0.0]]), k.darkened(0.15))
+	# 光の輪
+	var halo := ell(Vector2(0, -0.42), 0.24, 0.07, 24)
+	halo.append(halo[0])
+	ci.draw_polyline(halo, COL.ink, 0.11, true)
+	ci.draw_polyline(halo, k, 0.06, true)
+
+
+## 無心乱舞：赤い爆発の上を、あちこちから走る白い斬撃
+func _i_c_mushin(ci: CanvasItem, k: Color) -> void:
+	_ink_poly(ci, burst_pts(Vector2.ZERO, 0.5, 0.3, 14, 11), k.darkened(0.25), 0.04)
+	ci.draw_colored_polygon(burst_pts(Vector2.ZERO, 0.32, 0.18, 14, 13), k.lightened(0.2))
+	for v in [[-0.46, -0.2, 0.42, 0.06], [-0.3, 0.42, 0.22, -0.46], [-0.14, -0.46, 0.4, 0.36], [0.46, -0.22, -0.4, 0.26], [-0.46, 0.14, 0.46, -0.4]]:
+		_slash_streak(ci, Vector2(v[0], v[1]), Vector2(v[2], v[3]), 0.04, COL.paper, COL.ink)
+
+
+## APパサー：左の味方から右の味方へ、AP の結晶を投げ渡す
+func _i_c_ap_pass(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	_pawn(ci, Vector2(-0.3, 0.06), 0.44, COL.paper.darkened(0.3), false)
+	_pawn(ci, Vector2(0.3, 0.06), 0.44, COL.paper, false)
+	ci.draw_arc(Vector2(0, 0.0), 0.32, -PI * 0.92, -PI * 0.08, 20, COL.ink, 0.1, true)
+	ci.draw_arc(Vector2(0, 0.0), 0.32, -PI * 0.92, -PI * 0.08, 20, Color(k, 0.9), 0.05, true)
+	_sub(ci, m, Vector2(0.0, -0.32), 0.44)
+	ci.draw_colored_polygon(pts([[0, -0.58], [0.46, -0.1], [0, 0.58], [-0.46, -0.1]]), COL.ink)
+	_i_ap(ci, k)
+	_sub(ci, m, Vector2.ZERO, 1.0)
+	_ink_poly(ci, PackedVector2Array([Vector2(0.36, -0.02), Vector2(0.2, -0.12), Vector2(0.38, -0.2)]), k, 0.03)
+
+
+## ゴーレム：角ばった石の頭に光る目
+func _i_c_golem(ci: CanvasItem, k: Color) -> void:
+	# 肩
+	_ink_poly(ci, pts([[-0.48, 0.2], [-0.3, 0.08], [0.3, 0.08], [0.48, 0.2], [0.5, 0.48], [-0.5, 0.48]]), k.darkened(0.3), 0.05)
+	var head := pts([[-0.26, -0.44], [0.26, -0.44], [0.34, -0.3], [0.32, 0.18], [0.2, 0.3], [-0.2, 0.3], [-0.32, 0.18], [-0.34, -0.3]])
+	_ink_poly(ci, head, k, 0.05)
+	# 光の当たる面
+	ci.draw_colored_polygon(pts([[-0.26, -0.44], [0.0, -0.44], [-0.06, -0.3], [-0.34, -0.3]]), k.lightened(0.25))
+	# 眉（岩のでっぱり）と目
+	ci.draw_rect(Rect2(-0.3, -0.16, 0.6, 0.08), k.darkened(0.45))
+	for sx in [-1.0, 1.0]:
+		ci.draw_rect(Rect2(sx * 0.15 - 0.07, -0.07, 0.14, 0.08), COL.ink)
+		ci.draw_rect(Rect2(sx * 0.15 - 0.05, -0.06, 0.1, 0.05), Color("6fe3ff"))
+	# 口とひび
+	ci.draw_rect(Rect2(-0.12, 0.12, 0.24, 0.05), COL.ink)
+	ci.draw_polyline(pts([[0.18, -0.44], [0.12, -0.32], [0.2, -0.24]]), k.darkened(0.5), 0.03, true)
+	ci.draw_polyline(pts([[-0.36, 0.3], [-0.26, 0.36], [-0.3, 0.46]]), k.darkened(0.6), 0.03, true)
+
+
+## 盾を回り込む矢印（もう一度張る）。リブロックのカードと状態で共通
+func _reblock_shape(ci: CanvasItem, k: Color, m: Transform2D, bold: bool) -> void:
+	_sub(ci, m, Vector2(0, 0.02), 0.72 if not bold else 0.66)
+	_i_shield(ci, k)
+	_sub(ci, m, Vector2.ZERO, 1.0)
+	_arc_arrow(ci, Vector2(0, 0.02), 0.44, PI * 0.72, PI * 2.32, COL.paper if not bold else Color("7be09a"), 0.07 if not bold else 0.09)
+
+
+## リブロック：盾と、ぐるりと回る白い矢印。右下に「次のターン」の時計
+func _i_c_reblock(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	_reblock_shape(ci, k, m, false)
+	_clock_badge(ci, Vector2(0.32, 0.32), 0.16)
+
+
+## ドレイン：赤いしずくを吸い込む紫の渦と AP の結晶
+func _i_c_drain(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	for i in 3:
+		ci.draw_arc(Vector2.ZERO, 0.26 + i * 0.09, i * 1.4, i * 1.4 + PI * 1.1, 18, Color(ICON_DEFAULT.ap, 0.75 - i * 0.18), 0.045, true)
+	_sub(ci, m, Vector2.ZERO, 0.42)
+	ci.draw_colored_polygon(pts([[0, -0.6], [0.48, -0.1], [0, 0.6], [-0.48, -0.1]]), COL.ink)
+	_i_ap(ci, ICON_DEFAULT.ap)
+	_sub(ci, m, Vector2.ZERO, 1.0)
+	for i in 3:
+		var a := TAU * i / 3.0 - PI * 0.75
+		var d := Vector2(cos(a), sin(a))
+		var p := d * 0.38
+		ci.draw_line(p - d * 0.08, d * 0.22, Color(k, 0.7), 0.05, true)
+		# しずく（中心へ飛んでいく向き：丸い方が前、尖った方が外）
+		var drop := PackedVector2Array()
+		for v in [[0, -0.17], [0.1, -0.01], [0.08, 0.07], [0, 0.11], [-0.08, 0.07], [-0.1, -0.01]]:
+			drop.append(Vector2(v[0], v[1]).rotated(a + PI / 2) + p)
+		_ink_poly(ci, drop, k, 0.035)
+		ci.draw_circle(p + d * 0.03 + d.orthogonal() * 0.03, 0.025, Color(1, 1, 1, 0.6))
+
+
+## アブソーブ：紫の渦に吸い込まれる剣（相手の力を奪う）＋自分の攻撃力アップの矢印
+func _i_c_absorb(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	var sp := PackedVector2Array()
+	for i in 40:
+		var t := float(i) / 39.0
+		var a := t * TAU * 1.8
+		sp.append(Vector2(cos(a), sin(a)) * (0.06 + t * 0.4))
+	ci.draw_polyline(sp, COL.ink, 0.11, true)
+	ci.draw_polyline(sp, k, 0.06, true)
+	_sub(ci, m, Vector2(-0.06, -0.04), 0.5, -0.5)
+	_i_sword(ci, ICON_DEFAULT.sword)
+	_sub(ci, m, Vector2.ZERO, 1.0)
+	_arrow(ci, Vector2(0.3, 0.3), 0.66, true)
+
+
+## アースクエイク：割れた地面と飛び散る岩、横揺れの線
+func _i_c_quake(ci: CanvasItem, k: Color) -> void:
+	for sx in [-1.0, 1.0]:
+		for i in 2:
+			var x: float = sx * (0.4 + i * 0.07)
+			ci.draw_line(Vector2(x, -0.3 + i * 0.06), Vector2(x, -0.06 + i * 0.06), Color(COL.paper, 0.7 - i * 0.25), 0.035)
+	# 左右に割れた地面
+	_ink_poly(ci, pts([[-0.5, 0.12], [-0.06, 0.08], [0.02, 0.22], [-0.08, 0.32], [0.0, 0.48], [-0.5, 0.48]]), k, 0.04)
+	_ink_poly(ci, pts([[0.06, 0.14], [0.5, 0.18], [0.5, 0.48], [0.1, 0.48], [0.16, 0.32], [0.08, 0.24]]), k.darkened(0.15), 0.04)
+	ci.draw_line(Vector2(-0.5, 0.2), Vector2(-0.1, 0.17), k.lightened(0.3), 0.03)
+	ci.draw_line(Vector2(0.12, 0.25), Vector2(0.5, 0.27), k.lightened(0.2), 0.03)
+	# 飛び散る岩
+	for v in [[-0.2, -0.2, 0.12, 0.3], [0.16, -0.34, 0.1, -0.5], [0.02, -0.04, 0.08, 1.0], [-0.3, -0.42, 0.07, 0.6], [0.3, -0.08, 0.08, 2.0]]:
+		var c := Vector2(v[0], v[1])
+		var r: float = v[2]
+		var rock := PackedVector2Array()
+		for j in 5:
+			var a: float = TAU * j / 5.0 + float(v[3])
+			rock.append(c + Vector2(cos(a), sin(a)) * r * (0.8 + _hash(j + float(v[3])) * 0.4))
+		_ink_poly(ci, rock, k.lightened(0.15), 0.03)
+
+
+## ブロック吸収：左の赤い（敵の）盾から、右の青い盾へ流れ込む矢印
+func _i_c_absorb_block(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	_sub(ci, m, Vector2(-0.27, -0.14), 0.5)
+	_i_shield(ci, Color("d0404a"))
+	_sub(ci, m, Vector2(0.18, 0.14), 0.74)
+	_i_shield(ci, k)
+	_sub(ci, m, Vector2.ZERO, 1.0)
+	_arc_arrow(ci, Vector2(-0.12, 0.26), 0.3, PI * 1.1, PI * 1.62, COL.paper, 0.06)
+	for v in [[-0.1, -0.4], [0.06, -0.3], [-0.04, -0.2]]:
+		ci.draw_circle(Vector2(v[0], v[1]), 0.035, Color("8fc0ea"))
+
+
+## エナジーチャージ：AP の結晶に走る稲妻と、集まる光
+func _i_c_energy(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	glow(ci, Vector2.ZERO, 0.46, Color(k, 0.8), 6)
+	_sub(ci, m, Vector2(0, 0.02), 0.82)
+	ci.draw_colored_polygon(pts([[0, -0.56], [0.44, -0.1], [0, 0.56], [-0.44, -0.1]]), COL.ink)
+	_i_ap(ci, ICON_DEFAULT.ap)
+	_sub(ci, m, Vector2(0.02, 0.02), 0.62)
+	ci.draw_colored_polygon(pts([[0.08, -0.56], [-0.36, 0.1], [-0.04, 0.1], [-0.16, 0.56], [0.36, -0.12], [0.04, -0.12]]), COL.ink)
+	_i_bolt(ci, k)
+	_sub(ci, m, Vector2.ZERO, 1.0)
+	_sparkle(ci, Vector2(0.36, -0.36), 0.14, COL.paper)
+	_sparkle(ci, Vector2(-0.38, 0.3), 0.1, COL.paper)
+
+
+## 豪炎：並んで燃え上がる 3 つの大きな炎と火の粉
+func _i_c_inferno(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	ci.draw_colored_polygon(ell(Vector2(0, 0.42), 0.5, 0.09, 24), Color(COL.red, 0.7))
+	for v in [[-0.26, 0.12, 0.62], [0.26, 0.12, 0.62], [0.0, 0.0, 0.9]]:
+		_sub(ci, m, Vector2(v[0], v[1]), float(v[2]))
+		ci.draw_colored_polygon(_teardrop(Vector2(0, 0.18), 0.35, 0.76), COL.ink)
+		_i_flame(ci, k)
+	_sub(ci, m, Vector2.ZERO, 1.0)
+	for v in [[-0.4, -0.3], [0.38, -0.36], [0.14, -0.48]]:
+		ci.draw_circle(Vector2(v[0], v[1]), 0.035, Color("ffe08a"))
+
+
+## 魔力暴走：ひびの入った魔力の玉から四方へ走る稲妻
+func _i_c_overload(ci: CanvasItem, k: Color) -> void:
+	ci.draw_colored_polygon(burst_pts(Vector2.ZERO, 0.52, 0.34, 12, 5), Color(COL.red, 0.85))
+	for i in 4:
+		var a := TAU * i / 4.0 + PI / 4
+		var d := Vector2(cos(a), sin(a))
+		var n := d.orthogonal()
+		var bolt := PackedVector2Array([d * 0.22, d * 0.34 + n * 0.08, d * 0.36 - n * 0.02, d * 0.52 + n * 0.04])
+		ci.draw_polyline(bolt, COL.ink, 0.1, true)
+		ci.draw_polyline(bolt, Color("ffe08a"), 0.05, true)
+	ci.draw_circle(Vector2.ZERO, 0.3, COL.ink)
+	ci.draw_circle(Vector2.ZERO, 0.26, k)
+	ci.draw_circle(Vector2(-0.06, -0.06), 0.15, k.lightened(0.5))
+	ci.draw_circle(Vector2(-0.1, -0.1), 0.05, COL.paper)
+	# ひび（赤）
+	ci.draw_polyline(pts([[0.04, -0.26], [0.0, -0.12], [0.08, -0.02], [0.02, 0.1], [0.12, 0.24]]), COL.red_d, 0.05, true)
+	ci.draw_polyline(pts([[0.08, -0.02], [0.22, 0.0]]), COL.red_d, 0.04, true)
+
+
+## 状態：バリケード（木の柵）
+func _i_st_barricade(ci: CanvasItem, k: Color) -> void:
+	_barricade_shape(ci, k, 0.9)
+
+
+## 状態：精神統一（水色の丸に閉じた目）
+func _i_st_focus(ci: CanvasItem, k: Color) -> void:
+	ci.draw_circle(Vector2.ZERO, 0.42, k)
+	ci.draw_arc(Vector2(0, -0.04), 0.24, PI * 0.1, PI * 0.9, 14, COL.ink, 0.11, true)
+	for a in [0.3, 0.5, 0.7]:
+		var d := Vector2(cos(PI * a), sin(PI * a))
+		ci.draw_line(d * 0.24 + Vector2(0, -0.04), d * 0.36 + Vector2(0, -0.04), COL.ink, 0.07, true)
+	ci.draw_circle(Vector2(0, -0.26), 0.07, COL.paper)
+
+
+## 状態：宣言（赤い旗）
+func _i_st_declare(ci: CanvasItem, k: Color) -> void:
+	_flag_shape(ci, k, true)
+
+
+## 状態：リブロック（盾と緑の回る矢印）
+func _i_st_reblock(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	_reblock_shape(ci, k, m, true)
+
+
+## キーワード：消費（橙の丸に、下へ落ちる白いカード）
+func _i_kw_consume(ci: CanvasItem, k: Color) -> void:
+	ci.draw_circle(Vector2.ZERO, 0.46, COL.ink)
+	ci.draw_circle(Vector2.ZERO, 0.4, k)
+	var card := _rot([[-0.15, -0.21], [0.15, -0.21], [0.15, 0.21], [-0.15, 0.21]], -0.3, Vector2(-0.02, -0.06))
+	_ink_poly(ci, card, COL.paper, 0.04)
+	# 下向きの矢印
+	ci.draw_line(Vector2(0.18, -0.1), Vector2(0.18, 0.16), COL.ink, 0.09)
+	ci.draw_colored_polygon(PackedVector2Array([Vector2(0.04, 0.12), Vector2(0.32, 0.12), Vector2(0.18, 0.32)]), COL.ink)
+
+
+## キーワード：APX（AP の結晶に白い X）
+func _i_kw_apx(ci: CanvasItem, k: Color, m: Transform2D) -> void:
+	ci.draw_colored_polygon(pts([[0, -0.56], [0.44, -0.1], [0, 0.56], [-0.44, -0.1]]), COL.ink)
+	_i_ap(ci, k)
+	for v in [[-0.17, -0.2, 0.17, 0.2], [0.17, -0.2, -0.17, 0.2]]:
+		ci.draw_line(Vector2(v[0], v[1]), Vector2(v[2], v[3]), COL.ink, 0.17)
+	for v in [[-0.15, -0.18, 0.15, 0.18], [0.15, -0.18, -0.15, 0.18]]:
+		ci.draw_line(Vector2(v[0], v[1]), Vector2(v[2], v[3]), COL.paper, 0.09)
+
+
+## 対象：自分以外の味方（暗い自分の人影から、赤い矢印が明るい味方の人影を指す）
+func _i_tgt_ally_other(ci: CanvasItem, k: Color) -> void:
+	ci.draw_colored_polygon(ell(Vector2(0.2, 0.42), 0.3, 0.1, 18), COL.red)
+	_pawn(ci, Vector2(-0.28, 0.08), 0.38, k.darkened(0.5), false)
+	_pawn(ci, Vector2(0.2, -0.02), 0.52, k, false)
+	_ink_arrow(ci, Vector2(-0.44, -0.3), Vector2(-0.04, -0.3), COL.red, 0.08)
 
 
 ## 人影（頭＋肩）。c = 胴の上端の中心、h = 全体の高さ。enemy なら頭に小さな角。黒い縁で重なっても分かれて見える
