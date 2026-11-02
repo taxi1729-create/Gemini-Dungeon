@@ -12,6 +12,14 @@ class_name ActionList
 ##   effects  : 効果の配列。各効果 {"effect": 種類, "eff_val": 値, "status": 状態ID, "turns": ターン数, "to": "target"/"self"/"ally_all"}
 ##              種類：add_shield / add_status / heal / add_ap / draw / swap / double / turnabout / extra_turn / set_next_action
 ##   keywords : "exhaust"（廃棄：使うと廃棄札へ）、"power"（パワー：発動不可。手札にある間 power_effect が効く）
+##              "consume"（消費：使う時、このカード以外の手札からランダムに 1 枚を捨札へ。捨てるカードが無ければ使えない）
+##   ap_x     : true なら APX（使う時に全ての AP を消費し、その量を X とする。AP 1 以上で使える。"ap" は 1 を入れておく）
+##   hits     : 多段攻撃の回数（power を hits 回与える）。hits_x = true なら X 回
+##   on_kill  : "reuse"（この攻撃で倒したら捨札に行かず手札に残り、もう一度使える）
+##              "reuse_free"（同上。さらにそのターンの終わりまでこのカードの AP が 0）
+##   kill_ap  : この攻撃で敵を 1 体倒すごとに AP +n
+##   効果の "x": true は eff_val × X
+##   効果の種類（追加）：absorb_block（対象の敵のブロックの合計を自分のブロックに足す。敵のブロックはそのまま）
 ## art は ImageController.icon の種類名（画像ファイルは使わない）
 
 const ALLY_CARDS = {
@@ -21,13 +29,20 @@ const ALLY_CARDS = {
 		"block": {"owner": "knight", "name": "ブロック", "type": "skill", "target": "self", "art": "shield", "ap": 1,
 			"effects": [{"effect": "add_shield", "eff_val": 7}]},
 		"sweep": {"owner": "knight", "name": "薙ぎ払い", "type": "attack", "target": "front_enemy_group", "art": "sweep", "power": 5, "ap": 1},
-		"spirit": {"owner": "knight", "name": "気合", "type": "skill", "target": "self", "art": "chevrons", "ap": 0,
-			"effects": [{"effect": "add_ap", "eff_val": 1}]},
+		"spirit": {"owner": "knight", "name": "気合", "type": "skill", "target": "self", "art": "chevrons", "ap": 2,
+			"effects": [{"effect": "add_status", "status": "ap_next", "eff_val": 2, "turns": 1}, {"effect": "add_shield", "eff_val": 5}]},
 		"big_shield": {"owner": "knight", "name": "ビッグシールド", "type": "skill", "target": "self", "art": "c_big_shield", "ap": 2,
 			"effects": [{"effect": "add_shield", "eff_val": 14}]},
 		"hone": {"owner": "knight", "name": "研ぎ澄ます", "type": "skill", "target": "self", "art": "c_hone", "ap": 1,
 			"effects": [{"effect": "add_shield", "eff_val": 9}, {"effect": "add_status", "status": "spd_buff", "eff_val": 1}]},
 		"flash": {"owner": "knight", "name": "一閃", "type": "attack", "target": "front_row", "art": "c_flash", "power": 6, "ap": 1},
+		"chop": {"owner": "knight", "name": "切り刻み", "type": "attack", "target": "front_enemy_single", "art": "c_chop", "power": 8, "ap": 2, "on_kill": "reuse"},
+		"flurry": {"owner": "knight", "name": "乱撃", "type": "attack", "target": "front_enemy_single", "art": "c_flurry", "power": 5, "hits": 2, "ap": 1},
+		"rampart": {"owner": "knight", "name": "城壁", "type": "skill", "target": "self", "art": "c_rampart", "ap": 1, "keywords": ["consume"],
+			"effects": [{"effect": "add_shield", "eff_val": 16}]},
+		"parry": {"owner": "knight", "name": "受け流し", "type": "skill", "target": "front_row", "art": "c_parry", "ap": 2,
+			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}, {"effect": "add_shield", "eff_val": 8, "to": "self"},
+				{"effect": "draw", "eff_val": 1, "to": "self"}]},
 		"taunt": {"owner": "knight", "name": "挑発", "type": "skill", "target": "front_enemy_group", "art": "c_taunt", "ap": 0,
 			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}]},
 		# --- ウィッチ ---
@@ -45,6 +60,15 @@ const ALLY_CARDS = {
 			"effects": [{"effect": "draw", "eff_val": 1, "to": "self"}]},
 		"hit_away": {"owner": "witch", "name": "ヒットアンドアウェイ", "type": "attack", "target": "front_enemy_single", "art": "c_hit_away", "power": 8, "ap": 1,
 			"effects": [{"effect": "swap", "to": "self"}]},
+		"ap_pass": {"owner": "witch", "name": "APパサー", "type": "skill", "target": "other_ally", "art": "c_ap_pass", "ap": 1,
+			"effects": [{"effect": "add_ap", "eff_val": 1}]},
+		"golem": {"owner": "witch", "name": "ゴーレム", "type": "skill", "target": "self", "art": "c_golem", "ap": 1, "keywords": ["consume"],
+			"effects": [{"effect": "add_shield", "eff_val": 11}]},
+		"reblock": {"owner": "witch", "name": "リブロック", "type": "skill", "target": "self", "art": "c_reblock", "ap": 1,
+			"effects": [{"effect": "add_shield", "eff_val": 4}, {"effect": "add_status", "status": "reblock", "eff_val": 4}]},
+		"drain": {"owner": "witch", "name": "ドレイン", "type": "attack", "target": "front_enemy_group", "art": "c_drain", "power": 6, "ap": 1, "kill_ap": 1},
+		"absorb": {"owner": "witch", "name": "アブソーブ", "type": "skill", "target": "front_enemy_group", "art": "c_absorb", "ap": 1,
+			"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 2, "turns": 1}, {"effect": "add_status", "status": "atk_buff", "eff_val": 1, "to": "self"}]},
 		"poison_gas": {"owner": "witch", "name": "毒ガス", "type": "skill", "target": "front_enemy_group", "art": "c_poison_gas", "ap": 1,
 			"effects": [{"effect": "add_status", "status": "poison", "eff_val": 4, "turns": 4}]},
 	},
@@ -58,6 +82,15 @@ const ALLY_CARDS = {
 		"big_swing": {"owner": "knight", "name": "大振り", "type": "attack", "target": "front_enemy_single", "art": "c_big_swing", "power": 20, "ap": 3},
 		"store": {"owner": "knight", "name": "貯める", "type": "skill", "target": "self", "art": "c_store", "ap": 3,
 			"effects": [{"effect": "add_shield", "eff_val": 10}, {"effect": "add_status", "status": "ap_next", "eff_val": 3, "turns": 1}]},
+		"focus": {"owner": "knight", "name": "精神統一", "type": "skill", "target": "self", "art": "c_focus", "ap": 3,
+			"effects": [{"effect": "add_status", "status": "focus", "eff_val": 1}]},
+		"barricade": {"owner": "knight", "name": "バリケード", "type": "skill", "target": "self", "art": "c_barricade", "ap": 3,
+			"effects": [{"effect": "add_status", "status": "barricade", "eff_val": 1}]},
+		"dance": {"owner": "knight", "name": "演舞", "type": "attack", "target": "enemy_all", "art": "c_dance", "power": 5, "hits": 3, "ap": 2, "keywords": ["consume"]},
+		"declare": {"owner": "knight", "name": "宣言", "type": "skill", "target": "self", "art": "c_declare", "ap": 1,
+			"effects": [{"effect": "add_status", "status": "declare", "eff_val": 3}]},
+		"holy": {"owner": "knight", "name": "聖なる加護", "type": "skill", "target": "self", "art": "c_holy", "ap": 1, "ap_x": true,
+			"effects": [{"effect": "add_shield", "eff_val": 6, "x": true}]},
 		"steel": {"owner": "knight", "name": "鋼鉄化", "type": "unselectable", "target": "self", "art": "c_steel",
 			"keywords": ["power"], "power_effect": {"status": "def_buff", "eff_val": 2}},
 		# --- ウィッチ ---
@@ -69,6 +102,11 @@ const ALLY_CARDS = {
 			"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 3, "turns": 1}]},
 		"meditate": {"owner": "witch", "name": "瞑想", "type": "skill", "target": "self", "art": "c_meditate", "ap": 2,
 			"effects": [{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 3}]},
+		"quake": {"owner": "witch", "name": "アースクエイク", "type": "attack", "target": "front_row", "art": "c_quake", "power": 15, "ap": 2, "keywords": ["consume"]},
+		"absorb_block": {"owner": "witch", "name": "ブロック吸収", "type": "skill", "target": "enemy_all", "art": "c_absorb_block", "ap": 0, "keywords": ["consume"],
+			"effects": [{"effect": "absorb_block"}]},
+		"energy": {"owner": "witch", "name": "エナジーチャージ", "type": "skill", "target": "self", "art": "c_energy", "ap": 0, "keywords": ["consume", "exhaust"],
+			"effects": [{"effect": "add_ap", "eff_val": 2}]},
 		"force": {"owner": "witch", "name": "フォース", "type": "unselectable", "target": "self", "art": "c_force",
 			"keywords": ["power"], "power_effect": {"status": "atk_buff", "eff_val": 2}},
 	},
@@ -80,7 +118,11 @@ const ALLY_CARDS = {
 			"keywords": ["exhaust"]},
 		"stand": {"owner": "knight", "name": "仁王立ち", "type": "skill", "target": "enemy_all", "art": "c_stand", "ap": 3, "keywords": ["exhaust"],
 			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}, {"effect": "add_shield", "eff_val": 20, "to": "self"}]},
+		"mushin": {"owner": "knight", "name": "無心乱舞", "type": "attack", "target": "front_row", "art": "c_mushin", "power": 8, "hits_x": true, "ap": 1, "ap_x": true,
+			"keywords": ["exhaust"]},
 		# --- ウィッチ ---
+		"inferno": {"owner": "witch", "name": "豪炎", "type": "attack", "target": "enemy_all", "art": "c_inferno", "power": 5, "hits_x": true, "ap": 1, "ap_x": true},
+		"overload": {"owner": "witch", "name": "魔力暴走", "type": "attack", "target": "front_enemy_single", "art": "c_overload", "power": 18, "ap": 3, "on_kill": "reuse_free"},
 		"insight": {"owner": "witch", "name": "ひらめき", "type": "skill", "target": "self", "art": "cards", "ap": 0,
 			"effects": [{"effect": "draw", "eff_val": 2}]},
 		"magic_wall": {"owner": "witch", "name": "マジックウォール", "type": "skill", "target": "ally_all", "art": "c_magic_wall", "ap": 3, "keywords": ["exhaust"],

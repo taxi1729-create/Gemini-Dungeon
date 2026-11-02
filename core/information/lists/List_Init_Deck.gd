@@ -4,7 +4,7 @@ class_name InitAllyDeck
 
 const KNIGHT_DECK = ["strike", "strike", "strike", "block", "block", "sweep", "spirit"]
 
-const WITCH_DECK = ["missile", "missile", "missile", "firebolt", "firebolt", "sparks", "barrier", "chant"]
+const WITCH_DECK = ["missile", "missile", "missile", "firebolt", "sparks", "barrier", "chant"]
 
 
 static func get_deck(character_id: String) -> Array:

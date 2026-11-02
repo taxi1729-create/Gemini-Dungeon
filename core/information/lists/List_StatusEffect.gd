@@ -31,4 +31,12 @@ const DATA = {
 		"desc": "攻撃してきた相手に火傷を与える"},
 	"double": {"name": "連続魔法", "short": "連続", "timing": "all", "icon": "st_double", "good": true, "label": "none",
 		"desc": "次に使うカード・保留カードが2回発動する"},
+	"barricade": {"name": "バリケード", "short": "柵", "timing": "all", "icon": "st_barricade", "good": true, "label": "none",
+		"desc": "ブロックがターン開始時に取り除かれない（戦闘中ずっと）"},
+	"focus": {"name": "精神統一", "short": "統一", "timing": "start_turn", "icon": "st_focus", "good": true, "label": "val",
+		"desc": "次の自分のターン、必殺技の AP −数値"},
+	"declare": {"name": "宣言", "short": "宣言", "timing": "start_turn", "icon": "st_declare", "good": true, "label": "none",
+		"desc": "次の自分のターン開始時までに HP が減らなければ、3 ターン APプラス"},
+	"reblock": {"name": "リブロック", "short": "再盾", "timing": "start_turn", "icon": "st_reblock", "good": true, "label": "val",
+		"desc": "次の自分のターン開始時にブロック +数値"},
 }

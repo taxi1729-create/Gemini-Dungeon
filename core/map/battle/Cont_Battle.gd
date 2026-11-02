@@ -217,6 +217,20 @@ func _setup_units() -> void:
 			places.append([front_free.pop_front(), 0])
 		else:
 			places.append([back_free.pop_front(), 1])
+	# 再読み込みしても同じ敵で再開できるよう、編成をセーブに残す（保存済みならそれを使う）
+	var saved = SaveData.screen.get("formation")
+	if saved is Array and not saved.is_empty() and saved.all(func(f): return f is Dictionary and EnemyList.DATA.has(str(f.get("id", "")))):
+		ids = []
+		places = []
+		for f in saved:
+			ids.append(str(f.id))
+			places.append([Vector2(float(f.x), float(f.y)), int(f.row)])
+	else:
+		var form: Array = []
+		for i in ids.size():
+			form.append({"id": ids[i], "x": places[i][0].x, "y": places[i][0].y, "row": places[i][1]})
+		SaveData.screen["formation"] = form
+		SaveData.save("battle")
 	var enemies: Array = []
 	for i in ids.size():
 		var e := EnemyList.make_enemy(ids[i], floor_no)
@@ -655,9 +669,8 @@ func _handle_specials(user: Dictionary, events: Array) -> void:
 				StatusController.apply_status(user, "double", 1, -1)
 				fx.popup(views[user.uid], "連続魔法", ImageController.COL.accent, 28)
 			"turnabout":
-				# 上下左右（8・4・2・6）の手札を捨てて 4 枚引く。攻撃力 +1
-				dc.discard_hand([0, 1, 2, 3])
-				_draw_more(dc, 4, [0, 1, 2, 3])
+				# 空いている手札の枠を補充する。攻撃力 +1
+				_draw_more(dc, DeckController.HAND_SIZE)
 				StatusController.apply_status(user, "atk_buff", maxi(1, int(ev.val)))
 				fx.popup(views[user.uid], "攻↑ 1", ImageController.COL.good, 28)
 			"extra_turn":
@@ -987,7 +1000,7 @@ func _effect_label(a: Dictionary) -> String:
 		"add_status":
 			var st: Dictionary = StatusEffectList.DATA[e.status]
 			return st.short if e.status in ["taunt"] else "%s%d" % [st.short, e.eff_val]
-		"turnabout": return "引き直し"
+		"turnabout": return "補充"
 		"extra_turn": return "再行動"
 	return ""
 
@@ -1046,9 +1059,7 @@ func _execute(num) -> void:
 				_fly_card(src, Vector2(1, -1))
 			else:
 				_log("%sを保留した" % dc.hold.name)
-				_anim_hold(moving, src, false)
-			if dc.hand[info.slot] != null:
-				_pop_in(hand_cards[info.slot], 0.05)
+				_anim_hold(moving, src, false)  # 入れ替えで戻ったカードは、保留したカードが着いてから出す
 		"swap":
 			current["ap"] = int(current.ap) - ap
 			_do_swap()
@@ -1239,6 +1250,10 @@ func _anim_hold(card: Dictionary, src: Control, auto: bool) -> void:
 	pad.add_child(c)
 	c.pivot_offset = c.size / 2
 	hold_card.modulate.a = 0.0
+	# 元の枠のカードは隠し、飛んでいくカード 1 枚だけを見せる（入れ替えで戻るカードは着いてから出す）
+	var hide_src: bool = src != hold_card and src is GuiCard
+	if hide_src:
+		src.modulate.a = 0.0
 	var dest: Vector2 = _cell_center(_cell_of(9)) - GuiCard.SIZE / 2
 	var center := Vector2(360, 960) - GuiCard.SIZE / 2
 	var tw := c.create_tween()
@@ -1257,6 +1272,12 @@ func _anim_hold(card: Dictionary, src: Control, auto: bool) -> void:
 		c.queue_free()
 		hold_card.modulate.a = 1.0
 		_pop_in(hold_card, 0.0)
+		if hide_src:
+			src.modulate.a = 1.0
+			if auto:
+				src.visible = false  # 自動保留：元の枠は空になる
+			elif src.visible:
+				_pop_in(src, 0.0)
 		if not auto:  # 自動保留は吹き出しで知らせるので、札は出さない
 			AnimationController.popup_text(ui, _cell_center(_cell_of(9)) + Vector2(0, -96), "保留！", ImageController.COL.accent, 30))
 	if auto:

@@ -205,7 +205,7 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 			"draw": parts.append("[i:cards]カードを%d枚引く" % e.eff_val)
 			"swap": parts.append("[i:swap]味方の位置を入れ替える")
 			"double": parts.append("[i:st_double]次に使うカード・保留カードが2回発動")
-			"turnabout": parts.append("[i:cards]上下左右の手札をすべて捨てて4枚引く　[i:atk_buff]攻撃力+1")
+			"turnabout": parts.append("[i:cards]空いている手札の枠を補充する　[i:atk_buff]攻撃力+1")
 			"extra_turn": parts.append("[i:hourglass]ターン終了時、もう一度ターンを得る")
 			"set_next_action": parts.append("[i:hourglass]次に強攻撃")
 			"add_status":

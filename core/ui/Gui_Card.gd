@@ -232,7 +232,7 @@ static func summary(c: Dictionary) -> String:
 			"draw": parts.append("%d枚引く" % e.eff_val)
 			"swap": parts.append("入替")
 			"double": parts.append("2回発動")
-			"turnabout": parts.append("引き直し")
+			"turnabout": parts.append("補充")
 			"extra_turn": parts.append("再行動")
 			"add_status":
 				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
