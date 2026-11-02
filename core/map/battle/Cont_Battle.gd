@@ -963,7 +963,7 @@ func _action_for(num) -> Dictionary:
 			return {"title": "入替", "desc": "左右の位置を入れ替える（AP1）。敵の矢印の色で狙われる側がわかる", "action": ActionList.SWAP, "kind": "swap", "ap": 1}
 		3:
 			var s: Dictionary = ActionList.UNIQUE_SKILLS[current.id]
-			return {"title": s.name, "desc": _short(s), "action": s, "kind": "unique", "ap": int(s.ap)}
+			return {"title": s.name, "desc": _short(s), "action": s, "kind": "unique", "ap": int(s.ap), "block_msg": _unique_block(s)}
 		5:
 			var s: Dictionary = specials[current.id]
 			return {"title": "必殺", "desc": "%s　%s（長押し）" % [s.name, _short(s)], "action": s, "kind": "special", "ap": _special_cost(s)}
@@ -978,7 +978,20 @@ func _card_info(c: Dictionary, slot: int, kind: String, desc: String) -> Diction
 	if c.get("ap_x", false) and not c.get("free", false):
 		need = maxi(1, int(c.get("ap", 1)))
 	var no_consume: bool = ActionList.has_keyword(c, "consume") and not dc.has_consume_target(slot)
-	return {"title": c.name, "desc": desc, "action": c, "kind": kind, "slot": slot, "ap": cost, "need": need, "no_consume": no_consume}
+	# 自分以外の味方が対象（APパサー）：その味方が倒れていれば使えない
+	var msg := ""
+	if c.get("target", "") == "other_ally" and ActionController.resolve_targets(current, "other_ally", CurrentStatus.allies, CurrentStatus.enemies).is_empty():
+		msg = "渡す相手が倒れている"
+	return {"title": c.name, "desc": desc, "action": c, "kind": kind, "slot": slot, "ap": cost, "need": need, "no_consume": no_consume, "block_msg": msg}
+
+
+## 固有スキルを今使えないわけ（"" = 使える）。一転攻勢は手札に空きが無いと使えない
+func _unique_block(s: Dictionary) -> String:
+	if ActionList.effects_of(s).any(func(e): return e.get("effect", "") == "turnabout"):
+		var dc: DeckController = deck_controllers[current.id]
+		if not dc.hand.any(func(x): return x == null):
+			return "手札に空きがない"
+	return ""
 
 
 ## カードを使う時に払う AP（free は 0、APX は今の AP 全部）
@@ -1004,6 +1017,8 @@ func _card_block(c: Dictionary, slot: int) -> String:
 		return "ap"
 	if info.no_consume:
 		return "consume"
+	if info.block_msg != "":
+		return "target"
 	return ""
 
 
@@ -1032,11 +1047,12 @@ func _preview_action(num) -> void:
 		return
 	var lack_ap := int(info.get("need", info.get("ap", 0))) > int(current.ap)
 	var lack_cons: bool = info.get("no_consume", false)
-	var lack := lack_ap or lack_cons
+	var lack_msg := str(info.get("block_msg", ""))
+	var lack := lack_ap or lack_cons or lack_msg != ""
 	_show_desc_for(num)
 	log_label.visible = false
 	strip_title = info.title
-	strip_text = info.desc + ("　AP不足" if lack_ap else ("　消費するカードがない" if lack_cons else ""))
+	strip_text = info.desc + ("　AP不足" if lack_ap else ("　消費するカードがない" if lack_cons else ("　" + lack_msg if lack_msg != "" else "")))
 	strip_col = ImageController.COL.bad if lack else ImageController.COL.accent
 	strip.queue_redraw()
 	var w = _widget_of(num if not (num is String and num.begins_with("hold:")) else 9)
@@ -1121,6 +1137,10 @@ func _execute(num) -> void:
 		return
 	if info.get("no_consume", false):
 		_log("消費するカードがない")
+		AnimationController.shake(pad, 6)
+		return
+	if str(info.get("block_msg", "")) != "":
+		_log(str(info.block_msg))
 		AnimationController.shake(pad, 6)
 		return
 	var dc: DeckController = deck_controllers[current.id]
@@ -1470,7 +1490,7 @@ func _refresh_all() -> void:
 		btn.unique.title = u.name
 		btn.unique.icon_kind = u.art
 		btn.unique.ap_cost = int(u.ap)
-		btn.unique.dimmed = int(current.ap) < int(u.ap)
+		btn.unique.dimmed = int(current.ap) < int(u.ap) or _unique_block(u) != ""
 		var sp: Dictionary = specials[current.id]
 		btn.special.title = sp.name
 		btn.special.icon_kind = sp.art

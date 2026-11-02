@@ -1,6 +1,8 @@
 extends Node2D
 ## タイトル画面
 
+const VERSION := "0.01"  # 公開するたびに上げる（右下に表示）
+
 var deco: Control
 var _t := 0.0
 
@@ -26,6 +28,9 @@ func _ready() -> void:
 	var hint := UiSystem.make_label(ui, "カードをタップ、または下半分でフリックして使う\n長押しで説明・敵をタップで詳細",
 			Vector2(80, 1096), Vector2(560, 96), 20, col.ink, HORIZONTAL_ALIGNMENT_CENTER, 0)
 	hint.add_theme_font_override("font", ImageController.font_bold)
+	# バージョン（右下）
+	var ver := UiSystem.make_label(ui, "ver %s" % VERSION, Vector2(500, 1236), Vector2(200, 34), 20, col.paper, HORIZONTAL_ALIGNMENT_RIGHT, 4)
+	ver.add_theme_font_override("font", ImageController.font_head)
 
 
 func _process(delta: float) -> void:

@@ -81,7 +81,8 @@ const ALLY_CARDS = {
 			"effects": [{"effect": "add_shield", "eff_val": 8}, {"effect": "add_status", "status": "fire_guard", "eff_val": 2, "turns": 1}]},
 		"big_swing": {"owner": "knight", "name": "大振り", "type": "attack", "target": "front_enemy_single", "art": "c_big_swing", "power": 20, "ap": 3},
 		"store": {"owner": "knight", "name": "貯める", "type": "skill", "target": "self", "art": "c_store", "ap": 3,
-			"effects": [{"effect": "add_shield", "eff_val": 10}, {"effect": "add_status", "status": "ap_next", "eff_val": 3, "turns": 1}]},
+			"effects": [{"effect": "add_shield", "eff_val": 10}, {"effect": "add_status", "status": "ap_next", "eff_val": 3, "turns": 1},
+				{"effect": "add_status", "status": "def_buff", "eff_val": 1}]},
 		"focus": {"owner": "knight", "name": "精神統一", "type": "skill", "target": "self", "art": "c_focus", "ap": 3,
 			"effects": [{"effect": "add_status", "status": "focus", "eff_val": 1}]},
 		"barricade": {"owner": "knight", "name": "バリケード", "type": "skill", "target": "self", "art": "c_barricade", "ap": 3,
@@ -135,7 +136,7 @@ const ALLY_CARDS = {
 ## キャラ固有スキル（テンキー 3）
 const UNIQUE_SKILLS = {
 	"witch": {"id": "first_step", "name": "ファーストステップ", "type": "skill", "target": "ally_all", "art": "chevrons", "ap": 1,
-			"effects": [{"effect": "add_status", "status": "spd_buff", "eff_val": 10}, {"effect": "add_shield", "eff_val": 3}]},
+			"effects": [{"effect": "add_status", "status": "spd_buff", "eff_val": 1}, {"effect": "add_shield", "eff_val": 3}]},
 	"knight": {"id": "turnabout", "name": "一転攻勢", "type": "skill", "target": "self", "art": "atk_buff", "ap": 1,
 			"effects": [{"effect": "turnabout", "eff_val": 1}]},
 }
