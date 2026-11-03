@@ -464,9 +464,7 @@ func _draw() -> void:
 	var IC = ImageController
 	var col: Dictionary = IC.COL
 	var bg := Rect2(0, 10, size.x, size.y - 10)
-	draw_rect(bg, col.ink)
-	IC.stripes(self, bg, Color(1, 1, 1, 0.022), 24, 2, 0.6)
-	IC.halftone(self, Rect2(Vector2(420, 390), Vector2(300, 238)), Color(col.red, 0.08), Vector2(720, 628), 320, 18, 5)
+	IC.pad_bg(self, bg)
 	draw_rect(Rect2(0, 7, 720, 4), col.red)
 	draw_rect(Rect2(0, 12, 720, 1), Color(1, 1, 1, 0.5))
 	draw_colored_polygon(IC.slant_pts(Rect2(470, 0, 260, 11), 10), col.red)
@@ -483,10 +481,14 @@ func _draw() -> void:
 		IC.head(self, header_right, r.get_center(), 22, col.ink, w - 30)
 	# 説明帯
 	if _strip_text != "":
-		IC.slant(self, Rect2(8, STRIP_Y + 4, 704, 36), Color(1, 1, 1, 0.06), 14)
-		IC.text(self, _strip_title + "　" + DeckController.plain(_strip_text), Vector2(360, STRIP_Y + 22), 20, _strip_col, true, 0, 680)
+		# 説明帯：エンジェルホワイトの帯に濃い文字
+		IC.slant(self, Rect2(8, STRIP_Y + 4, 704, 36), col.paper, 14, 2.0, col.ink, Color(col.red, 0.9), Vector2(4, 4))
+		var sc: Color = col.ink if _strip_col.get_luminance() > 0.5 else _strip_col.darkened(0.25)
+		IC.text(self, _strip_title + "　" + DeckController.plain(_strip_text), Vector2(360, STRIP_Y + 22), 20, sc, true, 0, 680)
 	elif hint != "":
-		IC.text(self, hint, Vector2(360, STRIP_Y + 22), 18, col.sub, true, 0, 680)
+		# 操作のヒント：ホーリーブルーの薄い帯にエンジェルホワイトの文字
+		IC.slant(self, Rect2(60, STRIP_Y + 6, 600, 32), Color(IC.GLASS.holy_blue, 0.16), 12)
+		IC.text(self, hint, Vector2(360, STRIP_Y + 22), 18, col.paper, true, 0, 680)
 
 
 ## 値札（白い斜めタグ）と売り切れ（黒地に赤字）。拡大中のマスには描かない

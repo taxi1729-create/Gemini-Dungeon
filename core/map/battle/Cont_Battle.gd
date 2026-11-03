@@ -470,9 +470,7 @@ func _build_ui() -> void:
 	low_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	low_bg.draw.connect(func():
 		var IC = ImageController
-		low_bg.draw_rect(Rect2(Vector2.ZERO, low_bg.size), col.ink)
-		IC.stripes(low_bg, Rect2(Vector2.ZERO, low_bg.size), Color(1, 1, 1, 0.022), 24, 2, 0.6)
-		IC.halftone(low_bg, Rect2(Vector2(420, 380), Vector2(300, 238)), Color(col.red, 0.08), low_bg.size, 320, 18, 5))
+		IC.pad_bg(low_bg, Rect2(Vector2.ZERO, low_bg.size)))
 	ui.add_child(low_bg)
 	var line := Control.new()
 	line.position = Vector2(0, 652)
@@ -575,8 +573,10 @@ func _draw_strip() -> void:
 	strip.draw_rect(Rect2(0, 0, 720, 42), Color(IC.COL.ink, 0.0))
 	var ap := int(current.get("ap", 0)) if current.get("side", "") == "ally" else 0
 	if strip_text != "":
-		IC.slant(strip, Rect2(8, 4, 704, 36), Color(1, 1, 1, 0.06), 14)
-		IC.text(strip, strip_title + "　" + DeckController.plain(strip_text), Vector2(360, 22), 20, strip_col, true, 0, 680)
+		# 説明帯：エンジェルホワイトの帯に濃い文字（明るい色の指定は墨に、濃い色は少し暗くして読みやすく）
+		IC.slant(strip, Rect2(8, 4, 704, 36), IC.COL.paper, 14, 2.0, IC.COL.ink, Color(IC.COL.red, 0.9), Vector2(4, 4))
+		var sc: Color = IC.COL.ink if strip_col.get_luminance() > 0.5 else strip_col.darkened(0.25)
+		IC.text(strip, strip_title + "　" + DeckController.plain(strip_text), Vector2(360, 22), 20, sc, true, 0, 680)
 		return
 	if current.get("side", "") == "ally":
 		# 左に赤い斜めタグで「〇〇の手番」、右に AP の菱形
