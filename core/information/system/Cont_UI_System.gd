@@ -140,22 +140,23 @@ func _build_theme() -> Theme:
 	var col: Dictionary = ImageController.COL
 	th.default_font = ImageController.font
 	th.default_font_size = 26
-	# ボタン：黒地＋白枠＋赤のベタ影。押すと赤。
+	# ボタン：セイクレッドブルーの地＋白枠＋ブラッキッシュブルーのベタ影。押すとディープローズ。
 	# ホバーは枠を赤にするだけ（スマホではタップ後もホバー状態が残るため、文字色が変わらないようにする）
-	th.set_stylebox("normal", "Button", _sb_btn(col.ink, col.paper, col.red))
-	th.set_stylebox("hover", "Button", _sb_btn(col.ink.lerp(col.red, 0.15), col.red, col.paper))
+	var G: Dictionary = ImageController.GLASS
+	th.set_stylebox("normal", "Button", _sb_btn(G.sacred_blue, col.paper, col.ink))
+	th.set_stylebox("hover", "Button", _sb_btn(G.sacred_blue.lerp(col.red, 0.2), col.red, col.ink))
 	th.set_stylebox("pressed", "Button", _sb_btn(col.red, col.paper, col.ink))
-	th.set_stylebox("disabled", "Button", _sb_btn(Color("161619"), Color("3a3a42"), Color(0, 0, 0, 0), 2))
+	th.set_stylebox("disabled", "Button", _sb_btn(col.steel, G.ash_gray, Color(0, 0, 0, 0), 2))
 	th.set_stylebox("focus", "Button", StyleBoxEmpty.new())
 	th.set_color("font_color", "Button", col.paper)
 	th.set_color("font_hover_color", "Button", col.paper)
 	th.set_color("font_hover_pressed_color", "Button", col.paper)
 	th.set_color("font_pressed_color", "Button", col.paper)
 	th.set_color("font_focus_color", "Button", col.paper)
-	th.set_color("font_disabled_color", "Button", Color("5c5c66"))
+	th.set_color("font_disabled_color", "Button", ImageController.GLASS.holy_blue.darkened(0.25))
 	th.set_font("font", "Button", ImageController.font_head)
-	th.set_stylebox("panel", "Panel", _sb_panel(Color(col.panel, 0.97), col.paper))
-	th.set_stylebox("panel", "PanelContainer", _sb_panel(Color(col.panel, 0.97), col.paper))
+	th.set_stylebox("panel", "Panel", _sb_panel(Color(col.panel, 0.98), G.holy_blue))
+	th.set_stylebox("panel", "PanelContainer", _sb_panel(Color(col.panel, 0.98), G.holy_blue))
 	th.set_color("font_color", "Label", col.text)
 	th.set_color("font_outline_color", "Label", Color(0, 0, 0, 0.9))
 	th.set_constant("outline_size", "Label", 0)
@@ -227,6 +228,13 @@ func make_panel(parent: Node, rect: Rect2) -> Panel:
 	p.size = rect.size
 	parent.add_child(p)
 	return p
+
+
+## パネルを明るい「文字の箱」（エンジェルホワイトの面・ブラッキッシュブルーの縁・ローズの影）にする。中の文字は COL.ink で書く
+func set_panel_light(p: Panel) -> void:
+	var col: Dictionary = ImageController.COL
+	var sb := _sb_panel(ImageController.GLASS.angel_white, col.ink)
+	p.add_theme_stylebox_override("panel", sb)
 
 
 ## 見出しの帯（斜めの平行四辺形＋極太斜体の文字）。fill＝帯の色、txt_col＝文字の色

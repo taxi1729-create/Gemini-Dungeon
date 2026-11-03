@@ -89,6 +89,81 @@ static func active_bonuses(user: Dictionary, card: Dictionary, ctx: Dictionary) 
 	return out
 
 
+# ------------------------------------------------------------
+# 撃破・反撃・予約の札（後で効く追加効果）
+#   カードに keywords: ["gekiha"] などと、追加効果 "bonus_gekiha" / "bonus_hangeki" / "bonus_yoyaku" = {"effects": [...]} を書く
+#   （bonus_○○ が無く、即応・最後・転身の札も無いカードは "bonus" を使う）。効果の形は普通の effects と同じ。
+#   撃破 gekiha ：この攻撃で敵を 1 体以上倒したら、effects を発動（1 回の発動につき 1 回。"to" は普通の効果と同じ。
+#                対象 "target" はこのカードの対象のうち生きている敵）。execute_action が {"target": 使用者, "gekiha": 倒した数} を出す
+#   反撃 hangeki：使うと自分に状態 hangeki（次の自分のターン開始時に消える）。その間に自分を攻撃してきた敵それぞれに
+#                effects を 1 回の攻撃につき 1 回発動（効果の対象は攻撃してきた敵。"to" は見ない）。{"target": 敵, "hangeki": true} を出す
+#   予約 yoyaku ：使うと自分に状態 yoyaku。次の自分のターン開始時（ブロックが 0 に戻った後）に effects を発動
+#                （対象は bonus_yoyaku.target、無ければカードの対象で、その時に決め直す）。表示は「予約」にまとまる
+#   倒したらもう一度（on_kill）・倒すと AP（kill_ap）・ファイアガードは今の仕組みのまま、札（gekiha / hangeki）だけ付ける
+# ------------------------------------------------------------
+const KW_TIMED := ["gekiha", "hangeki", "yoyaku"]
+
+
+## 札 k（gekiha / hangeki / yoyaku）の追加効果 {"effects": [...], "target"?}。無ければ {}
+static func timed_bonus(card: Dictionary, k: String) -> Dictionary:
+	var b = card.get("bonus_" + k)
+	if b is Dictionary:
+		return b
+	var kws: Array = card.get("keywords", [])
+	if not (kws.has("sokuou") or kws.has("saigo") or kws.has("tenshin")):
+		var b2 = card.get("bonus")
+		if b2 is Dictionary:
+			return b2
+	return {}
+
+
+## 撃破：倒した数 kills > 0 の時の追加効果のイベント（execute_action の中から呼ぶ）
+static func _gekiha_events(user: Dictionary, action: Dictionary, kills: int, allies: Array, enemies: Array, x: int) -> Array:
+	var out: Array = []
+	if kills <= 0 or not ActionList.has_keyword(action, "gekiha"):
+		return out
+	out.append({"target": user, "gekiha": kills})
+	var effs: Array = action.get("gekiha_effects", timed_bonus(action, "gekiha").get("effects", []))
+	if not effs.is_empty() and user.hp > 0:
+		out.append_array(execute_action(user, {"target": action.get("target", "self"), "effects": effs}, allies, enemies, x))
+	return out
+
+
+## 反撃：attacker が owner を攻撃した時（1 回の攻撃につき 1 回）。owner の状態 hangeki の効果を attacker に付ける
+static func _hangeki_events(attacker: Dictionary, owner: Dictionary) -> Array:
+	var out: Array = []
+	var e = owner.get("status_effects", {}).get("hangeki")
+	if not (e is Dictionary) or attacker == owner or int(attacker.hp) <= 0:
+		return out
+	if str(attacker.get("side", "")) == str(owner.get("side", "")):
+		return out
+	for eff in e.get("effects", []):
+		var e2: Dictionary = (eff as Dictionary).duplicate(true)
+		# 攻撃してきた敵は自分のターン中なので、期間つきの効果はそのターンの終わりで減らないよう 1 足す
+		if int(e2.get("turns", -1)) > 0:
+			e2["turns"] = int(e2.turns) + 1
+		var ev := {"target": attacker, "hangeki": true}
+		_apply_effect(owner, attacker, e2, ev)
+		out.append(ev)
+	return out
+
+
+## 状態 hangeki / yoyaku に、効果（add_status の "payload"）を積む
+static func _attach_payload(t: Dictionary, sid: String, payload: Dictionary) -> void:
+	var e = t.status_effects.get(sid)
+	if not (e is Dictionary):
+		return
+	match sid:
+		"hangeki":
+			var list: Array = e.get("effects", [])
+			list.append_array((payload.get("effects", []) as Array).duplicate(true))
+			e["effects"] = list
+		"yoyaku":
+			var list2: Array = e.get("list", [])
+			list2.append(payload.duplicate(true))
+			e["list"] = list2
+
+
 ## 実際に発動する行動（カードのコピー）。キーワードの追加効果・バッジ・レリック（砥石・十連の数珠）を足す
 ## ctx の "whet" = 砥石が効く、"rosary" = 数珠が効く（Cont_Battle が決める）
 static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}) -> Dictionary:
@@ -100,6 +175,22 @@ static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}
 		add += int(b.get("power", 0))
 		for e in b.get("effects", []):
 			effs.append((e as Dictionary).duplicate(true))
+	# 撃破・反撃・予約の札：使った時には効かず、後で効く効果として行動に持たせる（timed_bonus の説明を参照）
+	for k in KW_TIMED:
+		if not ActionList.has_keyword(card, k):
+			continue
+		var tb := timed_bonus(card, k)
+		var teffs: Array = (tb.get("effects", []) as Array).duplicate(true)
+		if teffs.is_empty():
+			continue
+		match k:
+			"gekiha":
+				a["gekiha_effects"] = (a.get("gekiha_effects", []) as Array) + teffs
+			"hangeki":
+				effs.append({"effect": "add_status", "status": "hangeki", "eff_val": 1, "to": "self", "payload": {"effects": teffs}})
+			"yoyaku":
+				effs.append({"effect": "add_status", "status": "yoyaku", "eff_val": 1, "to": "self",
+						"payload": {"target": str(tb.get("target", card.get("target", "self"))), "effects": teffs}})
 	var rank := int(user.get("rank", 0))
 	match str(card.get("badge", "")):
 		"sharp":
@@ -296,32 +387,17 @@ static func resolve_targets(user: Dictionary, target_type: String, allies: Array
 			return friends.filter(func(f): return f != user)
 		"enemy_all":
 			return foes
-		"front_enemy_single":
+		"front_pair", "front_enemy_single":
 			if foes.is_empty():
 				return []
 			if not is_ally:
-				# 挑発されていれば、挑発してきた味方を狙う
-				if StatusController.has(user, "taunt"):
-					var uid := StatusController.val(user, "taunt")
-					for a in foes:
-						if int(a.get("uid", -1)) == uid:
-							return [a]
-				# 予告した側（左＝青／右＝赤）にいる味方。倒れていれば残った方
-				var lane := int(user.get("target_lane", 0))
-				for a in foes:
-					if int(a.get("lane", 0)) == lane:
-						return [a]
-				return [foes[0]]
-			# 味方の単体攻撃：目の前の前衛で HP が一番低い敵（同じなら近い方）。全滅なら front_group の代わりの順
-			var group := front_group(user, foes)
-			var up: Vector2 = user.get("pos", Vector2.ZERO)
-			var best = group[0]
-			for e in group:
-				if int(e.hp) < int(best.hp) or (int(e.hp) == int(best.hp) and up.distance_to(e.pos) < up.distance_to(best.pos)):
-					best = e
-			return [best]
+				return _enemy_single(user, foes)
+			# 味方の「目の前の敵前衛」（front_pair）：目の前の前衛 2 体（青なら A-2・A-3）にまとめて当たる。
+			# 全滅していれば 同じ側の後衛 → C → 全員。旧 front_enemy_single（味方側）もこれと同じ
+			return front_group(user, foes)
 		"front_enemy_group":
-			return front_group(user, foes) if is_ally else foes
+			# 目の前の敵グループ：C・A-1・A-2・A-3（赤なら C・B-1・B-2・B-3）。全滅なら全員
+			return enemy_group(user, foes) if is_ally else foes
 		"front_row":
 			# 前衛全体（A-2・A-3・B-3・B-2）。全滅なら後衛
 			var fr := _in_slots(foes, FRONT_SLOTS)
@@ -349,7 +425,33 @@ const BACK_SLOTS := ["A-1", "B-1", "C"]
 const FRONT_CHAIN := [[["A-2", "A-3"], ["A-1"], ["C"]], [["B-3", "B-2"], ["B-1"], ["C"]]]
 
 
-## 目の前の敵グループ（front_enemy_group）：目の前の前衛（青なら A-2・A-3、赤なら B-3・B-2）。
+## 目の前の敵グループ（front_enemy_group）の位置：青＝C・A-1・A-2・A-3、赤＝C・B-1・B-2・B-3
+const GROUP_SLOTS := [["C", "A-1", "A-2", "A-3"], ["C", "B-1", "B-2", "B-3"]]
+
+
+## 目の前の敵グループ（front_enemy_group）：C と自分の側の後衛・前衛。全滅していれば全員
+static func enemy_group(user: Dictionary, foes: Array) -> Array:
+	var lane := clampi(int(user.get("lane", 0)), 0, 1)
+	var g := _in_slots(foes, GROUP_SLOTS[lane])
+	return g if not g.is_empty() else foes
+
+
+## 敵の単体攻撃（敵の行動の front_enemy_single）：挑発されていれば挑発した味方、
+## そうでなければ予告した側（左＝青／右＝赤）にいる味方。倒れていれば残った方
+static func _enemy_single(user: Dictionary, foes: Array) -> Array:
+	if StatusController.has(user, "taunt"):
+		var uid := StatusController.val(user, "taunt")
+		for a in foes:
+			if int(a.get("uid", -1)) == uid:
+				return [a]
+	var lane := int(user.get("target_lane", 0))
+	for a in foes:
+		if int(a.get("lane", 0)) == lane:
+			return [a]
+	return [foes[0]]
+
+
+## 目の前の敵前衛（front_pair）：目の前の前衛（青なら A-2・A-3、赤なら B-3・B-2）。
 ## 全滅していれば 同じ側の後衛（A-1／B-1）→ C → 全員 の順に代わる
 static func front_group(user: Dictionary, foes: Array) -> Array:
 	var lane := clampi(int(user.get("lane", 0)), 0, 1)
