@@ -1,7 +1,7 @@
 extends Node2D
 ## タイトル画面
 
-const VERSION := "0.02"  # 公開するたびに上げる（右下に表示）
+const VERSION := "0.03"  # 公開するたびに上げる（右下に表示）
 
 var deco: Control
 var _t := 0.0

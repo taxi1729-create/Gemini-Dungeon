@@ -69,7 +69,10 @@ static func apply_status(target: Dictionary, status_id: String, amount: int, tur
 			e["val"] = amount  # 挑発は最後に挑発したキャラ
 		else:
 			e["val"] = int(e.val) + amount
-		e["turns"] = -1 if (turns < 0 or int(e.turns) < 0) else maxi(int(e.turns), turns)
+		if status_id in ["fire", "poison"]:
+			e["turns"] = int(e.val)  # 火傷・毒は重ねた分だけ残りターンも増える（強さ＝残りターン）
+		else:
+			e["turns"] = -1 if (turns < 0 or int(e.turns) < 0) else maxi(int(e.turns), turns)
 	else:
 		se[status_id] = {"val": amount, "turns": turns}
 

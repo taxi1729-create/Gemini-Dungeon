@@ -418,7 +418,7 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 					"declare": parts.append("%s宣言：次の自分のターン開始時までにHPが減らなければ、%dターン APプラス（ターン開始時AP+1）" % [ic, int(e.eff_val)])
 					"reblock": parts.append("%s次の自分のターン開始時にブロック+%d" % [ic, int(e.eff_val)])
 					_: parts.append("%s%s%s+%d" % [ic, who, str(st.get("name", "")).replace("アップ", ""), int(e.eff_val)])
-	if burns(action, "exhaust"):
+	if burns(action, "exhaust") and not is_power:
 		parts.append("[i:kw_exhaust]使うと廃棄")
 	if str(action.get("badge", "")) == "keep" and (ActionList.has_keyword(action, "exhaust") or ActionList.has_keyword(action, "consume")):
 		parts.append("[i:b_keep]廃棄・消費しない")
