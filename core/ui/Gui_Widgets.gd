@@ -51,12 +51,12 @@ func _draw_order() -> void:
 		var is_cur := i == index
 		var w := 64.0 if is_cur else 52.0
 		var r := Rect2(x, (size.y - w) / 2, w, w)
-		var side_col: Color = Color("1f3f86") if u.get("side") == "ally" else Color("6a1420")
+		var side_col: Color = IC.GLASS.sacred_blue if u.get("side") == "ally" else IC.GLASS.deep_rose.darkened(0.3)  # 味方＝セイクレッドブルー、敵＝暗いローズ
 		var alive: bool = u.hp > 0
 		if is_cur:
 			IC.slant(self, r, side_col, 8, 4.0, IC.COL.paper, IC.COL.red, Vector2(5, 5))
 		else:
-			IC.slant(self, r, side_col.darkened(0.35) if alive else Color("1a1a1e"), 8, 2.0, side_col.lightened(0.25) if alive else Color("333"))
+			IC.slant(self, r, side_col.darkened(0.35) if alive else IC.GLASS.ivory_black, 8, 2.0, side_col.lightened(0.25) if alive else IC.GLASS.ash_gray.darkened(0.3))
 		var sc: float = 0.36 * w / 64.0 / float(u.get("art_scale", 1.0))
 		var face := 1.0 if u.get("side") == "ally" else -1.0
 		IC.character(self, u.get("art", "knight"), r.position + Vector2(w / 2, w - 6), sc * float(u.get("art_scale", 1.0)), face, _t)

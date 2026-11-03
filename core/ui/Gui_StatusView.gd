@@ -77,9 +77,9 @@ func _layout() -> void:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.82))
 	var IC = ImageController
-	IC.stripes(self, Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.025), 22, 2, 0.6)
+	draw_rect(Rect2(Vector2.ZERO, size), Color(IC.GLASS.blackish_blue, 0.88))
+	IC.dots(self, Rect2(Vector2.ZERO, size), Color(IC.GLASS.sacred_blue, 0.5), 26.0, 3.2)  # 水玉（セイクレッドブルー）
 	for c in _cards:
 		_draw_card(c.unit, c.rect)
 

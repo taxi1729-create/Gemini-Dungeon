@@ -46,8 +46,8 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var IC = ImageController
-	var fg: Color = IC.COL.text if not dimmed else Color("5c5c66")
-	var ac: Color = accent if not dimmed else Color("4a4a54")
+	var fg: Color = IC.COL.text if not dimmed else IC.GLASS.ash_gray.lightened(0.2)
+	var ac: Color = accent if not dimmed else IC.GLASS.ash_gray
 	if shape == "key":
 		_draw_key(fg, ac)
 		return
@@ -57,14 +57,15 @@ func _draw() -> void:
 	if highlighted:
 		IC.poly_box(self, IC.burst_pts(c, rad + 16, rad + 4, 14, 5, _t * 0.6), IC.COL.red, 3.0, IC.COL.ink)
 	else:
-		draw_circle(c + Vector2(5, 5), rad, Color(0, 0, 0, 0.7))
-	var face: Color = IC.COL.ink
+		draw_circle(c + Vector2(5, 5), rad, Color(IC.GLASS.ivory_black, 0.7))
+	# 丸の面：ブラッキッシュブルーにセイクレッドブルーを混ぜた明るめの紺。無効はアッシュ寄りの暗い色
+	var face: Color = IC.COL.ink.lerp(IC.GLASS.sacred_blue, 0.45)
 	if dimmed:
-		face = Color("17171b")
+		face = IC.GLASS.ivory_black.lerp(IC.GLASS.ash_gray, 0.3)
 	elif highlighted:
 		face = IC.COL.red
 	draw_circle(c, rad, face)
-	var ring: Color = IC.COL.paper if not dimmed else Color("3a3a42")
+	var ring: Color = IC.COL.paper if not dimmed else IC.GLASS.ash_gray.darkened(0.2)
 	if icon_kind == "burst" and not dimmed and not highlighted:
 		ring = IC.COL.red.lerp(IC.COL.paper, 0.5 + 0.5 * sin(_t * 4.0))
 	draw_arc(c, rad, 0, TAU, 48, ring, 4, true)
@@ -83,7 +84,7 @@ func _draw() -> void:
 	_draw_badge()
 	if ap_cost >= 0:
 		var p := Vector2(size.x - 18, 18)
-		IC.icon(self, "ap", p, 34, IC.COL.ap if not dimmed else Color("5a2a30"))
+		IC.icon(self, "ap", p, 34, IC.COL.ap if not dimmed else IC.GLASS.deep_rose.darkened(0.55))
 		IC.text(self, str(ap_cost), p + Vector2(0, 1), 17, Color.WHITE, true, 4, -1.0, IC.COL.ink)
 
 
@@ -124,13 +125,13 @@ func _draw_key(fg: Color, ac: Color) -> void:
 	var IC = ImageController
 	var r := Rect2(8, 6, size.x - 18, size.y - 16)
 	var skew := 16.0
-	var face: Color = IC.COL.ink.lerp(accent, 0.14)  # 黒に差し色をほんのり混ぜる
+	var face: Color = IC.COL.ink.lerp(IC.GLASS.sacred_blue, 0.4).lerp(accent, 0.12)  # 紺に差し色をほんのり混ぜる
 	if dimmed:
-		face = Color("17171b")
+		face = IC.GLASS.ivory_black.lerp(IC.GLASS.ash_gray, 0.3)
 	elif highlighted:
 		face = IC.COL.red
-	var shadow: Color = IC.COL.ink if highlighted else Color(0, 0, 0, 0.75)
-	IC.slant(self, r, face, skew, 3.0 if not highlighted else 4.0, IC.COL.paper if not dimmed else Color("3a3a42"),
+	var shadow: Color = IC.COL.ink if highlighted else Color(IC.GLASS.ivory_black, 0.75)
+	IC.slant(self, r, face, skew, 3.0 if not highlighted else 4.0, IC.COL.paper if not dimmed else IC.GLASS.ash_gray.darkened(0.2),
 			shadow, Vector2(7, 7))
 	if not highlighted and not dimmed:
 		# 右下に差し色の斜線、左に差し色の細い帯

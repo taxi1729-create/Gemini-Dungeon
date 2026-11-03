@@ -47,7 +47,7 @@ func _draw() -> void:
 	var h := BAND_H * open * (1.0 - close * close)
 	var fade := 1.0 - close
 	# 画面を少し暗く
-	draw_rect(Rect2(0, 0, 720, 1280), Color(0, 0, 0, 0.42 * open * fade))
+	draw_rect(Rect2(0, 0, 720, 1280), Color(BattleFx.INK, 0.42 * open * fade))
 	if h < 2:
 		return
 	var slide := close * 260.0  # 閉じる時は右へ流れて抜ける

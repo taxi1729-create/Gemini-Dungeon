@@ -120,7 +120,7 @@ func _refresh() -> void:
 	info["enabled"] = not done and not (content.kind == "relic" and Inventory.has_relic(content.id))
 	info["block_msg"] = "もう持っている" if not done else "もう決めた"
 	pad.set_cell(8, info)
-	pad.set_cell(2, {"title": "取得しない", "icon": "skull", "accent": Color("a8a8b0"), "desc": "中身を置いて先へ進む", "enabled": not done, "block_msg": "もう決めた"})
+	pad.set_cell(2, {"title": "取得しない", "icon": "skull", "accent": ImageController.GLASS.stone_gray, "desc": "中身を置いて先へ進む", "enabled": not done, "block_msg": "もう決めた"})
 	pad.queue_redraw()
 
 
@@ -196,13 +196,14 @@ func _draw_view() -> void:
 	IC.icon(view, "chest", c + Vector2(0, 70), 150)
 	# 中身の名前と効果
 	var r := Rect2(40, 500, 640, 132)
-	IC.slant(view, r, Color(col.ink, 0.92), 16, 3.0, col.paper, col.red, Vector2(6, 6))
-	IC.head(view, str(info.get("title", "")), Vector2(360, r.position.y + 32), 30, col.gold, 560)
+	# 中身の説明：エンジェルホワイトの文字の箱（見出しはディープローズ、本文は墨）
+	IC.slant(view, r, IC.GLASS.angel_white, 16, 3.0, col.ink, col.red, Vector2(6, 6))
+	IC.head(view, str(info.get("title", "")), Vector2(360, r.position.y + 32), 30, col.red, 560)
 	var body := str(info.desc).replace("\n", "　")
 	var fs := 19
 	while fs > 13 and IC.rich_height(body, fs, r.size.x - 60, fs * 1.35) > r.size.y - 66:
 		fs -= 1
-	IC.rich_text(view, body, Vector2(r.position.x + 30, r.position.y + 60), fs, col.text, r.size.x - 60, 0, fs * 1.35)
+	IC.rich_text(view, body, Vector2(r.position.x + 30, r.position.y + 60), fs, col.ink, r.size.x - 60, 0, fs * 1.35)
 	if info.has("card"):
 		# カードの中身はマス 8 にカードで出るので、上にはアイコンの代わりに「カード」の札
 		IC.icon(view, "cards", p, 90 * maxf(k, 0.2))

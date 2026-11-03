@@ -161,6 +161,13 @@ static func display_status(u: Dictionary) -> Array:
 		var st: Dictionary = StatusEffectList.DATA.get(id, {})
 		out.append({"id": id, "icon": str(st.get("icon", "star")), "text": status_text(u, id),
 				"label": str(StatusController.label(u, id)), "good": bool(st.get("good", true))})
+	# 味方の前衛・後衛の効果（陣形効果。ActionController.FORMATION_BONUS）を状態と同じように出す
+	if str(u.get("side", "")) == "ally" and u.has("rank"):
+		var fb := ActionController.FORMATION_BONUS
+		if int(u.rank) == 0:
+			out.append({"id": "rank_front", "icon": "rank_front", "text": "前衛 攻+%d" % fb, "label": "攻+%d" % fb, "good": true})
+		else:
+			out.append({"id": "rank_back", "icon": "rank_back", "text": "後衛 防+%d" % fb, "label": "防+%d" % fb, "good": true})
 	if reserve > 0:
 		out.append({"id": "reserve", "icon": "st_reserve", "text": "予約" if reserve == 1 else "予約 %d" % reserve,
 				"label": "" if reserve == 1 else str(reserve), "good": true})

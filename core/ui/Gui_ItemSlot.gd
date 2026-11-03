@@ -41,8 +41,8 @@ func _draw() -> void:
 		return
 	var acc: Color = it.get("art_col", IC.COL.paper)
 	# 斜めの黒いパネル。選択中は赤く塗り、白縁＋黒のベタ影
-	var face: Color = IC.COL.red if highlighted else IC.COL.ink.lerp(acc, 0.12)
-	var shadow: Color = IC.COL.ink if highlighted else Color(0, 0, 0, 0.75)
+	var face: Color = IC.COL.red if highlighted else IC.COL.ink.lerp(IC.GLASS.sacred_blue, 0.4).lerp(acc, 0.12)
+	var shadow: Color = IC.COL.ink if highlighted else Color(IC.GLASS.ivory_black, 0.75)
 	IC.slant(self, r, face, skew, 4.0 if highlighted else 3.0, IC.COL.paper, shadow, Vector2(6, 6))
 	if not highlighted:
 		IC.stripes(self, Rect2(r.position.x + r.size.x * 0.4, r.end.y - 30, r.size.x * 0.5, 26), Color(acc, 0.3), 9, 3, 0.6)

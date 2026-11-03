@@ -550,7 +550,7 @@ const ICON_DEFAULT = {
 
 
 func icon(ci: CanvasItem, kind: String, c: Vector2, s: float, col: Color = Color(0, 0, 0, 0), rot: float = 0.0) -> void:
-	var k: Color = col if col.a > 0 else ICON_DEFAULT.get(kind, ICON_DEFAULT7.get(kind, Color.WHITE))
+	var k: Color = col if col.a > 0 else ICON_DEFAULT.get(kind, ICON_DEFAULT7.get(kind, ICON_DEFAULT8.get(kind, Color.WHITE)))
 	ci.draw_set_transform(c, rot, Vector2(s, s))
 	match kind:
 		"sword", "battle": _i_sword(ci, k)
@@ -2231,12 +2231,21 @@ func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool) -> void:
 	for i in 14:
 		var px := r.position.x + fmod(i * 97.0 + t * (8 + i % 5), r.size.x)
 		var py := r.position.y + fmod(i * 61.0 - t * (5 + i % 3) * 3.0 + 2000.0, ground_y - r.position.y)
-		var pc := COL.red if i % 3 == 0 else G.angel_white
+		var pc: Color = COL.red if i % 3 == 0 else G.angel_white
 		ci.draw_rect(Rect2(Vector2(px, py), Vector2(3, 3)), Color(pc, 0.28 + 0.15 * sin(t * 2 + i)))
 
 
 func _bg_camp(ci: CanvasItem, r: Rect2, t: float) -> void:
 	_bg_cave(ci, r, t, true)
+	# 暖炉：中央の窓の前を石の尖頭アーチで覆い、中を暗くして鍋と文字を見やすくする
+	var ground_y := r.position.y + r.size.y * 0.72
+	var hearth := Rect2(r.get_center().x - 190, r.position.y + r.size.y * 0.12, 380, ground_y - r.position.y - r.size.y * 0.12)
+	var arch := _arch_pts(hearth)
+	ci.draw_colored_polygon(arch, GLASS.stone_gray.darkened(0.35))
+	ci.draw_colored_polygon(_arch_pts(hearth.grow(-14)), GLASS.ivory_black.lerp(GLASS.blackish_blue, 0.45))
+	var ol := arch.duplicate()
+	ol.append(arch[0])
+	ci.draw_polyline(ol, GLASS.ivory_black, 3.0)
 	var c := Vector2(r.get_center().x, r.position.y + r.size.y * 0.44)  # 休憩所の画面で見える高さに置く
 	var fl := 0.9 + 0.1 * sin(t * 8.0) + 0.06 * sin(t * 21.0)
 	glow(ci, c + Vector2(0, -40), 260 * fl, Color(COL.red, 0.35), 10)
@@ -2492,7 +2501,7 @@ func _icon_ext7(ci: CanvasItem, kind: String, k: Color, m: Transform2D) -> bool:
 		"relic": _i_relic(ci, k)
 		"badge": _i_badge_medal(ci, "badge", k, m)
 		_:
-			return false
+			return _icon_ext8(ci, kind, k)
 	return true
 
 
@@ -2864,3 +2873,93 @@ func _i_relic(ci: CanvasItem, k: Color) -> void:
 	ci.draw_colored_polygon(pts([[0, -0.3], [0.32, -0.06], [0, 0.04], [-0.32, -0.06]]), k.lightened(0.3))
 	ci.draw_colored_polygon(pts([[0, 0.04], [0.2, 0.36], [-0.2, 0.36]]), k.darkened(0.25))
 	_sparkle(ci, Vector2(0.3, -0.34), 0.13, COL.paper)
+
+
+# ============================================================
+# 8回目の追加アイコン（撃破・反撃・予約の札、スタン・回復不可、前衛・後衛の効果、目の前の敵前衛）
+# ============================================================
+
+const ICON_DEFAULT8 = {
+	"kw_gekiha": Color("c8384f"), "kw_hangeki": Color("3d7fd6"), "kw_yoyaku": Color("8a5cd0"),
+	"st_stun": Color("ffd84a"), "st_no_heal": Color("5fd07a"),
+	"rank_front": Color("e8213a"), "rank_back": Color("7fa6d8"),
+	"tgt_front_pair": Color("ff4a4a"),
+}
+
+
+func _icon_ext8(ci: CanvasItem, kind: String, k: Color) -> bool:
+	match kind:
+		"kw_gekiha": _i_kw_gekiha(ci, k)
+		"kw_hangeki": _i_kw_hangeki(ci, k)
+		"kw_yoyaku": _i_kw_yoyaku(ci, k)
+		"st_stun": _i_st_stun(ci, k)
+		"st_no_heal": _i_st_no_heal(ci, k)
+		"rank_front": _i_rank_front(ci, k)
+		"rank_back": _i_rank_back(ci, k)
+		"tgt_front_pair": _i_tgt_front_pair(ci, k)
+		_:
+			return false
+	return true
+
+
+## 撃破：赤い丸に、白いギザギザの星（倒した手応え）と黒いバツ
+func _i_kw_gekiha(ci: CanvasItem, k: Color) -> void:
+	_kw_disc(ci, k)
+	ci.draw_colored_polygon(star_pts(Vector2.ZERO, 0.34, 0.16, 8), COL.paper)
+	ci.draw_line(Vector2(-0.12, -0.12), Vector2(0.12, 0.12), COL.ink, 0.08)
+	ci.draw_line(Vector2(0.12, -0.12), Vector2(-0.12, 0.12), COL.ink, 0.08)
+
+
+## 反撃：青い丸に、白い盾と、盾から跳ね返る矢印
+func _i_kw_hangeki(ci: CanvasItem, k: Color) -> void:
+	_kw_disc(ci, k)
+	ci.draw_colored_polygon(pts([[-0.24, -0.24], [0.04, -0.3], [0.04, 0.3], [-0.24, 0.12]]), COL.paper)
+	_arc_arrow(ci, Vector2(0.06, 0.0), 0.22, -PI * 0.45, PI * 0.45, COL.gold, 0.07)
+
+
+## 予約：紫の丸に、時計
+func _i_kw_yoyaku(ci: CanvasItem, k: Color) -> void:
+	_kw_disc(ci, k)
+	_clock_badge(ci, Vector2.ZERO, 0.28)
+
+
+## スタン：頭の上を回る黄色い星 3 つと渦
+func _i_st_stun(ci: CanvasItem, k: Color) -> void:
+	var ring := ell(Vector2(0, 0.06), 0.4, 0.16, 24)
+	ring.append(ring[0])
+	ci.draw_polyline(ring, COL.ink, 0.1, true)
+	ci.draw_polyline(ring, COL.paper, 0.05, true)
+	for i in 3:
+		var a := -PI / 2 + TAU * i / 3.0
+		var c := Vector2(cos(a) * 0.36, 0.06 + sin(a) * 0.16) + Vector2(0, -0.08)
+		ci.draw_colored_polygon(star_pts(c, 0.2, 0.09), COL.ink)
+		ci.draw_colored_polygon(star_pts(c, 0.15, 0.065), k)
+
+
+## 回復不可：緑のハートに赤い斜線
+func _i_st_no_heal(ci: CanvasItem, k: Color) -> void:
+	_i_heart(ci, k)
+	ci.draw_line(Vector2(-0.4, -0.36), Vector2(0.4, 0.36), COL.ink, 0.16)
+	ci.draw_line(Vector2(-0.4, -0.36), Vector2(0.4, 0.36), COL.red, 0.09)
+
+
+## 前衛の効果（攻撃力+2）：上向きの赤い矢印と白い剣
+func _i_rank_front(ci: CanvasItem, k: Color) -> void:
+	_i_stat_atk(ci, COL.paper)
+	_ink_arrow(ci, Vector2(0.26, 0.3), Vector2(0.26, -0.3), k, 0.09)
+
+
+## 後衛の効果（防御力+2）：青い兜と、上向きの矢印
+func _i_rank_back(ci: CanvasItem, k: Color) -> void:
+	_i_helmet(ci, k)
+	_ink_arrow(ci, Vector2(0.3, 0.3), Vector2(0.3, -0.26), COL.good, 0.08)
+
+
+## 対象：目の前の敵前衛（照準の中に並んだ人影 2 つ）
+func _i_tgt_front_pair(ci: CanvasItem, k: Color) -> void:
+	ci.draw_arc(Vector2.ZERO, 0.44, 0, TAU, 28, COL.ink, 0.15, true)
+	ci.draw_arc(Vector2.ZERO, 0.44, 0, TAU, 28, k, 0.08, true)
+	for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
+		ci.draw_line(d * 0.38, d * 0.56, k, 0.09)
+	_pawn(ci, Vector2(-0.16, -0.02), 0.46, k.darkened(0.15))
+	_pawn(ci, Vector2(0.16, 0.02), 0.48, k)

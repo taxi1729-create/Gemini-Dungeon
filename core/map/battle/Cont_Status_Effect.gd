@@ -4,7 +4,7 @@ class_name StatusController
 
 
 ## 次のターンに効く状態。表示では「予約」1 つ（アイコン st_reserve）にまとめる（中身はそのまま）
-const RESERVE := ["ap_next", "focus", "declare", "reblock"]
+const RESERVE := ["ap_next", "focus", "declare", "reblock", "yoyaku"]
 
 
 ## 予約の中身（説明の文の配列）。無ければ空
@@ -19,6 +19,11 @@ static func reserve_lines(u: Dictionary) -> Array:
 			"focus": out.append("[i:st_focus]精神統一：%s必殺技の AP-%d" % ["このターン " if u.status_effects.focus.get("active", false) else "次の自分のターン ", v])
 			"declare": out.append("[i:st_declare]宣言：次の自分のターン開始時までに HP が減らなければ %dターン APプラス" % v)
 			"reblock": out.append("[i:st_reblock]リブロック：次の自分のターン開始時にブロック+%d" % v)
+			"yoyaku":
+				# 予約の札：積んだ効果をそれぞれ説明する
+				for p in u.status_effects.yoyaku.get("list", []):
+					var pd: Dictionary = p
+					out.append("[i:kw_yoyaku]予約：次の自分のターン開始時に %s" % DeckController.effect_text(u, {"effects": pd.get("effects", [])}))
 	return out
 
 
@@ -48,6 +53,12 @@ static func apply_status(target: Dictionary, status_id: String, amount: int, tur
 	var se: Dictionary = target.status_effects
 	if status_id in ["fire", "poison", "regen"]:
 		turns = maxi(turns, amount)  # 火傷・毒・リジェネは強さ＝残りターン
+	if status_id in ["stun", "hangeki", "yoyaku"]:
+		turns = -1  # 次の自分のターン（開始時）に消えるので、ターン終了では減らさない
+	if status_id == "stun":
+		amount = 1  # スタンは重ねても 1 回休むだけ
+		if se.has("stun"):
+			return
 	if se.has(status_id):
 		var e: Dictionary = se[status_id]
 		if status_id == "focus" and e.get("active", false):
@@ -99,7 +110,10 @@ static func trigger_start_of_turn(u: Dictionary) -> Array:
 				evs.append({"target": u, "damage": v, "tick": k, "lost": before - int(u.hp),
 						"overkill": maxi(0, v - before) if int(u.hp) <= 0 else 0})
 			"regen":
-				# リジェネ：残りターン分 HP 回復（最大 HP を超えてよい）
+				# リジェネ：残りターン分 HP 回復（最大 HP を超えてよい）。回復不可の間は回復しない
+				if se.has("no_heal"):
+					evs.append({"target": u, "heal": 0, "no_heal": true, "tick": k})
+					continue
 				var rv := int(e.val)
 				u["hp"] = int(u.hp) + rv
 				evs.append({"target": u, "heal": rv, "tick": k})
@@ -114,10 +128,15 @@ static func trigger_start_of_turn(u: Dictionary) -> Array:
 			"focus":
 				e["active"] = true
 				evs.append({"target": u, "focus": int(e.val)})
+			"yoyaku":
+				# 予約の札：中身（[{"target", "effects"}]）を Cont_Battle が発動する
+				evs.append({"target": u, "yoyaku": (e.get("list", []) as Array).duplicate(true)})
 	if se.has("ap_next"):
 		se.erase("ap_next")
 	if se.has("reblock"):
 		se.erase("reblock")
+	se.erase("yoyaku")
+	se.erase("hangeki")  # 反撃は次の自分のターン開始まで
 	return evs
 
 

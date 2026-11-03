@@ -58,7 +58,7 @@ func _ready() -> void:
 	z_index = 200
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.75)
+	bg.color = Color(ImageController.GLASS.ivory_black, 0.78)
 	bg.size = size
 	add_child(bg)
 	UiSystem.make_panel(self, Rect2(20, 60, 680, 1160))

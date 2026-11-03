@@ -21,9 +21,9 @@ class_name BattleFx
 ##   ・top（FxTop、z_index 高）：火花・斬撃・ダメージ数字・画面フラッシュ。1 つの _draw でまとめて描く（ノードを増やさない）
 
 const LANE_COL := [Color("3d8bff"), Color("ff3b3b")]  # 左＝青、右＝赤
-const INK := Color("111114")  # 黒
-const PAPER := Color("f7f4ee")  # 白
-const RED := Color("e8213a")  # 差し色
+const INK := Color("1c2048")  # 黒（ブラッキッシュブルー）
+const PAPER := Color("dbe6f3")  # 白（エンジェルホワイト）
+const RED := Color("b4485b")  # 差し色（ディープローズ）
 const SPARK_GOLD := Color("ffd84d")
 const WALL := Rect2(0, 0, 720, 650)  # 吹き飛びの跳ね返り範囲（戦場）
 const TARGET_R := Vector2(78, 24)  # 地面ターゲットの楕円半径

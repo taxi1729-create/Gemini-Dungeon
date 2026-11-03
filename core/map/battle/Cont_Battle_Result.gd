@@ -78,7 +78,8 @@ func _show_win() -> void:
 		saved_cards = []
 	UiSystem.make_banner(ui, "戦利品　" + "、".join(drops), Rect2(30, 262, 660, 54), 24, col.paper, col.ink, 18)
 	_build_foods(SaveData.screen.get("foods_got", []))
-	UiSystem.make_label(ui, "報酬カードを1枚選んでください（持ち主のデッキに入ります）", Vector2(20, 452), Vector2(680, 34), 21, col.text, HORIZONTAL_ALIGNMENT_CENTER, 4)
+	# 案内：セイクレッドブルーの帯（背景の窓の上でも読めるように）
+	UiSystem.make_banner(ui, "報酬カードを1枚選んでください（持ち主のデッキに入ります）", Rect2(30, 452, 660, 36), 20, ImageController.GLASS.sacred_blue, col.paper, 14)
 	var owners := ["knight", "witch", ["knight", "witch"].pick_random()]
 	owners.shuffle()
 	for i in 3:
@@ -138,15 +139,17 @@ func _build_foods(got: Array) -> void:
 		for f in got:
 			var r := Rect2(i * 222, 0, 214, 118)
 			var g := int(f.grade)
-			IC.cut_rect(box, r, Color(col.ink, 0.92), 12, 2.0, col.paper if g > 0 else col.line)
+			# 食材の箱：手に入れたらエンジェルホワイト、なしはストーングレイ（どちらも墨の縁・濃い文字）
+			IC.cut_rect(box, r, IC.GLASS.angel_white if g > 0 else IC.GLASS.stone_gray.darkened(0.15), 12, 3.0, col.ink,
+					Color(col.red, 0.9) if g > 0 else Color(IC.GLASS.ivory_black, 0.5), Vector2(5, 5))
 			var fd: Dictionary = FoodList.DATA[f.id]
-			IC.icon(box, fd.icon, r.position + Vector2(44, 46), 58, Color(0, 0, 0, 0) if g > 0 else col.steel)
+			IC.icon(box, fd.icon, r.position + Vector2(44, 46), 58, Color(0, 0, 0, 0) if g > 0 else IC.GLASS.ash_gray)
 			IC.head(box, ("%s G%d" % [fd.name, g]) if g > 0 else "%s なし" % fd.name, r.position + Vector2(146, 44), 26,
-					col.paper if g > 0 else col.sub, 128, col.red if g > 0 else Color(0, 0, 0, 0), Vector2(3, 3))
-			IC.text(box, "%s %d" % [labels.get(f.id, ""), int(f.val)], r.position + Vector2(107, 96), 18, col.sub if g <= 0 else col.text, true, 0, 200)
+					col.ink if g > 0 else IC.GLASS.ash_gray.darkened(0.2), 128, Color(0, 0, 0, 0), Vector2(3, 3))
+			IC.text(box, "%s %d" % [labels.get(f.id, ""), int(f.val)], r.position + Vector2(107, 96), 18, IC.GLASS.ash_gray.darkened(0.2) if g <= 0 else IC.GLASS.sacred_blue, true, 0, 200)
 			if g > 0:
 				for s in g:  # グレードの星
-					box.draw_colored_polygon(IC.star_pts(r.position + Vector2(110 + s * 22, 74), 9, 4), col.gold)
+					box.draw_colored_polygon(IC.star_pts(r.position + Vector2(110 + s * 22, 74), 9, 4), col.red)
 			i += 1)
 	ui.add_child(box)
 

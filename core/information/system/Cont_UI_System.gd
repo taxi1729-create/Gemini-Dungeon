@@ -254,6 +254,10 @@ func make_banner(parent: Node, txt: String, rect: Rect2, font_size: int = 36,
 		# 黒い帯は白縁＋赤影、それ以外は黒縁＋黒影にして背景から浮かせる
 		var dark := f.get_luminance() < 0.2
 		IC.slant(c, r, f, skew, 3.0, col.paper if dark else col.ink, col.red if dark else Color(col.ink, 0.9), Vector2(7, 7))
+		# 帯の右端にストライプ（ローズの帯は墨、紺の帯はスカイ。白い帯には入れない）
+		if f.get_luminance() < 0.6 and c.size.x > 150:
+			var sw := Rect2(c.size.x * 0.74, 2, c.size.x * 0.26 - skew - 4, c.size.y - 4)
+			IC.stripes(c, sw, Color(col.ink, 0.22) if not dark else Color(IC.GLASS.sacred_sky, 0.14), 12, 4, 0.5)
 		# 帯の左端に白い細線を添えてシャープに見せる
 		c.draw_colored_polygon(IC.slant_pts(Rect2(-14, 0, 8, c.size.y), skew), col.paper)
 		# 文字の影：白文字なら黒（黒帯なら赤）、黒文字なら影なし

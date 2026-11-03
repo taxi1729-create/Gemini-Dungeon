@@ -3,7 +3,11 @@ class_name GuiCard
 ## 手札・報酬のカード。枠・絵柄・AP・威力を全てコードで描く。
 
 const SIZE := Vector2(128, 168)
-const POWER_COL := Color("23a85a")  # パワーカードの枠の色
+const POWER_COL := Color("23a85a")  # パワーカードの枠の色（ナイト）
+## ウィッチのカードの枠の色（ナイトは COL.attack＝ディープローズ・COL.skill＝セイクレッドブルー・POWER_COL＝緑）
+const WITCH_SKILL_COL := Color("5cbfe6")  # 水色
+const WITCH_ATTACK_COL := Color("e8842c")  # オレンジ
+const WITCH_POWER_COL := Color("9ccc3c")  # 黄緑
 
 var card: Dictionary = {}
 var playable := true  # AP不足なら false（暗く表示）
@@ -32,6 +36,13 @@ func _process(delta: float) -> void:
 
 
 func _frame_color() -> Color:
+	if str(card.get("owner", "")) == "witch":
+		# ウィッチのカード：スキル＝水色、アタック＝オレンジ、パワー＝黄緑（持ち主は枠の色で分かる）
+		if ActionList.has_keyword(card, "power") or card.get("type", "") == "unselectable":
+			return WITCH_POWER_COL
+		match card.get("type", ""):
+			"attack": return WITCH_ATTACK_COL
+			"skill": return WITCH_SKILL_COL
 	if ActionList.has_keyword(card, "power"):
 		return POWER_COL  # パワーカードは緑の枠（札は出さない）
 	match card.get("type", ""):
@@ -129,12 +140,7 @@ func _draw() -> void:
 		IC.text(self, aps, Vector2(size.x - 18, 18), 19, Color.WHITE, true, 4, -1.0, IC.COL.ink)
 	elif card.get("type") == "unselectable":
 		IC.text(self, "常時", Vector2(size.x - 22, 16), 14, IC.COL.good, true, 4)
-	# 持ち主のタグ（ナイト／ウィッチ）：持ち主の色の斜めタグ
-	var owner: String = card.get("owner", "")
-	if owner != "":
-		var tag := Rect2(size.x / 2 - 30, 4, 60, 20)
-		IC.slant(self, tag, IC.COL.get(owner, Color.GRAY), 6, 2.0, IC.COL.ink)
-		IC.text(self, "ナイト" if owner == "knight" else "ウィッチ", tag.get_center(), 12, Color.WHITE, true)
+	# 持ち主のタグ（ナイト／ウィッチ）は出さない（持ち主は枠の色と説明で分かる）
 	_draw_keywords(art)
 	_draw_badge(art)
 	if not playable and not unsel:
@@ -197,6 +203,12 @@ func _draw_keywords(art: Rect2) -> void:
 				lb = "消費"
 				face = Color("ff8a2a").darkened(0.1)
 				fg = Color.WHITE
+				line = IC.COL.ink
+			"gekiha", "hangeki", "yoyaku":
+				# 撃破・反撃・予約：札の色はアイコンと同じ（ImageController.ICON_DEFAULT8）
+				lb = str(DeckController.KW_NAME[kw])
+				face = ImageController.ICON_DEFAULT8.get("kw_" + str(kw), IC.COL.paper)
+				fg = IC.COL.paper
 				line = IC.COL.ink
 			_:
 				continue

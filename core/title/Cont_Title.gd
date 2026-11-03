@@ -128,7 +128,7 @@ func _open_list(title: String, note: String, rows: Array) -> Control:
 	v.mouse_filter = Control.MOUSE_FILTER_STOP
 	v.z_index = 200
 	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.8)
+	bg.color = Color(ImageController.GLASS.ivory_black, 0.8)
 	bg.size = v.size
 	v.add_child(bg)
 	UiSystem.make_panel(v, Rect2(20, 60, 680, 1160))
@@ -144,11 +144,12 @@ func _open_list(title: String, note: String, rows: Array) -> Control:
 		for i in rows.size():
 			var y := i * rh
 			var r := Rect2(0, y, 648, rh - 6)
-			IC.cut_rect(list, r, Color(col.ink, 0.9), 10, 2.0, col.line)
-			list.draw_circle(Vector2(44, y + (rh - 6) / 2), 34, col.steel)
+			# 一覧の行：エンジェルホワイトの箱（セイクレッドブルーの縁）、アイコンの下地はホーリーブルー
+			IC.cut_rect(list, r, IC.GLASS.angel_white, 10, 2.0, IC.GLASS.sacred_blue)
+			list.draw_circle(Vector2(44, y + (rh - 6) / 2), 34, IC.GLASS.holy_blue)
 			IC.icon(list, rows[i][0], Vector2(44, y + (rh - 6) / 2), 54)
-			list.draw_string(IC.font_bold, Vector2(92, y + 32), rows[i][1], HORIZONTAL_ALIGNMENT_LEFT, 540, 23, col.paper)
-			IC.rich_text(list, rows[i][2], Vector2(92, y + 40), 17, col.text, 548, 0, 22))
+			list.draw_string(IC.font_bold, Vector2(92, y + 32), rows[i][1], HORIZONTAL_ALIGNMENT_LEFT, 540, 23, col.ink)
+			IC.rich_text(list, rows[i][2], Vector2(92, y + 40), 17, IC.GLASS.ash_gray.darkened(0.35), 548, 0, 22))
 	v.add_child(list)
 	UiSystem.make_button(v, "閉じる", Vector2(210, 1110), Vector2(300, 80), v.queue_free, 26)
 	ui.add_child(v)

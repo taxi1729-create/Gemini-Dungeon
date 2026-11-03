@@ -237,29 +237,32 @@ func _draw_board() -> void:
 	var IC = ImageController
 	var col: Dictionary = IC.COL
 	var r := Rect2(Vector2.ZERO, board.size)
-	IC.slant(board, r, Color(col.ink, 0.9), 18, 3.0, col.paper, col.red, Vector2(7, 7))
+	# 所持品の棚：エンジェルホワイトの箱（墨の縁・ローズの影）に、下端だけ市松（ローズ×ストーングレイ）の飾り
+	var G: Dictionary = IC.GLASS
+	IC.slant(board, r, G.angel_white, 18, 3.0, col.ink, col.red, Vector2(7, 7))
+	IC.checker(board, Rect2(40, r.end.y - 14, r.size.x - 80, 10), 10.0, Color(G.deep_rose, 0.75), Color(G.stone_gray, 0.9))
 	# ゴールド
 	IC.icon(board, "coin", Vector2(60, 46), 50)
-	IC.head(board, "%d G" % Inventory.gold, Vector2(170, 46), 38, col.gold, 170)
+	IC.head(board, "%d G" % Inventory.gold, Vector2(170, 46), 38, col.ink, 170)
 	# 道具
-	IC.text(board, "道具", Vector2(330, 46), 20, col.sub, true)
+	IC.text(board, "道具", Vector2(330, 46), 20, G.sacred_blue, true)
 	for i in Inventory.ITEM_MAX:
 		var p := Vector2(390 + i * 56, 46)
 		if i < Inventory.items.size():
 			var it: Dictionary = Item_List.DATA.get(Inventory.items[i], {})
 			IC.icon(board, str(it.get("icon", "potion")), p, 40, it.get("art_col", col.paper))
 		else:
-			board.draw_arc(p, 18, 0, TAU, 20, Color(1, 1, 1, 0.25), 2, true)
+			board.draw_arc(p, 18, 0, TAU, 20, G.holy_blue, 2, true)
 	# レリック 5 枠
-	IC.text(board, "レリック", Vector2(70, 112), 20, col.sub, true)
+	IC.text(board, "レリック", Vector2(70, 112), 20, G.sacred_blue, true)
 	for i in RelicList.MAX:
 		var p := Vector2(160 + i * 64, 112)
-		board.draw_circle(p, 26, Color(1, 1, 1, 0.06))
-		board.draw_arc(p, 26, 0, TAU, 28, Color(1, 1, 1, 0.3) if i >= Inventory.relics.size() else col.gold, 2, true)
+		board.draw_circle(p, 26, Color(G.holy_blue, 0.35))
+		board.draw_arc(p, 26, 0, TAU, 28, G.holy_blue if i >= Inventory.relics.size() else G.sacred_blue, 2, true)
 		if i < Inventory.relics.size():
 			IC.icon(board, str(RelicList.DATA[Inventory.relics[i]].icon), p, 40)
 	# 食材（アイコン＋グレード）
-	IC.text(board, "食材", Vector2(70, 180), 20, col.sub, true)
+	IC.text(board, "食材", Vector2(70, 180), 20, G.sacred_blue, true)
 	var x := 130.0
 	for k in FoodList.DATA:
 		for i in Inventory.food_indices(k):
@@ -269,7 +272,7 @@ func _draw_board() -> void:
 			IC.text(board, "G%d" % int(Inventory.foods[i].grade), Vector2(x + 14, 196), 14, col.paper, true, 3, -1.0, col.ink)
 			x += 44
 	if Inventory.foods.is_empty():
-		IC.text(board, "なし", Vector2(150, 180), 20, col.sub, true)
+		IC.text(board, "なし", Vector2(150, 180), 20, G.ash_gray, true)
 
 
 # ============================================================

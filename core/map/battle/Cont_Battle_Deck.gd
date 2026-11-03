@@ -240,12 +240,15 @@ static func card_text(user: Dictionary, action: Dictionary) -> String:
 
 
 ## キーワード（即応・最後・陣形・転身）の名前
-const KW_NAME := {"sokuou": "即応", "saigo": "最後", "jinkei": "陣形", "tenshin": "転身"}
+const KW_NAME := {"sokuou": "即応", "saigo": "最後", "jinkei": "陣形", "tenshin": "転身", "gekiha": "撃破", "hangeki": "反撃", "yoyaku": "予約"}
 ## キーワードの条件の説明
 const KW_COND := {
 	"sokuou": "このラウンドに味方の誰かが入替していれば",
 	"saigo": "手札にも保留枠にも他のカードが無ければ",
 	"tenshin": "戦闘開始時と違う位置にいれば",
+	"gekiha": "この攻撃で敵を倒したら",
+	"hangeki": "次の自分のターン開始まで、攻撃してきた敵に",
+	"yoyaku": "次の自分のターン開始時に",
 }
 
 
@@ -260,6 +263,8 @@ static func badge_text(c: Dictionary) -> String:
 
 ## 追加効果（bonus）の文。例「ダメージ+4　自分にブロック+3」
 static func bonus_text(user: Dictionary, b: Dictionary) -> String:
+	if b.has("text"):
+		return str(b.text)  # 説明文を差し替える（星降り）
 	var parts: Array = []
 	if int(b.get("power", 0)) != 0:
 		parts.append("ダメージ%+d" % int(b.power))
@@ -277,6 +282,11 @@ static func keyword_lines(user: Dictionary, action: Dictionary) -> Array:
 		if k == "jinkei":
 			out.append("[i:kw_jinkei]陣形：左（青）なら %s／右（赤）なら %s" % [
 					bonus_text(user, action.get("bonus_left", {})), bonus_text(user, action.get("bonus_right", {}))])
+		elif ActionController.KW_TIMED.has(k):
+			# 撃破・反撃・予約：追加効果が書いてあるカードだけ説明する（倒したらもう一度・ファイアガード等は本文で説明済み）
+			var tb := ActionController.timed_bonus(action, k)
+			if not (tb.get("effects", []) as Array).is_empty():
+				out.append("[i:kw_%s]%s：%s %s" % [k, KW_NAME[k], KW_COND[k], bonus_text(user, {"effects": tb.effects})])
 		elif KW_COND.has(k):
 			out.append("[i:kw_%s]%s：%s %s" % [k, KW_NAME[k], KW_COND[k], bonus_text(user, action.get("bonus", {}))])
 	return out
@@ -293,7 +303,7 @@ static func plain(s: String) -> String:
 static func target_icon(t: String) -> String:
 	match t:
 		"enemy_all": return "tgt_enemy_all"
-		"front_enemy_single": return "tgt_enemy_one"
+		"front_pair", "front_enemy_single": return "tgt_front_pair"
 		"front_enemy_group": return "tgt_enemy_group"
 		"front_row": return "tgt_front_row"
 		"self": return "tgt_self"
@@ -309,25 +319,23 @@ static func target_text(t: String) -> String:
 	var s := ""
 	match t:
 		"enemy_all": s = "敵全体"
-		"front_enemy_single": s = "目の前の前衛（HP最低）"
-		"front_enemy_group": s = "目の前の前衛"
+		"front_pair", "front_enemy_single": s = "目の前の敵前衛"
+		"front_enemy_group": s = "目の前の敵グループ"
 		"front_row": s = "前衛全体"
 		"back_row": s = "後衛全体"
 		"random_enemy": s = "ランダムな敵"
 		"self": s = "自分"
 		"ally_all": s = "味方全体"
-		"other_ally": s = "ナイト（もう一人の味方）"  # 今は APパサー（ウィッチのカード）だけが使う
+		"other_ally": s = "もう1人の味方"
 	return "" if s == "" else "[i:%s]%s" % [ic, s]
 
 
 static func effect_text(user: Dictionary, action: Dictionary) -> String:
 	var parts: Array = []
-	if ActionList.has_keyword(action, "power"):
-		var pe: Dictionary = action.get("power_effect", {})
-		var st: Dictionary = StatusEffectList.DATA.get(pe.get("status", ""), {})
-		parts.append("[i:kw_power]使えない。手札にある間、次の自分のターンまで [i:%s]%s+%d（保留枠に入ると捨札へ）" % [
-				st.get("icon", "star"), str(st.get("name", "")).replace("アップ", ""), int(pe.get("eff_val", 0))])
-	if burns(action, "consume"):
+	var is_power := ActionList.has_keyword(action, "power")
+	if is_power:
+		parts.append(power_text(user, action))
+	if burns(action, "consume") and not is_power:
 		parts.append("[i:kw_consume]消費：他の手札1枚をランダムに捨てる　無いと使えない")
 	if action.get("ap_x", false):
 		parts.append("[i:kw_apx]APを全部使い、その量をXとする")
@@ -338,10 +346,32 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 			times = "×X回"
 		elif int(action.get("hits", 1)) > 1:
 			times = "×%d回" % int(action.hits)
-		if atk != 0 and not action.get("fixed", false):
+		if action.get("reroll", false):
+			times += "（1回ごとに敵を選び直す）"
+		if str(action.get("power_from", "")) == "poison":
+			parts.append("[i:st_poison]それぞれの毒の残り分の固定ダメージ（毒は減らない）")
+		elif action.get("power_used", false):
+			parts.append("[i:stat_atk]Xダメージ%s（X＝このターンにこのキャラが使ったカードの枚数%s）" % [times, ("。攻撃力%+d" % atk) if atk != 0 else ""])
+		elif atk != 0 and not action.get("fixed", false):
 			parts.append("[i:stat_atk]%dダメージ%s（攻撃力%+d）" % [action.power, times, atk])
 		else:
 			parts.append("[i:stat_atk]%dダメージ%s" % [action.power, times])
+	var aph = action.get("ap_hits")
+	if aph is Dictionary:
+		parts.append("[i:ap]使う前のAPが%d以上なら、さらに%d回" % [int(aph.get("min", 0)), int(aph.get("hits", 1)) - maxi(1, int(action.get("hits", 1)))])
+	# 1 ヒットごとの効果（毒の雨・毒針の嵐・星の審判）
+	var he_txt: Array = []
+	for he in action.get("hit_effects", []):
+		var hs := effect_text(user, {"effects": [(he as Dictionary).duplicate()]})
+		if (he as Dictionary).get("if_damaged", false):
+			hs = "ダメージを受けた敵に" + hs
+		he_txt.append(hs)
+	if not he_txt.is_empty():
+		var n_txt := "X" if action.get("hits_x", false) else str(maxi(1, int(action.get("hits", 1))))
+		if action.has("power"):
+			parts.append("1回ごとに " + "　".join(he_txt))
+		else:
+			parts.append("%s を%s回%s" % ["　".join(he_txt), n_txt, "（1回ごとに敵を選び直す）" if action.get("reroll", false) else ""])
 	match String(action.get("on_kill", "")):
 		"reuse": parts.append("[i:skull]倒したら、もう一度使える")
 		"reuse_free": parts.append("[i:skull]倒したら、このターンはAP0でもう一度使える")
@@ -367,13 +397,17 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 			"turnabout": parts.append("[i:cards]空いている手札の枠を補充する　[i:atk_buff]攻撃力+1")
 			"extra_turn": parts.append("[i:hourglass]ターン終了時、もう一度ターンを得る")
 			"set_next_action": parts.append("[i:hourglass]次に強攻撃")
+			"rank_swap": parts.append("[i:formation]自分の前衛・後衛を入れ替える")
+			"repeat": parts.append("[i:skull]もう一度この攻撃が発動")
 			"add_status":
 				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
 				var ic := "[i:%s]" % str(st.get("icon", "star"))
 				match e.status:
 					"taunt": parts.append("%s%s挑発（単体攻撃をこちらへ向けさせる）" % [ic, dur])
 					"poison": parts.append("%s毒%dターン" % [ic, int(e.eff_val)])
-					"fire": parts.append("%s火傷%d" % [ic, int(e.eff_val)])
+					"fire": parts.append("%s%s火傷%d" % [ic, who, int(e.eff_val)])
+					"stun": parts.append("%sスタン（次のターンを休む）" % ic)
+					"no_heal": parts.append("%s%s回復不可" % [ic, dur])
 					"atk_down": parts.append("%s%s攻撃力-%d" % [ic, dur, int(e.eff_val)])
 					"def_down": parts.append("%s%s防御力-%d" % [ic, dur, int(e.eff_val)])
 					"ap_plus": parts.append("%s%sAPプラス（ターン開始時AP+%d）" % [ic, dur, int(e.eff_val)])
@@ -388,5 +422,52 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 		parts.append("[i:kw_exhaust]使うと廃棄")
 	if str(action.get("badge", "")) == "keep" and (ActionList.has_keyword(action, "exhaust") or ActionList.has_keyword(action, "consume")):
 		parts.append("[i:b_keep]廃棄・消費しない")
-	parts.append_array(keyword_lines(user, action))
+	var kl := keyword_lines(user, action)
+	if action.get("saigo_only", false):
+		# 「最後」の効果しか無いカード：条件を満たした時だけ使える
+		kl = kl.filter(func(s): return not str(s).begins_with("[i:kw_saigo]"))
+		kl.append("[i:kw_saigo]最後：手札にも保留枠にも他のカードが無い時だけ使える")
+	if is_power:
+		kl = kl.filter(func(s): return not str(s).begins_with("[i:kw_jinkei]") and not str(s).begins_with("[i:kw_sokuou]"))  # power_text で説明済み
+	parts.append_array(kl)
 	return "　".join(parts)
+
+
+## パワーカードの説明（power_effect の形は ActionList の説明を参照）
+static func power_text(user: Dictionary, action: Dictionary) -> String:
+	var pe: Dictionary = action.get("power_effect", {})
+	var head := "[i:kw_power]使えない。手札にある間、次の自分のターンまで"
+	if pe.has("left") or pe.has("right"):
+		return "%s [i:kw_jinkei]陣形：左（青）なら %s／右（赤）なら %s（手札に入った時の位置）" % [
+				head, _power_body(user, pe.get("left", {})), _power_body(user, pe.get("right", {}))]
+	var kind := str(pe.get("kind", ""))
+	if kind in ["end_herb", "end_convert"]:
+		return "[i:kw_power]使えない。" + _power_body(user, pe)
+	if pe.get("exhaust_now", false):
+		return "[i:kw_power]使えない。手札に入った時に %s（その後すぐ廃棄）" % _power_body(user, pe)
+	return "%s %s（保留枠に入ると捨札へ）" % [head, _power_body(user, pe)]
+
+
+static func _power_body(user: Dictionary, pe: Dictionary) -> String:
+	var parts: Array = []
+	if pe.has("status"):
+		var st: Dictionary = StatusEffectList.DATA.get(pe.get("status", ""), {})
+		parts.append("[i:%s]%s+%d" % [st.get("icon", "star"), str(st.get("name", "")).replace("アップ", ""), int(pe.get("eff_val", 0))])
+	if pe.has("once"):
+		var t := effect_text(user, {"effects": pe.once})
+		parts.append(t if pe.get("exhaust_now", false) else "手札に入った時 " + t)
+	if int(pe.get("aid_atk", 0)) > 0:
+		parts.append("[i:atk_buff]もう1人の味方の攻撃力+%d" % int(pe.aid_atk))
+	match str(pe.get("kind", "")):
+		"burn_atk": parts.append("[i:flame]自分の火傷の残りターン分、攻撃力+")
+		"last_stand": parts.append("[i:stat_atk]HPの残りX%で 攻撃力+Y・素早さ+Y（Y＝(100−X)÷10 切り捨て）")
+		"on_plain_card": parts.append("[i:tgt_enemy_all]札の無いカードが発動するたび、敵全体に%dダメージ　[i:kw_sokuou]即応：さらに+%d" % [int(pe.get("dmg", 0)), int(pe.get("sokuou_add", 0))])
+		"on_burn": parts.append("[i:tgt_enemy_all]消費・廃棄が発動するたび、敵全体に%dダメージ" % int(pe.get("dmg", 0)))
+		"on_attack_poison": parts.append("[i:st_poison]アタックカードを使うたび、当たった敵に毒%d" % int(pe.get("eff_val", 1)))
+		"on_debuff_card": parts.append("[i:shield]状態異常を付けるカードを使うたび、自分にブロック+%d" % int(pe.get("shield", 1)))
+		"on_own_card": parts.append("[i:flame]このキャラがカードを使うたび、もう1人の味方に火傷%d・ブロック+%d" % [int(pe.get("fire", 1)), int(pe.get("shield", 0))])
+		"on_gekiha_card": parts.append("[i:atk_buff]撃破のカードを使うたび、自分の攻撃力+%d（戦闘中）" % int(pe.get("atk", 1)))
+		"on_gekiha_hangeki": parts.append("[i:tgt_random]撃破・反撃が発動するたび、ランダムな敵に%d×%d（固定）" % [int(pe.get("power", 2)), int(pe.get("hits", 5))])
+		"end_herb": parts.append("[i:item_herb]自分のターン終了時に手札にあれば、薬草を得る（アイテムがいっぱいなら得られない）。その後廃棄")
+		"end_convert": parts.append("[i:kw_consume]自分のターン終了時に手札にあれば、他の手札1枚をランダムに捨て（消費）、そのカードのAP分 AP+")
+	return "　".join(parts) if not parts.is_empty() else "—"

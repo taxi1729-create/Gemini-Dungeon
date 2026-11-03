@@ -41,4 +41,14 @@ const DATA = {
 		"desc": "次の自分のターン開始時までに HP が減らなければ、3 ターン APプラス"},
 	"reblock": {"name": "リブロック", "short": "再盾", "timing": "start_turn", "icon": "st_reblock", "good": true, "label": "val",
 		"desc": "次の自分のターン開始時にブロック +数値"},
+	# 8 回目の追加
+	"stun": {"name": "スタン", "short": "スタン", "timing": "start_turn", "icon": "st_stun", "good": false, "label": "none",
+		"desc": "次の自分のターンを休む（ターン開始時の火傷・毒などは起きる）。休んだら消える"},
+	"no_heal": {"name": "回復不可", "short": "回復不可", "timing": "all", "icon": "st_no_heal", "good": false, "label": "turns",
+		"desc": "HPを回復できない（回復・リジェネも効かない）"},
+	# 反撃・予約の札が付ける状態（中身の効果は status_effects[id].effects / .list）
+	"hangeki": {"name": "反撃", "short": "反撃", "timing": "all", "icon": "kw_hangeki", "good": true, "label": "none",
+		"desc": "次の自分のターン開始まで、攻撃してきた敵に追加効果"},
+	"yoyaku": {"name": "予約", "short": "予約", "timing": "start_turn", "icon": "kw_yoyaku", "good": true, "label": "none",
+		"desc": "次の自分のターン開始時に効果が発動する"},
 }

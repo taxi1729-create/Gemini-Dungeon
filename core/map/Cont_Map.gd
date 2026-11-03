@@ -84,14 +84,19 @@ func _draw_map() -> void:
 				var pulse := 0.5 + 0.5 * sin(_t * 4.0)
 				IC.poly_box(view, IC.burst_pts(p, rad + 16 + pulse * 6, rad + 6, 12, f * 7 + i, _t * 0.5), IC.COL.red, 3.0, IC.COL.ink)
 			else:
-				view.draw_circle(p + Vector2(4, 4), rad, Color(0, 0, 0, 0.6))
-			var base: Color = IC.COL.ink
+				view.draw_circle(p + Vector2(4, 4), rad, Color(IC.GLASS.ivory_black, 0.6))
+			# マスの面：ブラッキッシュブルー×セイクレッドブルー（通ったマスはアイボリーブラック寄り）
+			var base: Color = IC.COL.ink.lerp(IC.GLASS.sacred_blue, 0.5)
 			if can:
 				base = IC.COL.red
 			elif visited and not is_cur:
-				base = Color("1c1c20")
+				base = IC.GLASS.ivory_black.lerp(IC.GLASS.ash_gray, 0.3)
 			view.draw_circle(p, rad, base)
-			var ring: Color = IC.COL.paper if (can or is_cur) else Color(1, 1, 1, 0.3)
+			if node.type == "boss" and not can:
+				# ボスのマス：バラ窓のステンドグラス
+				IC.stained(view, IC.ell(p, rad - 3, rad - 3, 28), 41, 0.75, [], Color(0, 0, 0, 0), 16.0, 18.0)
+				view.draw_circle(p, rad * 0.62, Color(IC.COL.ink, 0.85))
+			var ring: Color = IC.COL.paper if (can or is_cur) else Color(IC.GLASS.holy_blue, 0.6)
 			if node.type == "boss" and not can:
 				ring = IC.COL.red
 			view.draw_arc(p, rad, 0, TAU, 40, ring, 4 if (can or is_cur) else 2, true)
@@ -99,9 +104,9 @@ func _draw_map() -> void:
 			if can:
 				ic_col = IC.COL.paper
 			elif visited and not is_cur:
-				ic_col = Color(0.4, 0.4, 0.42)
+				ic_col = IC.GLASS.ash_gray.lightened(0.15)
 			elif not is_cur:
-				ic_col = Color(0.8, 0.8, 0.82, 0.6)
+				ic_col = Color(IC.GLASS.angel_white, 0.75)
 			IC.icon(view, ICONS[node.type], p, rad * 1.15, ic_col)
 			if can:
 				var tag := Rect2(p.x - 44, p.y + rad + 8, 88, 30)
@@ -149,16 +154,17 @@ func _select(f: int, i: int) -> void:
 
 func _build_footer(ui: CanvasLayer) -> void:
 	var p := UiSystem.make_panel(ui, Rect2(16, 1112, 688, 156))
+	UiSystem.set_panel_light(p)  # 文字の箱はエンジェルホワイト＋濃い文字
 	var x := 22.0
 	for a in CurrentStatus.allies:
-		var col: Color = ImageController.COL.text if a.hp > 0 else ImageController.COL.bad
+		var col: Color = ImageController.COL.ink if a.hp > 0 else ImageController.COL.red
 		UiSystem.make_banner(p, a.name, Rect2(x - 4, 10, 118, 32), 20, ImageController.COL.get(a.id, ImageController.COL.ink), ImageController.COL.paper, 10)
-		var hp := UiSystem.make_label(p, "HP %d/%d" % [a.hp, a.max_hp], Vector2(x, 44), Vector2(200, 34), 26, col, HORIZONTAL_ALIGNMENT_LEFT, 4)
+		var hp := UiSystem.make_label(p, "HP %d/%d" % [a.hp, a.max_hp], Vector2(x, 44), Vector2(200, 34), 26, col, HORIZONTAL_ALIGNMENT_LEFT, 0)
 		hp.add_theme_font_override("font", ImageController.font_head)
-		UiSystem.make_label(p, "デッキ%d枚" % CurrentDeck.decks[a.id].size(), Vector2(x + 124, 12), Vector2(86, 30), 15, ImageController.COL.sub, HORIZONTAL_ALIGNMENT_LEFT, 0)
+		UiSystem.make_label(p, "デッキ%d枚" % CurrentDeck.decks[a.id].size(), Vector2(x + 124, 12), Vector2(86, 30), 15, ImageController.GLASS.ash_gray, HORIZONTAL_ALIGNMENT_LEFT, 0)
 		x += 220
 	var txt := "%dゴールド\n道具 %d個" % [Inventory.gold, Inventory.items.size()]
-	UiSystem.make_label(p, txt, Vector2(462, 10), Vector2(220, 70), 20, ImageController.COL.text, HORIZONTAL_ALIGNMENT_LEFT, 0)
+	UiSystem.make_label(p, txt, Vector2(462, 10), Vector2(220, 70), 20, ImageController.COL.ink, HORIZONTAL_ALIGNMENT_LEFT, 0)
 	# 食材（アイコン＋グレード）とレリック（タップで説明）
 	var belong := Control.new()
 	belong.position = Vector2(0, 84)
@@ -189,10 +195,10 @@ const RELIC_GAP := 60.0
 func _draw_belongings(c: Control) -> void:
 	var IC = ImageController
 	var col: Dictionary = IC.COL
-	c.draw_line(Vector2(16, 2), Vector2(672, 2), Color(1, 1, 1, 0.15), 2)
+	c.draw_line(Vector2(16, 2), Vector2(672, 2), Color(col.ink, 0.25), 2)
 	var x := 30.0
 	if Inventory.foods.is_empty():
-		IC.text(c, "食材なし", Vector2(80, 33), 18, col.sub, true)
+		IC.text(c, "食材なし", Vector2(80, 33), 18, IC.GLASS.ash_gray, true)
 	for k in FoodList.DATA:
 		for i in Inventory.food_indices(k):
 			if x > 340:
@@ -202,8 +208,8 @@ func _draw_belongings(c: Control) -> void:
 			x += 38
 	for i in RelicList.MAX:
 		var p := RELIC_X0 + Vector2(i * RELIC_GAP, 0)
-		c.draw_circle(p, 25, Color(1, 1, 1, 0.06))
-		c.draw_arc(p, 25, 0, TAU, 28, col.gold if i < Inventory.relics.size() else Color(1, 1, 1, 0.25), 2, true)
+		c.draw_circle(p, 25, Color(IC.GLASS.holy_blue, 0.35))
+		c.draw_arc(p, 25, 0, TAU, 28, IC.GLASS.sacred_blue if i < Inventory.relics.size() else IC.GLASS.holy_blue, 2, true)
 		if i < Inventory.relics.size():
 			IC.icon(c, str(RelicList.DATA[Inventory.relics[i]].icon), p, 38)
 

@@ -31,7 +31,11 @@ func _ready() -> void:
 		var IC = ImageController
 		IC.halftone(deco, Rect2(120, 190, 480, 230), Color(col.paper, 0.08), Vector2(360, 300), 240, 16, 5)
 		IC.poly_box(deco, IC.burst_pts(Vector2(360, 300), 140, 100, 14, 11, 0.2), col.red, 4.0, col.ink, col.ink, Vector2(8, 8))
-		deco.draw_circle(Vector2(360, 300), 86, col.ink))
+		# アイコンの台座：バラ窓（ステンドグラスの輪＋紺の中心）
+		IC.stained(deco, IC.ell(Vector2(360, 300), 86, 86, 36), 23, 0.9, [], Color(0, 0, 0, 0), 20.0, 22.0)
+		deco.draw_arc(Vector2(360, 300), 86, 0, TAU, 40, col.ink, 4.0, true)
+		deco.draw_circle(Vector2(360, 300), 66, col.ink.lerp(IC.GLASS.sacred_blue, 0.3))
+		deco.draw_arc(Vector2(360, 300), 66, 0, TAU, 36, IC.GLASS.stone_gray, 3.0, true))
 	ui.add_child(deco)
 	icon_w = GuiWidget.new("icon", Rect2(280, 220, 160, 160))
 	icon_w.icon_kind = ev.icon
@@ -55,7 +59,7 @@ func _ready() -> void:
 	result_label.add_theme_font_override("font", ImageController.font_head)
 	result_label.add_theme_color_override("font_outline_color", col.red)
 	UiSystem.make_banner(ui, "所持：%dゴールド　%s" % [Inventory.gold, Inventory.foods_text()], Rect2(60, 1196, 600, 44), 20,
-			col.ink, col.paper, 16)
+			col.paper, col.ink, 16)
 
 
 func _choose(id: String) -> void:

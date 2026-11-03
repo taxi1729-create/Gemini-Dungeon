@@ -208,7 +208,7 @@ func _refresh() -> void:
 	var ok_info := cook_info.duplicate()
 	ok_info["icon"] = "enter"
 	pad.set_cell("ok", ok_info)
-	pad.set_cell(2, {"title": "仮眠", "icon": "rest", "accent": Color("8fc0ea"), "sub": "HP%d%%" % NAP_PCT,
+	pad.set_cell(2, {"title": "仮眠", "icon": "rest", "accent": ImageController.GLASS.sacred_sky, "sub": "HP%d%%" % NAP_PCT,
 			"desc": "料理をせずに眠る。全員のHPを最大HPの%d%%回復" % NAP_PCT,
 			"enabled": not done, "block_msg": "もう休憩した"})
 	pad.header_right = "鍋 %d/%d　合計G%d" % [pot.size(), FoodList.PICK_MAX, FoodList.grade_sum(picked(), bonus())] if not pot.is_empty() else "鍋は空"
@@ -222,12 +222,12 @@ func _draw_view() -> void:
 	var col: Dictionary = IC.COL
 	# 体力
 	var hp_r := Rect2(30, 156, 660, 70)
-	IC.slant(view, hp_r, Color(col.ink, 0.88), 16, 3.0, col.paper, col.red, Vector2(6, 6))
+	IC.slant(view, hp_r, IC.GLASS.angel_white, 16, 3.0, col.ink, col.red, Vector2(6, 6))  # 文字の箱はエンジェルホワイト
 	var x := 70.0
 	for a in CurrentStatus.allies:
 		IC.slant(view, Rect2(x - 20, 172, 110, 36), col.get(a.id, col.ink), 10, 2.0, col.ink)
 		IC.head(view, a.name, Vector2(x + 35, 190), 20, col.paper, 96)
-		var hpc: Color = col.text if int(a.hp) > 0 else col.bad
+		var hpc: Color = col.ink if int(a.hp) > 0 else col.red
 		IC.head(view, "HP %d/%d" % [a.hp, a.max_hp], Vector2(x + 190, 190), 26, hpc, 180)
 		x += 320
 	# 鍋（たき火の上の黒い鍋）
@@ -235,7 +235,7 @@ func _draw_view() -> void:
 	IC.glow(view, pc + Vector2(0, 90), 90, Color(1.0, 0.45, 0.1, 0.35 + 0.1 * sin(_t * 5.0)), 6)
 	view.draw_colored_polygon(IC.ell(pc + Vector2(0, 30), 150, 72, 32), Color(0, 0, 0, 0.6))
 	IC.poly_box(view, IC.ell(pc + Vector2(0, 20), 140, 64, 32), col.steel, 4.0, col.paper, col.red, Vector2(6, 6))
-	view.draw_colored_polygon(IC.ell(pc + Vector2(0, -6), 124, 34, 28), Color("1b1b20"))
+	view.draw_colored_polygon(IC.ell(pc + Vector2(0, -6), 124, 34, 28), IC.GLASS.ivory_black)
 	if not pot.is_empty():
 		var g := FoodList.grade_sum(picked(), bonus())
 		var steam := Color(1, 1, 1, 0.25)
@@ -263,16 +263,16 @@ func _draw_view() -> void:
 			var poly := IC.ell(p, 38, 38, 20)
 			for j in poly.size():
 				view.draw_dashed_line(poly[j], poly[(j + 1) % poly.size()], Color(1, 1, 1, 0.35), 2.0, 6.0)
-			IC.text(view, "空き", p, 16, Color(1, 1, 1, 0.35), true)
+			IC.text(view, "空き", p, 16, Color(1, 1, 1, 0.5), true)
 	if not pot.is_empty():
 		IC.text(view, "タップで戻す", Vector2(600, 470), 16, col.sub, true)
 	# できる料理と効果
 	var dr := Rect2(30, 528, 660, 104)
-	IC.slant(view, dr, Color(col.ink, 0.9), 16, 3.0, col.paper, col.red, Vector2(6, 6))
+	IC.slant(view, dr, IC.GLASS.angel_white, 16, 3.0, col.ink, col.red, Vector2(6, 6))
 	var did := dish_id()
 	if did == "":
-		IC.text(view, "食材を鍋に入れると、できる料理が出る", dr.get_center(), 22, col.sub, true, 0, 620)
+		IC.text(view, "食材を鍋に入れると、できる料理が出る", dr.get_center(), 22, IC.GLASS.sacred_blue, true, 0, 620)
 	else:
 		var d: Dictionary = FoodList.DISHES[did]
-		IC.head(view, d.name, Vector2(dr.get_center().x, dr.position.y + 30), 28, col.gold, 600)
-		IC.text(view, d.desc, Vector2(dr.get_center().x, dr.position.y + 74), 19, col.text, true, 0, 620)
+		IC.head(view, d.name, Vector2(dr.get_center().x, dr.position.y + 30), 28, col.red, 600)
+		IC.text(view, d.desc, Vector2(dr.get_center().x, dr.position.y + 74), 19, col.ink, true, 0, 620)

@@ -15,7 +15,7 @@ class_name ActionController
 
 
 static func get_atk(u: Dictionary) -> int:
-	return int(u.get("atk", 0)) + StatusController.val(u, "atk_buff") - StatusController.val(u, "atk_down") + int(u.get("power_atk", 0)) + formation_atk(u)
+	return int(u.get("atk", 0)) + StatusController.val(u, "atk_buff") - StatusController.val(u, "atk_down") + int(u.get("power_atk", 0)) + formation_atk(u) + power_dyn(u, "atk")
 
 
 static func get_def(u: Dictionary) -> int:
@@ -39,10 +39,41 @@ static func formation_def(u: Dictionary) -> int:
 
 
 static func get_spd(u: Dictionary) -> int:
-	return int(u.get("spd", 0)) + StatusController.val(u, "spd_buff")
+	return int(u.get("spd", 0)) + StatusController.val(u, "spd_buff") + power_dyn(u, "spd")
+
+
+## パワー（8 回目の新カード）で変わる攻撃力・素早さ。u.powers = 今効いているパワーの power_effect の配列（Cont_Battle が入れる）
+##   burn_atk  ：攻撃力 + 自分の火傷の残りターン
+##   last_stand：HP の残り X% で 攻撃力・素早さ +Y（Y＝(100−X)/10 切り捨て）
+##   u.aid_atk = {渡した味方の id: n}（鼓舞の B：もう 1 人の攻撃力 +n）
+static func power_dyn(u: Dictionary, stat: String) -> int:
+	var add := 0
+	for pe in u.get("powers", []):
+		match str((pe as Dictionary).get("kind", "")):
+			"burn_atk":
+				if stat == "atk":
+					var f = u.get("status_effects", {}).get("fire")
+					if f is Dictionary:
+						add += maxi(0, int(f.turns))
+			"last_stand":
+				add += last_stand_y(u)
+	if stat == "atk":
+		var aid: Dictionary = u.get("aid_atk", {})
+		for k in aid:
+			add += int(aid[k])
+	return add
+
+
+## 背水の陣の Y（HP の残り X%＝切り捨て、Y＝(100−X)/10 切り捨て）
+static func last_stand_y(u: Dictionary) -> int:
+	var mx := maxi(1, int(u.get("max_hp", 1)))
+	var pct := clampi(int(u.get("hp", 0)) * 100 / mx, 0, 100)
+	return (100 - pct) / 10
 
 
 static func calc_damage(user: Dictionary, action: Dictionary, target: Dictionary) -> int:
+	if str(action.get("power_from", "")) == "poison":
+		return StatusController.val(target, "poison")  # 腐食：毒の残り分の固定ダメージ
 	if action.get("fixed", false):
 		return int(action.get("power", 0))
 	return maxi(0, int(action.get("power", 0)) + get_atk(user) + relic_atk(user) - get_def(target))
@@ -175,6 +206,15 @@ static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}
 		add += int(b.get("power", 0))
 		for e in b.get("effects", []):
 			effs.append((e as Dictionary).duplicate(true))
+		if b.has("target"):
+			a["target"] = str(b.target)  # 星降り：陣形で対象が変わる
+	# 二連詠唱：使う前の AP（ctx.ap_before。プレビューでは今の AP）が min 以上なら hits を増やす
+	var aph = card.get("ap_hits")
+	if aph is Dictionary and int(ctx.get("ap_before", user.get("ap", 0))) >= int(aph.get("min", 0)):
+		a["hits"] = int(aph.get("hits", 1))
+	# 怒涛の締め：power ＝ このターンにこのキャラが使ったカードの枚数（このカードは含まない）
+	if card.get("power_used", false):
+		a["power"] = int(user.get("cards_used", 0))
 	# 撃破・反撃・予約の札：使った時には効かず、後で効く効果として行動に持たせる（timed_bonus の説明を参照）
 	for k in KW_TIMED:
 		if not ActionList.has_keyword(card, k):
@@ -219,7 +259,7 @@ static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}
 		else:
 			effs.append({"effect": "add_shield", "eff_val": 10, "to": "self"})
 	if is_atk and add != 0:
-		a["power"] = int(card.power) + add
+		a["power"] = int(a.power) + add
 	a["effects"] = effs
 	a.erase("effect")
 	return a
@@ -246,6 +286,8 @@ static func hit_count(action: Dictionary, x: int = 1) -> int:
 static func preview(user: Dictionary, action: Dictionary, allies: Array, enemies: Array, x: int = 1) -> Array:
 	var out: Array = []
 	var n := hit_count(action, x)
+	if action.get("reroll", false):
+		n = 1  # 1 ヒットごとに引き直す攻撃は、1 ヒット目の敵だけ予想する
 	for t in resolve_targets(user, action.get("target", "self"), allies, enemies):
 		var ev := {"target": t}
 		if action.has("power"):
@@ -271,10 +313,23 @@ static func execute_action(user: Dictionary, action: Dictionary, allies: Array, 
 	var friends := (allies if is_ally else enemies).filter(func(e): return e.hp > 0)
 	# ダメージ（hits 回。1 回ごとに攻撃力・防御力・ブロックを計算）
 	var kills := 0
-	if action.has("power"):
+	var hit_owners: Array = []  # 攻撃した相手（反撃の判定用）
+	var hit_effs: Array = action.get("hit_effects", [])
+	var foes_all: Array = enemies if is_ally else allies
+	if action.has("power") or not hit_effs.is_empty():
 		for h in hit_count(action, x):
-			for t in targets:
+			var tg: Array = targets
+			# 1 ヒットごとに引き直す（2 ヒット目から。1 ヒット目はプレビューと同じ敵）
+			if action.get("reroll", false) and h > 0:
+				var alive_foes: Array = foes_all.filter(func(e): return e.hp > 0)
+				tg = [] if alive_foes.is_empty() else [alive_foes[randi() % alive_foes.size()]]
+			for t in tg:
 				if t.hp <= 0 or user.hp <= 0:
+					continue
+				# 毒針の嵐（power が無い）は効果だけ。腐食は毒の無い敵には当てない
+				if not action.has("power") or (str(action.get("power_from", "")) == "poison" and StatusController.val(t, "poison") <= 0):
+					if not action.has("power"):
+						events.append_array(_hit_effect_events(user, t, hit_effs, h, 0, x))
 					continue
 				var dmg := calc_damage(user, action, t)
 				var blocked := mini(int(t.get("shield", 0)), dmg)
@@ -292,7 +347,16 @@ static func execute_action(user: Dictionary, action: Dictionary, allies: Array, 
 				if StatusController.has(t, "fire_guard") and user.hp > 0 and user != t:
 					var v := StatusController.val(t, "fire_guard")
 					StatusController.apply_status(user, "fire", v, v)
-					events.append({"target": user, "status": "fire", "status_val": v, "reflect": true, "hit_no": h})
+					events.append({"target": user, "status": "fire", "status_val": v, "reflect": true, "hit_no": h, "hangeki": true})
+				if not hit_owners.has(t):
+					hit_owners.append(t)
+				events.append_array(_hit_effect_events(user, t, hit_effs, h, dmg, x))
+	# 反撃：攻撃された相手に状態 hangeki があれば、攻撃してきた側に追加効果（1 回の攻撃につき 1 回）
+	for o in hit_owners:
+		if StatusController.has(o, "hangeki"):
+			events.append_array(_hangeki_events(user, o))
+	# 撃破：1 体以上倒したら追加効果（1 回）
+	events.append_array(_gekiha_events(user, action, kills, allies, enemies, x))
 	# 倒した数に応じて AP（kill_ap）
 	if kills > 0 and int(action.get("kill_ap", 0)) > 0 and user.hp > 0:
 		var gain := kills * int(action.kill_ap)
@@ -309,7 +373,7 @@ static func execute_action(user: Dictionary, action: Dictionary, allies: Array, 
 		elif to == "other_ally":
 			recips = friends.filter(func(f): return f != user)
 		var kind: String = eff.get("effect", "")
-		if kind in ["draw", "swap", "double", "turnabout", "extra_turn"]:
+		if kind in ["draw", "swap", "double", "turnabout", "extra_turn", "rank_swap", "repeat"]:
 			events.append({"target": user, "special": kind, "val": int(eff.get("eff_val", 0))})
 			continue
 		if kind == "absorb_block":
@@ -328,6 +392,20 @@ static func execute_action(user: Dictionary, action: Dictionary, allies: Array, 
 			_apply_effect(user, t, eff, ev, x)
 			events.append(ev)
 	return events
+
+
+## 1 ヒットごとの効果（hit_effects）のイベント。dealt = このヒットで実際に与えたダメージ（"if_damaged" の判定に使う）
+static func _hit_effect_events(user: Dictionary, t: Dictionary, effs: Array, h: int, dealt: int, x: int) -> Array:
+	var out: Array = []
+	for he in effs:
+		if (he as Dictionary).get("if_damaged", false) and dealt <= 0:
+			continue
+		if int(t.hp) <= 0:
+			break
+		var ev := {"target": t, "hit_no": h}
+		_apply_effect(user, t, he, ev, x)
+		out.append(ev)
+	return out
 
 
 static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: Dictionary, x: int = 1) -> void:
@@ -350,10 +428,16 @@ static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: 
 			if sid == "taunt":
 				v = int(user.get("uid", 0))  # 挑発してきたキャラ
 			StatusController.apply_status(t, sid, v, turns)
+			if eff.get("payload") is Dictionary:
+				_attach_payload(t, sid, eff.payload)  # 反撃・予約の効果を状態に積む
 			if sid == "declare" and not t.status_effects.declare.has("hp"):
 				t.status_effects.declare["hp"] = int(t.hp)  # 宣言：この HP から減らなければ成功
 			ev["status"] = sid
 			ev["status_val"] = v if sid != "taunt" else 1
+		"heal", "heal_pct" when StatusController.has(t, "no_heal"):
+			# 回復不可：回復しない
+			ev["heal"] = 0
+			ev["no_heal"] = true
 		"heal":
 			var before := int(t.hp)
 			t["hp"] = mini(int(t.max_hp), before + v)

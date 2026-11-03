@@ -31,8 +31,8 @@ const CHARGE_TIME := 0.9
 const TAP_TIME := 0.35
 ## 右の列の既定（set_cell で上書きできる）
 const RIGHT_KEYS := {
-	"deck": {"title": "デッキ一覧", "icon": "cards", "accent": Color("8fb4ff"), "desc": "ナイトとウィッチのデッキを確認する"},
-	"status": {"title": "ステータス", "icon": "info", "accent": Color("8fc0ea"), "desc": "味方のステータスを確認する"},
+	"deck": {"title": "デッキ一覧", "icon": "cards", "accent": Color("9bb0e1"), "desc": "ナイトとウィッチのデッキを確認する"},
+	"status": {"title": "ステータス", "icon": "info", "accent": Color("dbe6f3"), "desc": "味方のステータスを確認する"},
 }
 
 var cells := {}  # key -> info
@@ -514,7 +514,7 @@ func _draw_tags() -> void:
 			IC.head(_tags, txt, tag.get_center(), 18, col.red, tw - 16)
 		else:
 			var afford: bool = bool(info.get("enabled", true))
-			IC.slant(_tags, tag, col.paper if afford else Color("5c5c66"), 8, 2.0, col.ink, col.red, Vector2(3, 3))
+			IC.slant(_tags, tag, col.paper if afford else IC.GLASS.ash_gray.lightened(0.2), 8, 2.0, col.ink, col.red, Vector2(3, 3))
 			IC.head(_tags, txt, tag.get_center(), 18, col.ink, tw - 16)
 
 
@@ -546,10 +546,10 @@ class SideTile extends GuiPad:
 		var IC = ImageController
 		var r := Rect2(6, 6, size.x - 16, size.y - 16)
 		var skew := 10.0
-		var acc: Color = accent if not dimmed else Color("4a4a54")
-		var face: Color = IC.COL.red if highlighted else (Color("17171b") if dimmed else IC.COL.ink.lerp(acc, 0.12))
+		var acc: Color = accent if not dimmed else IC.GLASS.ash_gray
+		var face: Color = IC.COL.red if highlighted else (IC.GLASS.ivory_black.lerp(IC.GLASS.ash_gray, 0.3) if dimmed else IC.COL.ink.lerp(IC.GLASS.sacred_blue, 0.4).lerp(acc, 0.12))
 		var shadow: Color = IC.COL.ink if highlighted else Color(0, 0, 0, 0.75)
-		IC.slant(self, r, face, skew, 4.0 if highlighted else 3.0, IC.COL.paper if not dimmed else Color("3a3a42"), shadow, Vector2(6, 6))
+		IC.slant(self, r, face, skew, 4.0 if highlighted else 3.0, IC.COL.paper if not dimmed else IC.GLASS.ash_gray.darkened(0.2), shadow, Vector2(6, 6))
 		if not highlighted and not dimmed:
 			IC.stripes(self, Rect2(r.position.x + r.size.x * 0.4, r.end.y - 30, r.size.x * 0.5, 26), Color(acc, 0.3), 9, 3, 0.6)
 		var ic := Vector2(size.x / 2 - 1, r.position.y + 50)
@@ -557,10 +557,10 @@ class SideTile extends GuiPad:
 			IC.glow(self, ic, 30, Color(acc, 0.45), 4)
 		IC.icon(self, icon_kind, ic, 50, acc if not highlighted else IC.COL.paper)
 		var nb := Rect2(r.position.x - 2, r.position.y + 88, r.size.x + 4, 24)
-		IC.slant(self, nb, IC.COL.paper if not dimmed else Color("5c5c66"), 6, 2.0, IC.COL.ink)
+		IC.slant(self, nb, IC.COL.paper if not dimmed else IC.GLASS.ash_gray.lightened(0.2), 6, 2.0, IC.COL.ink)
 		IC.text(self, title, nb.get_center(), 15, IC.COL.ink, true, 0, nb.size.x - 14)
 		if sub != "":
-			IC.text(self, sub, Vector2(size.x / 2 - 3, r.end.y - 26), 13, IC.COL.text if not dimmed else Color("5c5c66"), true, 3, r.size.x - 6, IC.COL.ink)
+			IC.text(self, sub, Vector2(size.x / 2 - 3, r.end.y - 26), 13, IC.COL.text if not dimmed else IC.GLASS.ash_gray.lightened(0.2), true, 3, r.size.x - 6, IC.COL.ink)
 		if charge > 0:
 			_draw_charge(r, skew)
 

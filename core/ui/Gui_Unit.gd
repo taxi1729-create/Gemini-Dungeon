@@ -283,6 +283,11 @@ func _draw_intent(IC) -> void:
 	draw_colored_polygon(shape, PAPER)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	draw_colored_polygon(tail, PAPER)
+	if data.get("status_effects", {}).has("stun"):
+		# スタン中：次のターンは休むので、予告の代わりに「スタン」
+		IC.icon(self, "st_stun", c + Vector2(-30, 0), 26)
+		IC.text(self, "スタン", c + Vector2(12, 1), 19, RED, true)
+		return
 	# 左：効果、右：対象
 	if two:
 		_draw_intent_two(IC, c, dmgs)

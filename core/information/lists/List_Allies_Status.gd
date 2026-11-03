@@ -3,7 +3,7 @@ class_name InitAllyStatus
 ## 味方の初期ステータス（battle-spec.md「キャラクター」）。art はコードで描くキャラの種類名。
 
 const AP_PER_TURN := 3  # 毎ターン +3、余りは持ち越し
-const AP_MAX := 10
+const AP_MAX := 7  # 大きな砂時計で +5（12）
 
 const DATA = {
 	"knight": {"id": "knight", "name": "ナイト",
