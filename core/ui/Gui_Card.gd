@@ -275,19 +275,53 @@ func _draw_shine(art: Rect2, rarity: String) -> void:
 static func summary(c: Dictionary) -> String:
 	var parts: Array = []
 	var ti := DeckController.target_icon(c.get("target", ""))
+	# 陣形：今いる側（kw_side。戦闘外は左）の追加効果。対象が変わるカード（星降り）はアイコンも変える
+	var side_b: Dictionary = {}
+	if ActionList.has_keyword(c, "jinkei") and not ActionList.has_keyword(c, "power"):
+		side_b = c.get("bonus_right" if str(c.get("kw_side", "左")) == "右" else "bonus_left", {})
+		if side_b.has("target"):
+			ti = DeckController.target_icon(str(side_b.target))
 	if ActionList.has_keyword(c, "power"):
-		var pe: Dictionary = c.get("power_effect", {})
-		parts.append("%s+%d" % ["攻" if pe.get("status", "") == "atk_buff" else "防", int(pe.get("eff_val", 0))])
+		parts.append(_power_summary(c))
 	# 多段攻撃は「5×2」「8×X」（数字は実際のダメージ）
 	var hl := hits_label(c)
-	if hl != "" and int(c.get("power", 0)) > 0:
+	if c.get("power_used", false):
+		parts.append("X×%d" % maxi(1, int(c.get("hits", 1))))  # 怒涛の締め（X＝使った枚数）
+	elif str(c.get("power_from", "")) == "poison":
+		parts.append("毒の分")
+	elif hl != "" and int(c.get("power", 0)) > 0:
 		parts.append("%d%s" % [int(c.get("power_eff", c.power)), hl])
+	var aph = c.get("ap_hits")
+	if aph is Dictionary:
+		parts.append("AP%d+で×%d" % [int(aph.get("min", 0)), int(aph.get("hits", 1))])
+	if not c.has("power") and not (c.get("hit_effects", []) as Array).is_empty():
+		parts.append_array(_eff_summary(c.hit_effects))
+		parts[parts.size() - 1] = str(parts.back()) + "×%d" % maxi(1, int(c.get("hits", 1)))  # 毒針の嵐「毒4×3」
+	elif c.has("power"):
+		for he in c.get("hit_effects", []):
+			parts.append_array(_eff_summary([he]))
 	if c.get("kill_ap", 0) > 0:
 		parts.append("撃破AP+%d" % int(c.kill_ap))
 	match String(c.get("on_kill", "")):
 		"reuse": parts.append("撃破で再使用")
 		"reuse_free": parts.append("撃破でAP0再使用")
-	for e in ActionList.effects_of(c):
+	parts.append_array(_eff_summary(ActionList.effects_of(c)))
+	parts.append_array(_eff_summary(side_b.get("effects", [])))
+	# 撃破・反撃・予約の追加効果
+	for k in ActionController.KW_TIMED:
+		if ActionList.has_keyword(c, k):
+			var tb := ActionController.timed_bonus(c, k)
+			var sub := _eff_summary(tb.get("effects", []))
+			if not sub.is_empty():
+				parts.append(str(DeckController.KW_NAME[k]) + "".join(sub))
+	var s := " ".join(parts)
+	return s if ti == "" else "[i:%s]%s" % [ti, s]
+
+
+## 効果の配列の短い文（summary 用）
+static func _eff_summary(effs: Array) -> Array:
+	var parts: Array = []
+	for e in effs:
 		var xs := "×X" if e.get("x", false) else ""
 		match e.get("effect", ""):
 			"add_shield": parts.append("盾%d%s" % [e.eff_val, xs])
@@ -300,9 +334,37 @@ static func summary(c: Dictionary) -> String:
 			"double": parts.append("2回発動")
 			"turnabout": parts.append("補充")
 			"extra_turn": parts.append("再行動")
+			"rank_swap": parts.append("前後入替")
+			"repeat": parts.append("再発動")
 			"add_status":
 				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
-				var only_name: bool = e.status in ["taunt", "fire_guard"] or st.get("label", "") == "none"
-				parts.append(st.get("short", "?") if only_name else "%s%d" % [st.get("short", "?"), e.eff_val])
-	var s := " ".join(parts)
-	return s if ti == "" else "[i:%s]%s" % [ti, s]
+				var only_name: bool = e.status in ["taunt", "fire_guard", "stun", "no_heal"] or st.get("label", "") == "none"
+				var nm: String = str(st.get("short", "?")) if only_name else "%s%d" % [st.get("short", "?"), e.eff_val]
+				if str(e.get("to", "")) == "self" and e.status == "fire":
+					nm = "自" + nm
+				parts.append(nm)
+	return parts
+
+
+## パワーの短い文
+static func _power_summary(c: Dictionary) -> String:
+	var pe: Dictionary = c.get("power_effect", {})
+	if pe.has("left") or pe.has("right"):
+		pe = pe.get("right" if str(c.get("kw_side", "左")) == "右" else "left", {})
+	if pe.has("status"):
+		return "%s+%d" % ["攻" if pe.get("status", "") == "atk_buff" else "防", int(pe.get("eff_val", 0))]
+	if int(pe.get("aid_atk", 0)) > 0:
+		return "味方攻+%d" % int(pe.aid_atk)
+	match str(pe.get("kind", "")):
+		"burn_atk": return "攻+火傷"
+		"last_stand": return "HP減で攻速+"
+		"on_plain_card": return "札無しで全%d" % int(pe.get("dmg", 0))
+		"on_burn": return "消費廃棄で全%d" % int(pe.get("dmg", 0))
+		"on_attack_poison": return "攻撃で毒%d" % int(pe.get("eff_val", 1))
+		"on_debuff_card": return "状態異常で盾%d" % int(pe.get("shield", 1))
+		"on_own_card": return "使うたび火傷盾%d" % int(pe.get("shield", 0))
+		"on_gekiha_card": return "撃破札で攻+%d" % int(pe.get("atk", 1))
+		"on_gekiha_hangeki": return "撃破反撃で%d×%d" % [int(pe.get("power", 2)), int(pe.get("hits", 5))]
+		"end_herb": return "終了時 薬草"
+		"end_convert": return "終了時 消費AP+"
+	return " ".join(_eff_summary(pe.get("once", [])))

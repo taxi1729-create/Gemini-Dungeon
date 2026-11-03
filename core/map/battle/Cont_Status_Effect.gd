@@ -23,7 +23,7 @@ static func reserve_lines(u: Dictionary) -> Array:
 				# 予約の札：積んだ効果をそれぞれ説明する
 				for p in u.status_effects.yoyaku.get("list", []):
 					var pd: Dictionary = p
-					out.append("[i:kw_yoyaku]予約：次の自分のターン開始時に %s" % DeckController.effect_text(u, {"effects": pd.get("effects", [])}))
+					out.append("[i:kw_yoyaku]次の自分のターン開始時に %s" % DeckController.effect_text(u, {"effects": pd.get("effects", [])}))
 	return out
 
 
