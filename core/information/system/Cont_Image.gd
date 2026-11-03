@@ -3,34 +3,47 @@ extends Node
 ## 画像ファイルを一切使わず、アイコン・キャラクター・背景・カード裏をコードで描く共通ライブラリ。
 ## どの関数も「描画先の CanvasItem」を受け取り、その CanvasItem の _draw() の中から呼ぶ。
 
+## ゴシックのステンドグラスの 9 色（battle-spec.md「色」）
+const GLASS = {
+	"sacred_blue": Color("4b4e8c"),  # セイクレッドブルー
+	"sacred_sky": Color("9bb0e1"),  # セイクレッドスカイ
+	"deep_rose": Color("b4485b"),  # ディープローズ
+	"angel_white": Color("dbe6f3"),  # エンジェルホワイト
+	"holy_blue": Color("a5b4c9"),  # ホーリーブルー
+	"stone_gray": Color("c5c5bc"),  # ストーングレイ
+	"ash_gray": Color("585e63"),  # アッシュグレイ
+	"ivory_black": Color("24221f"),  # アイボリーブラック
+	"blackish_blue": Color("1c2048"),  # ブラッキッシュブルー
+}
+
 const COL = {
-	# 基調：黒・白・赤（スタイリッシュなメニュー風の高コントラスト配色）
-	"bg": Color("0a0a0c"),
-	"panel": Color("141417"),
-	"panel_hi": Color("222228"),
-	"line": Color("46464e"),
-	"gold": Color("f2c94c"),
-	"accent": Color("e8213a"),  # 差し色（赤）
-	"knight": Color("2f7cf0"),
-	"witch": Color("9b4dea"),
-	"gold_d": Color("5a5a62"),
-	"text": Color("f5f3ee"),
-	"sub": Color("a8a8b0"),
-	"attack": Color("c8303c"),
-	"skill": Color("2f68c8"),
-	"passive": Color("2f9258"),
-	"hp": Color("e8213a"),
-	"hp_back": Color("2a0c12"),
-	"shield": Color("8fc0ea"),
-	"ap": Color("b88cff"),
-	"good": Color("7be09a"),
-	"bad": Color("ff5a5a"),
-	# 追加：スタイル用の基本色
-	"ink": Color("0a0a0c"),  # 墨（いちばん濃い黒）
-	"paper": Color("f7f5f0"),  # 紙（吹き出し・白帯）
-	"red": Color("e8213a"),  # 赤（強調・選択中）
-	"red_d": Color("7a0c1a"),  # 暗い赤（影・地色）
-	"steel": Color("2c2c33"),  # 無効・控えめな面
+	# 基調：ステンドグラスの 9 色（暗い面はブラッキッシュブルー、白はエンジェルホワイト、差し色はディープローズ）
+	"bg": Color("12142e"),
+	"panel": Color("1c2048"),
+	"panel_hi": Color("2b3063"),
+	"line": Color("585e63"),
+	"gold": Color("e6c97a"),
+	"accent": Color("b4485b"),  # 差し色（ディープローズ）
+	"knight": Color("4b4e8c"),
+	"witch": Color("9b6aa8"),
+	"gold_d": Color("585e63"),
+	"text": Color("eef2f8"),
+	"sub": Color("a5b4c9"),
+	"attack": Color("b4485b"),
+	"skill": Color("4b4e8c"),
+	"passive": Color("6e9a7a"),
+	"hp": Color("b4485b"),
+	"hp_back": Color("2a1420"),
+	"shield": Color("9bb0e1"),
+	"ap": Color("9bb0e1"),
+	"good": Color("9fd6b0"),
+	"bad": Color("e07a8a"),
+	# スタイル用の基本色
+	"ink": Color("15172f"),  # 墨（ブラッキッシュブルーを暗くした線の色）
+	"paper": Color("dbe6f3"),  # 紙（エンジェルホワイト）
+	"red": Color("b4485b"),  # 強調・選択中（ディープローズ）
+	"red_d": Color("5e2230"),  # 暗いローズ（影・地色）
+	"steel": Color("2b2e40"),  # 無効・控えめな面
 }
 
 var font: Font
@@ -2165,15 +2178,23 @@ func _slash(ci: CanvasItem, r: Rect2, y0: float, y1: float, w: float, col: Color
 
 func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool) -> void:
 	var ground_y := r.position.y + r.size.y * (0.62 if not title else 0.72)
-	_vgrad(ci, Rect2(r.position, Vector2(r.size.x, ground_y - r.position.y)), Color("060608"), Color("1c1b21"))
-	_vgrad(ci, Rect2(r.position.x, ground_y, r.size.x, r.end.y - ground_y), Color("17161b"), Color("070709"), 12)
-	# 斜めに差す赤い光と白い筋
-	_slash(ci, r, r.position.y + r.size.y * 0.30, r.position.y - r.size.y * 0.05, r.size.y * 0.16, Color(COL.red, 0.10))
-	_slash(ci, r, r.position.y + r.size.y * 0.47, r.position.y + r.size.y * 0.10, 5, Color(COL.red, 0.35))
-	_slash(ci, r, r.position.y + r.size.y * 0.50, r.position.y + r.size.y * 0.13, 2, Color(1, 1, 1, 0.10))
-	# 網点（左上は白、右下は赤）
-	halftone(ci, Rect2(r.position, Vector2(300, 300)), Color(1, 1, 1, 0.05), r.position, 320, 18, 5)
-	halftone(ci, Rect2(r.end - Vector2(300, 260), Vector2(300, 260)), Color(COL.red, 0.12), r.end, 320, 18, 5)
+	var G := GLASS
+	_vgrad(ci, Rect2(r.position, Vector2(r.size.x, ground_y - r.position.y)), Color("0e1028"), Color("1c2048"))
+	_vgrad(ci, Rect2(r.position.x, ground_y, r.size.x, r.end.y - ground_y), Color("1a1c2c"), Color("0c0d18"), 12)
+	# 奥の壁：ゴシックの尖った窓（ステンドグラス）を 3 つ
+	var wy := r.position.y + r.size.y * 0.05
+	var wh := (ground_y - wy) * 0.78
+	for i in 3:
+		var w := 150.0 if i == 1 else 120.0
+		var cx2 := r.position.x + r.size.x * (0.2 + 0.3 * i)
+		var top := wy + (0.0 if i == 1 else 40.0)
+		gothic_window(ci, Rect2(cx2 - w / 2, top, w, wh - (0.0 if i == 1 else 40.0)), i * 7 + 3, 0.42 + 0.06 * sin(t * 0.8 + i))
+	# 床：アッシュグレイとアイボリーブラックの市松（遠近で奥ほど細かく）
+	_floor_checker(ci, r, ground_y)
+	# 窓から差す光（セイクレッドスカイの帯）
+	_slash(ci, r, r.position.y + r.size.y * 0.30, r.position.y - r.size.y * 0.05, r.size.y * 0.16, Color(G.sacred_sky, 0.06))
+	_slash(ci, r, r.position.y + r.size.y * 0.47, r.position.y + r.size.y * 0.10, 4, Color(G.deep_rose, 0.30))
+	_slash(ci, r, r.position.y + r.size.y * 0.50, r.position.y + r.size.y * 0.13, 2, Color(G.angel_white, 0.10))
 	# 奥の岩壁（尖ったシルエット）
 	var wall := PackedVector2Array()
 	wall.append(Vector2(r.position.x, ground_y))
@@ -2183,13 +2204,13 @@ func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool) -> void:
 		var y := ground_y - 50 - (34 if i % 2 == 0 else 6) - 18 * sin(i * 1.7)
 		wall.append(Vector2(x, y))
 	wall.append(Vector2(r.end.x, ground_y))
-	ci.draw_colored_polygon(wall, Color("0e0e11"))
+	ci.draw_colored_polygon(wall, Color(GLASS.blackish_blue.darkened(0.45), 0.0))  # 岩壁は描かない（窓の壁にした）
 	ci.draw_line(Vector2(r.position.x, ground_y), Vector2(r.end.x, ground_y), Color(1, 1, 1, 0.12), 2)
 	# つらら
 	for i in 9:
 		var x := r.position.x + (i + 0.5) * r.size.x / 9.0
 		var l := 40.0 + 34.0 * absf(sin(i * 2.3))
-		ci.draw_colored_polygon(PackedVector2Array([Vector2(x - 22, r.position.y), Vector2(x + 22, r.position.y), Vector2(x + 3, r.position.y + l)]), Color("040405"))
+		ci.draw_colored_polygon(PackedVector2Array([Vector2(x - 22, r.position.y), Vector2(x + 22, r.position.y), Vector2(x + 3, r.position.y + l)]), Color(GLASS.ivory_black, 0.0))
 	# 地面の遠近線
 	var cx := r.get_center().x
 	for i in 7:
@@ -2233,20 +2254,109 @@ func _bg_camp(ci: CanvasItem, r: Rect2, t: float) -> void:
 
 
 func _bg_map(ci: CanvasItem, r: Rect2, t: float) -> void:
-	_vgrad(ci, r, Color("0d0d10"), Color("050506"))
-	# 細かい斜線の地模様
-	stripes(ci, r, Color(1, 1, 1, 0.025), 22, 2, 0.6)
-	# 左上から伸びる赤い大きな斜めの帯
+	var G := GLASS
+	_vgrad(ci, r, Color("161a3c"), Color("0c0d1c"))
+	# 地模様：七宝（重なった円の格子）を薄く。ホーリーブルーの線、円の中はセイクレッドブルー
+	shippo(ci, r, 120.0, Color(G.sacred_blue, 0.16), Color(G.holy_blue, 0.10), Color(G.angel_white, 0.05))
+	# 左上から差すローズの帯
 	var band := PackedVector2Array([Vector2(r.position.x, r.position.y + 40), Vector2(r.position.x + 520, r.position.y),
 			Vector2(r.position.x + 720, r.position.y), Vector2(r.position.x, r.position.y + 420)])
-	ci.draw_colored_polygon(band, Color(COL.red, 0.10))
-	_slash(ci, r, r.position.y + 470, r.position.y - 60, 4, Color(COL.red, 0.35))
-	halftone(ci, Rect2(r.end - Vector2(320, 320), Vector2(320, 320)), Color(COL.red, 0.10), r.end, 360, 18, 5)
-	halftone(ci, Rect2(r.position + Vector2(0, r.size.y * 0.45), Vector2(240, 300)), Color(1, 1, 1, 0.04),
-			r.position + Vector2(0, r.size.y * 0.6), 220, 18, 4)
+	ci.draw_colored_polygon(band, Color(G.deep_rose, 0.10))
+	_slash(ci, r, r.position.y + 470, r.position.y - 60, 4, Color(G.deep_rose, 0.35))
 	for i in 30:
 		var p := Vector2(fmod(i * 173.0, r.size.x), fmod(i * 291.0, r.size.y)) + r.position
-		ci.draw_rect(Rect2(p, Vector2(2, 2)), Color(1, 1, 1, 0.08 + 0.06 * sin(t + i)))
+		ci.draw_rect(Rect2(p, Vector2(2, 2)), Color(G.sacred_sky, 0.10 + 0.06 * sin(t + i)))
+
+
+## ゴシックの尖った窓。中はステンドグラス（鉛の線で区切った色ガラス）。a = 明るさ
+func gothic_window(ci: CanvasItem, r: Rect2, seed_v: int, a: float) -> void:
+	var G := GLASS
+	var pts := _arch_pts(r)
+	ci.draw_colored_polygon(pts, Color(G.ivory_black, 0.9))
+	var inner := _arch_pts(r.grow(-7))
+	var cols: Array = [G.sacred_blue, G.sacred_sky, G.holy_blue, G.deep_rose, G.angel_white, G.sacred_blue, G.holy_blue]
+	# 縦横の格子を少しずらしたガラス片で埋め、窓の形で切り抜く
+	var cw := 22.0
+	var chh := 26.0
+	var rows := int(r.size.y / chh) + 1
+	var cols_n := int(r.size.x / cw) + 1
+	for yy in rows:
+		for xx in cols_n:
+			var h := absi(int(hash(Vector3i(xx, yy, seed_v))))
+			var c: Color = cols[h % cols.size()]
+			var j := float(h % 7) - 3.0
+			var x0 := r.position.x + xx * cw + (j if yy % 2 == 0 else -j)
+			var y0 := r.position.y + yy * chh
+			var quad := PackedVector2Array([Vector2(x0, y0), Vector2(x0 + cw, y0 + j), Vector2(x0 + cw + j, y0 + chh), Vector2(x0 - j, y0 + chh - j)])
+			for poly in Geometry2D.intersect_polygons(quad, inner):
+				ci.draw_colored_polygon(poly, Color(c, a))
+				var loop := poly.duplicate()
+				loop.append(poly[0])
+				ci.draw_polyline(loop, Color(G.ivory_black, 0.85), 2.0)
+	# 中央のバラ窓
+	var rc := Vector2(r.get_center().x, r.position.y + r.size.x * 0.62)
+	var rr := r.size.x * 0.26
+	ci.draw_circle(rc, rr + 4, G.ivory_black)
+	for k in 8:
+		var a0 := TAU * k / 8.0
+		var p2 := PackedVector2Array([rc, rc + Vector2.from_angle(a0) * rr, rc + Vector2.from_angle(a0 + TAU / 8.0) * rr])
+		ci.draw_colored_polygon(p2, Color(G.deep_rose if k % 2 == 0 else G.sacred_sky, a))
+		ci.draw_line(rc, rc + Vector2.from_angle(a0) * rr, G.ivory_black, 2.0)
+	ci.draw_circle(rc, rr * 0.3, Color(G.angel_white, a))
+	ci.draw_arc(rc, rr, 0, TAU, 32, G.ivory_black, 3.0)
+	var outline := pts.duplicate()
+	outline.append(pts[0])
+	ci.draw_polyline(outline, Color(G.stone_gray, 0.5), 3.0)
+
+
+## 尖頭アーチの輪郭（下は四角、上は 2 つの円弧で尖る）
+func _arch_pts(r: Rect2) -> PackedVector2Array:
+	var p := PackedVector2Array()
+	var w := r.size.x
+	var spring := r.position.y + w * 0.866  # 尖頭の高さ（正三角形の尖頭アーチ）
+	p.append(Vector2(r.position.x, r.end.y))
+	p.append(Vector2(r.position.x, spring))
+	var n := 12
+	for i in range(1, n + 1):  # 左の弧（右の起点を中心に、左から頂点へ）
+		p.append(Vector2(r.end.x, spring) + Vector2.from_angle(PI + (PI / 3.0) * i / n) * w)
+	for i in range(1, n + 1):  # 右の弧（左の起点を中心に、頂点から右へ）
+		p.append(Vector2(r.position.x, spring) + Vector2.from_angle(-PI / 3.0 + (PI / 3.0) * i / n) * w)
+	p.append(Vector2(r.end.x, r.end.y))
+	return p
+
+
+## 七宝（円が重なる格子）の地模様
+func shippo(ci: CanvasItem, r: Rect2, cell: float, fill: Color, petal: Color, line: Color) -> void:
+	var rad := cell / 2.0
+	var ny := int(r.size.y / rad) + 2
+	var nx := int(r.size.x / cell) + 2
+	for yy in ny:
+		for xx in nx:
+			var c := r.position + Vector2(xx * cell + (rad if yy % 2 == 1 else 0.0), yy * rad)
+			ci.draw_circle(c, rad * 0.42, fill)
+			ci.draw_arc(c, rad * 1.0, 0, TAU, 28, line, 2.0)
+			ci.draw_arc(c, rad * 0.42, 0, TAU, 20, petal, 3.0)
+
+
+## 床の市松（遠近：奥ほど小さく）
+func _floor_checker(ci: CanvasItem, r: Rect2, ground_y: float) -> void:
+	var G := GLASS
+	var rows := 9
+	var cx := r.get_center().x
+	for i in rows:
+		var k0 := pow(float(i) / rows, 1.6)
+		var k1 := pow(float(i + 1) / rows, 1.6)
+		var y0 := ground_y + (r.end.y - ground_y) * k0
+		var y1 := ground_y + (r.end.y - ground_y) * k1
+		var s0 := 0.35 + 0.65 * k0
+		var s1 := 0.35 + 0.65 * k1
+		var n := 10
+		for j in n:
+			var xa := (float(j) / n - 0.5) * r.size.x * 1.6
+			var xb := (float(j + 1) / n - 0.5) * r.size.x * 1.6
+			var quad := PackedVector2Array([Vector2(cx + xa * s0, y0), Vector2(cx + xb * s0, y0), Vector2(cx + xb * s1, y1), Vector2(cx + xa * s1, y1)])
+			var c: Color = G.ash_gray if (i + j) % 2 == 0 else G.ivory_black
+			ci.draw_colored_polygon(quad, Color(c, 0.55))
 
 
 # ============================================================
