@@ -37,8 +37,6 @@ const DEBUFFS := ["fire", "poison", "atk_down", "def_down", "no_heal", "stun"]
 
 ## 陣形効果（味方だけ）：前衛（rank 0）は攻撃力+2、後衛（rank 1）は防御力+2
 const FORMATION_BONUS := 2
-## 浄化の誓い（D）が解除するデバフ
-const PURGE_DEBUFFS := ["fire", "poison", "atk_down", "def_down", "no_heal", "stun"]
 
 
 static func formation_atk(u: Dictionary) -> int:
@@ -532,7 +530,7 @@ static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: 
 			if f is Dictionary:
 				fire_left = maxi(0, int(f.turns))
 			var gone: Array = []
-			for sid in PURGE_DEBUFFS:
+			for sid in DEBUFFS:  # A の cleanse と同じデバフの一覧（火傷の残りターンを先に読むので別の効果にしている）
 				if t.status_effects.has(sid):
 					t.status_effects.erase(sid)
 					gone.append(sid)

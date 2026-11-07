@@ -33,7 +33,10 @@ const ENEMY_MAX := 7
 ## 絵・影・HP バー・吹き出しの位置は GuiUnit がこの値（× data.art_scale × GuiUnit.VIEW_BASE）から決める。
 ## ボス・強敵は C（後衛）に立つが本体が大きいので別の倍率（"boss"）。PNG に差し替える時もこの値はそのまま使う
 const DEPTH_SCALE := {"enemy_back": 0.62, "enemy_front": 0.82, "ally_front": 0.92, "ally_back": 1.0, "boss": 0.7}
-const BOSS_POS := Vector2(360, 206)  # 強敵・ボスが C に立つ時の足元（体が大きいので少し手前に。吹き出しが上の帯に隠れないように）
+const BOSS_POS := Vector2(360, 206)  # 強敵・ボスが C に立つ時の足元（体が大きいので少し手前に。吹き出しが上の帯に隠れないように）。体が大きいほど下げる
+const BOSS_MAX_SCALE := 1.0  # C に立つボスの絵の倍率（art_scale × depth_scale × VIEW_BASE）の上限
+const BOSS_HEAD_ROOM := 106.0  # 頭の上に要る高さ（手番の帯の下 56 ＋ 吹き出し）。足元 ≥ これ ＋ 体の高さ
+const BOSS_MAX_Y := 240.0  # ボスの足元の下限（これより下げると前衛の敵の吹き出しと重なる）
 ## 味方の位置 [lane][rank]。lane 0 = 左（青）/ 1 = 右（赤）、rank 0 = 前衛 / 1 = 後衛（手前）
 ## 後衛は足元の状態の列が下の行動順の帯（y 652〜）に隠れないよう、少し上に置く
 const ALLY_POS := [[Vector2(214, 540), Vector2(92, 582)], [Vector2(506, 540), Vector2(628, 582)]]
@@ -89,6 +92,7 @@ var whet_used := {}  # char_id -> このターン「砥石」を使ったか（�
 var rosary_left := 10  # 十連の数珠：あと何回カードを使えば発動するか（味方 2 人の合計）
 var rosary_ready := false  # 十連の数珠：次のカードに効く
 var stats := {"overkill": 0, "rounds": 0, "hp_lost": 0}  # 戦闘の集計（終了時に CurrentStatus.battle_stats へ）
+var boss_extra := {"knight": false, "witch": false}  # ボスレリック：このラウンドの追加ターン（ラウンド開始時の抽選の結果。戦闘中セーブに残す）
 
 # 説明帯
 var strip_title := ""
@@ -111,7 +115,7 @@ var autoplay := false
 
 ## 戦闘の途中のセーブ（battle_snapshot / _restore_battle）でそのまま保存・復元するメンバー変数の名前。
 ## 値は int・bool・String・Dictionary・Array など（ユニットの辞書やノードを入れない）。戦闘に状態を足したらここに名前を足す
-const SAVE_VARS := ["round_no", "first_turn", "boots_used", "last_swap_round", "whet_used", "rosary_left", "rosary_ready", "stats"]
+const SAVE_VARS := ["round_no", "first_turn", "boots_used", "last_swap_round", "whet_used", "rosary_left", "rosary_ready", "stats", "boss_extra"]
 var _resume_at := -1  # 再開する行動順の位置（-1＝再開ではない。_restore_battle が入れる）
 var _turn_idx := 0  # 今ターン中のキャラの行動順の位置（action_order の添字。同じキャラが 2 回入っていても区別する）
 
@@ -242,11 +246,13 @@ func _setup_units() -> void:
 	var floor_no := maxi(0, CurrentStatus.current_floor)
 	var area := CurrentStatus.current_area_id
 	var kind := CurrentStatus.battle_kind
-	var count := AreaList.enemy_count(floor_no, kind)
+	var count := AreaList.enemy_count(floor_no, kind, CurrentStatus.stage)
 	var normal: Array = AreaList.get_enemy_pool(area, "enemies")
 	var ids: Array = []
 	var boss_id := ""
-	if kind == "boss":
+	if kind == "lastboss":
+		boss_id = AreaList.get_enemy_pool(area, "lastboss").pick_random()  # 3 階のボスの後の連戦（1 体だけ）
+	elif kind == "boss":
 		boss_id = AreaList.get_enemy_pool(area, "bosses").pick_random()
 	elif kind == "elite":
 		boss_id = AreaList.get_enemy_pool(area, "elites").pick_random()
@@ -328,7 +334,13 @@ func _place_enemy(e: Dictionary, slot: String) -> void:
 	var big := slot == BOSS_SLOT and (str(CurrentStatus.battle_kind) != "battle" or bool(e.get("boss", false)))
 	e["pos"] = BOSS_POS if big else d.pos
 	if big:
-		e["depth_scale"] = float(DEPTH_SCALE.boss)
+		# 体がとても大きいボス（ラスボスなど art_scale が大きい敵）は、絵の倍率を BOSS_MAX_SCALE までに抑え、
+		# 体の高さに合わせて足元を下げる（頭が上の予告の吹き出し・手番の帯に隠れないように）
+		var art := maxf(0.1, float(e.get("art_scale", 1.0)))
+		var dep := minf(float(DEPTH_SCALE.boss), BOSS_MAX_SCALE / (art * GuiUnit.VIEW_BASE))
+		e["depth_scale"] = dep
+		var body_h := 140.0 * art * dep * GuiUnit.VIEW_BASE
+		e["pos"] = Vector2(BOSS_POS.x, clampf(BOSS_HEAD_ROOM + body_h, BOSS_POS.y, BOSS_MAX_Y))
 	else:
 		e["depth_scale"] = float(DEPTH_SCALE.enemy_front if int(d.row) == 0 else DEPTH_SCALE.enemy_back)
 
@@ -656,6 +668,7 @@ func _battle_loop() -> void:
 				if sa == sb:
 					return a.side == "ally" and b.side != "ally"
 				return sa > sb)
+			_boss_round_start()  # ボスレリック（星詠みの砂時計・騎士王の角笛）：追加ターンを行動順の末尾へ
 		order_bar.units = action_order
 		for idx in range(start, action_order.size()):
 			var u: Dictionary = action_order[idx]
@@ -693,6 +706,7 @@ func battle_snapshot() -> Dictionary:
 		"decks": decks,
 		"order": action_order.map(func(u): return int(u.uid)),  # 行動順はユニットの uid で
 		"turn": _turn_idx,
+		"kind": CurrentStatus.battle_kind,  # 別の戦闘（ボスの後のラスボスなど）に古い途中の状態を戻さないため
 		"vars": vars,
 		"ext": {},
 	}
@@ -701,39 +715,55 @@ func battle_snapshot() -> Dictionary:
 
 ## battle_snapshot() の状態に戻す（_setup_units の中、ユニットの絵を作る前に呼ぶ）。enemies は CurrentStatus.enemies と同じ配列で、中身を入れ替える。
 ## 形がおかしければ何も変えない（その戦闘をはじめからやり直す）
-func _restore_battle(st: Dictionary, enemies: Array) -> void:
-	if st.is_empty():
-		return
+## 途中の状態が今の戦闘に戻せる形か。戻せなければ理由（戻せれば ""）
+func _battle_state_error(st: Dictionary) -> String:
 	var allies: Array = CurrentStatus.allies
 	var sa = st.get("allies")
 	var se = st.get("enemies")
 	var sd = st.get("decks")
 	var so = st.get("order")
 	if not (sa is Array and se is Array and sd is Dictionary and so is Array and st.get("vars") is Dictionary) or se.is_empty():
-		push_warning("Battle: 途中のセーブの形が違うので、はじめからやり直す")
-		return
+		return "形が違う"
+	if str(st.get("kind", "")) != CurrentStatus.battle_kind:
+		return "戦闘の種類が違う"
 	if (sa as Array).size() != allies.size():
-		return
+		return "味方の数が違う"
 	var by_uid := {}
 	for i in allies.size():
 		var o = sa[i]
 		if not (o is Dictionary and str(o.get("id", "")) == str(allies[i].id) and o.has("uid") and o.has("hp")):
-			return
+			return "味方が違う"
 		if not DeckController.save_ok(sd.get(str(allies[i].id))):
-			return
+			return "山札の形が違う"
 		by_uid[int(o.uid)] = true
 	for o in se:
-		if not (o is Dictionary and EnemyList.DATA.has(str(o.get("id", ""))) and o.has("uid") and o.has("hp")):
-			return
+		if not (o is Dictionary and EnemyList.DATA.has(str(o.get("base_id", ""))) and o.has("uid") and o.has("hp")):
+			return "知らない敵"
 		by_uid[int(o.uid)] = true
 	if by_uid.size() != (sa as Array).size() + (se as Array).size():
-		return  # uid が重なっている
+		return "uid が重なっている"
 	for x in so:
 		if not by_uid.has(int(x)):
-			return
+			return "行動順に知らないユニット"
 	var turn := int(st.get("turn", -1))
 	if turn < 0 or turn >= (so as Array).size():
+		return "手番の位置が違う"
+	return ""
+
+
+func _restore_battle(st: Dictionary, enemies: Array) -> void:
+	if st.is_empty():
 		return
+	var bad := _battle_state_error(st)
+	if bad != "":
+		push_warning("Battle: 途中のセーブを使わず、戦闘をはじめからやり直す（%s）" % bad)
+		return
+	var allies: Array = CurrentStatus.allies
+	var sa: Array = st.allies
+	var sd: Dictionary = st.decks
+	var se: Array = st.enemies
+	var so: Array = st.order
+	var turn := int(st.turn)
 	# ここから反映
 	var units := {}
 	for i in allies.size():
@@ -892,6 +922,7 @@ func _ally_turn(u: Dictionary) -> void:
 	if first_turn.get(u.id, false):
 		gain += int(CurrentStatus.next_battle.get("ap", 0))
 		first_turn[u.id] = false
+	gain += _boss_ap_bonus()  # ボスレリック「暁の聖杯」：ターン開始時 AP+1
 	# 毎ターン AP 3 ＋ 加算（前のターンの終わりで 0 にしてあるので、u.ap は予約・他の味方から入った分だけ）。上限は大きな砂時計で +5
 	u["ap"] = mini(int(u.get("max_ap", InitAllyStatus.AP_MAX)), int(u.ap) + gain)
 	whet_used[u.id] = false
@@ -908,7 +939,8 @@ func _ally_turn(u: Dictionary) -> void:
 	for i in hand_cards.size():
 		if dc.hand[i] != null:
 			_pop_in(hand_cards[i], i * 0.04)
-	if autoplay:
+	_boss_hold_auto(u, dc)  # ボスレリック「封印の聖櫃」：保留カードを AP0 で自動発動
+	if autoplay and phase == "player":
 		_autoplay_turn.call_deferred()
 	await turn_done
 	phase = "busy"
@@ -1096,6 +1128,7 @@ func _show_events(events: Array, action: Dictionary) -> void:
 
 
 func _update_deaths(attacker: Dictionary) -> void:
+	_lastboss_check()  # ラスボスの HP が 50% 以下なら第 2 段階へ
 	for u in CurrentStatus.allies + CurrentStatus.enemies:
 		var v: GuiUnit = views[u.uid]
 		if u.hp <= 0 and not v.dead:
@@ -1152,8 +1185,15 @@ func _finish(result: String) -> void:
 		a.erase("aid_atk")
 		a.erase("aid_def")  # 鋼鉄化（味方全体）
 		a.erase("cards_used")
-	if result == "win" and CurrentStatus.battle_kind != "boss":
-		SaveData.save("result")  # 戦闘クリア時の自動セーブ
+	if result == "win" and CurrentStatus.is_last_boss_next():
+		# 3 階のボスを倒した：結果画面を出さず、HP30% 回復してラスボスと連戦
+		CurrentStatus.start_last_boss()
+		SaveData.screen = {}
+		SaveData.save("battle")
+		UiSystem.goto("battle")
+		return
+	if result == "win" and CurrentStatus.battle_kind != "lastboss":
+		SaveData.save("result")  # 戦闘クリア時の自動セーブ（1 階・2 階のボスもボスの報酬があるので保存する）
 	else:
 		SaveData.clear()  # 全滅・踏破でセーブを消す
 	UiSystem.goto("result")
@@ -1344,7 +1384,7 @@ func _action_for(num) -> Dictionary:
 		5:
 			var s: Dictionary = specials[current.id]
 			var sd := str(s.get("desc", "")) + "（AP%d）" % _special_cost(s) if s.has("desc") else _short(s)
-			return {"title": "必殺", "desc": "%s　%s（長押し）" % [s.name, sd], "action": _special_play(s), "kind": "special", "ap": _special_cost(s),
+			return {"title": "必殺", "desc": "%s　%s（長押し）" % [s.name, sd], "action": _boss_mod(current, _special_play(s), true), "kind": "special", "ap": _special_cost(s),
 					"block_msg": _special_block(s)}
 	return {}
 
@@ -1489,7 +1529,7 @@ func _use_special(dc: DeckController) -> void:
 			_log("消費：%sを捨てた" % gone_card.get("name", ""))
 			_ash_altar()
 		consumed = true
-	var act := _special_play(sp, consumed)
+	var act := _boss_mod(current, _special_play(sp, consumed), true)  # ボスレリック（双翼の紋章・双星の宝冠）
 	var evs := _play(act)
 	for ev in evs:
 		if ev.has("purge"):
@@ -1599,6 +1639,8 @@ func _preview_action(num) -> void:
 		hand_cards[info.slot].highlighted = true
 	if info.has("action") and not lack:
 		var act: Dictionary = info.get("play", info.action)  # カードは強化込みの行動で予想する
+		if info.kind in ["card", "hold_play", "unique", "special"]:
+			act = _boss_mod(current, act, info.kind == "special")  # ボスレリックの対象の差し替え・必殺技の倍率
 		if info.kind == "swap":
 			for a in CurrentStatus.allies:
 				views[a.uid].preview = {"on": true, "label": "→右" if int(a.lane) == 0 else "→左"}
@@ -1715,7 +1757,7 @@ func _execute(num) -> void:
 		"unique":
 			current["ap"] = int(current.ap) - ap
 			_log("%s！" % info.action.name)
-			_play(info.action)
+			_play(_boss_mod(current, info.action))
 			# 誓いの紋章：キャラ固有スキルを使うと、味方全体にブロック+4
 			if Inventory.has_relic("oath"):
 				for a in CurrentStatus.allies:
@@ -1760,6 +1802,7 @@ func _use_card(info: Dictionary, dc: DeckController, dir: Vector2) -> void:
 	var pctx := _play_ctx(c, slot, true)
 	pctx["ap_before"] = ap_before
 	var act := ActionController.play_action(current, c, pctx)
+	act = _boss_mod(current, act)  # ボスレリック「双翼の紋章」：対象の差し替え
 	if not on_kw.is_empty():
 		fx.popup(views[current.uid], "%s！" % DeckController.KW_NAME[on_kw[0]], ImageController.COL.accent, 30)
 	# 消費：ほかの手札からランダムに 1 枚を捨札へ（残のバッジなら無効）
@@ -2323,7 +2366,7 @@ func _refresh_all() -> void:
 		btn.special.ap_cost = _special_cost(sp)  # 精神統一中は減った値
 		btn.special.subtitle = "長押し"
 		btn.special.dimmed = int(current.ap) < _special_cost(sp) or _special_block(sp) != ""
-		btn.special.badge = _special_badge(_special_play(sp))
+		btn.special.badge = _special_badge(_boss_mod(current, _special_play(sp), true))
 		var mc := _move_cost()
 		btn.swap.ap_cost = mc
 		btn.swap.dimmed = int(current.ap) < mc
@@ -2415,3 +2458,123 @@ func _autoplay_turn() -> void:
 			break
 	if phase == "player":
 		_execute("end")
+
+
+# ============================================================
+# ボスレリック・ラスボス（9 回目・C）
+# ============================================================
+const BOSS_EXTRA_RATE := 0.25  # 星詠みの砂時計・騎士王の角笛の確率
+const ENEMY_TARGETS := ["front_pair", "front_enemy_single", "front_enemy_group", "random_enemy", "back_row", "front_row"]
+const ALLY_TARGETS := ["self", "other_ally"]
+const SELF_ONLY_EFFECTS := ["draw", "swap", "double", "turnabout", "extra_turn", "rank_swap", "rank_to", "repeat", "add_ap"]  # 味方全体にしても持ち主だけに効く効果
+
+
+## 暁の聖杯：ターン開始時 AP+1
+func _boss_ap_bonus() -> int:
+	return 1 if Inventory.has_relic("boss_ap") else 0
+
+
+## ラウンド開始：星詠みの砂時計（ウィッチ）・騎士王の角笛（ナイト）が 25% で当たれば、行動順の末尾にそのキャラの追加ターン
+func _boss_round_start() -> void:
+	boss_extra = {"knight": false, "witch": false}
+	for pair in [["boss_knight_turn", "knight"], ["boss_witch_turn", "witch"]]:
+		if not Inventory.has_relic(pair[0]) or randf() >= BOSS_EXTRA_RATE:
+			continue
+		var a := CurrentStatus.ally(pair[1])
+		if a.is_empty() or int(a.hp) <= 0:
+			continue
+		boss_extra[pair[1]] = true
+		action_order.append(a)
+		_log("%s：%sの追加ターン！" % [RelicList.DATA[pair[0]].name, a.name])
+
+
+## 封印の聖櫃：ターン開始時、保留カードがあれば AP を使わずに自動で発動する（使えない条件のカードはそのまま）
+func _boss_hold_auto(u: Dictionary, dc: DeckController) -> void:
+	if not Inventory.has_relic("boss_hold") or dc.hold == null or phase != "player":
+		return
+	var c: Dictionary = dc.hold
+	if c.get("type", "") == "unselectable" or ActionList.has_keyword(c, "power"):
+		return
+	var info := _card_info(c, -1, "hold_play", "")
+	if info.no_consume or str(info.block_msg) != "":
+		return
+	info["ap"] = 0
+	fx.popup(views[u.uid], "封印の聖櫃！", ImageController.COL.accent, 28)
+	_log("封印の聖櫃：%sが自動で発動" % c.get("name", ""))
+	_use_card(info, dc, Vector2.UP)
+	_refresh_all()
+
+
+## 必殺技の倍率（双星の宝冠）。kind = "dmg"（左＝青のキャラ）/ "block"（右＝赤のキャラ）。D の必殺技で計算するダメージ・ブロックにも掛ける
+func boss_special_mult(user: Dictionary, kind: String) -> int:
+	if not Inventory.has_relic("boss_special") or user.get("side", "") != "ally":
+		return 1
+	var left := int(user.get("lane", 0)) == 0
+	if kind == "dmg":
+		return 2 if left else 1
+	return 1 if left else 2
+
+
+## ボスレリックで行動を書き換えたコピーを返す（持っていなければそのまま）
+## 双翼の紋章：前衛（rank 0）のキャラは敵が対象→敵全体、後衛（rank 1）は味方が対象→味方全体
+## 双星の宝冠（is_special のとき）：左のキャラはダメージ 2 倍、右のキャラはブロック 2 倍
+func _boss_mod(user: Dictionary, act: Dictionary, is_special: bool = false) -> Dictionary:
+	if act.get("_boss_mod", false) or user.get("side", "") != "ally":
+		return act
+	var form := Inventory.has_relic("boss_formation")
+	var crown := is_special and Inventory.has_relic("boss_special")
+	if not form and not crown:
+		return act
+	var a: Dictionary = act.duplicate(true)
+	a["_boss_mod"] = true
+	if form:
+		var tgt := str(a.get("target", "self"))
+		var front := int(user.get("rank", 0)) == 0
+		if front and tgt in ENEMY_TARGETS:
+			a["target"] = "enemy_all"
+		elif not front:
+			var to_all := tgt in ALLY_TARGETS
+			if to_all:
+				a["target"] = "ally_all"
+			if a.has("effects"):
+				var effs: Array = []
+				for e in a.effects:
+					var ed: Dictionary = (e as Dictionary).duplicate(true)
+					var k := str(ed.get("effect", ""))
+					var to := str(ed.get("to", "target"))
+					if k in SELF_ONLY_EFFECTS:
+						if to_all and to == "target":
+							ed["to"] = "self"  # 引く・入替などは持ち主だけ
+					elif to in ALLY_TARGETS:
+						ed["to"] = "ally_all"
+					effs.append(ed)
+				a["effects"] = effs
+	if crown:
+		if boss_special_mult(user, "dmg") > 1 and a.has("power"):
+			a["power"] = int(a.power) * 2
+		if boss_special_mult(user, "block") > 1 and a.has("effects"):
+			for e in a.effects:
+				if str(e.get("effect", "")) == "add_shield":
+					e["eff_val"] = int(e.get("eff_val", 0)) * 2
+	return a
+
+
+## ラスボス：HP が phase2_at（50%）以下になったら第 2 段階（行動が全体攻撃＋スタン入りに変わる。デバフを払う）
+func _lastboss_check() -> void:
+	for e in CurrentStatus.enemies:
+		if int(e.get("phase", 0)) != 1 or int(e.hp) <= 0:
+			continue
+		var base: Dictionary = EnemyList.DATA.get(str(e.get("base_id", "")), {})
+		if not base.has("phase2_actions") or float(e.hp) > float(e.max_hp) * float(base.get("phase2_at", 0.5)):
+			continue
+		e["phase"] = 2
+		e["actions"] = (base.phase2_actions as Array).duplicate()
+		for sid in ["fire", "poison", "atk_down", "def_down", "no_heal", "stun"]:
+			StatusController.remove(e, sid)
+		e["next_action"] = "twin_charge"
+		_choose_intent(e)
+		_log("%sが第2段階へ！" % e.name)
+		if views.has(e.uid):
+			fx.popup(views[e.uid], "第2段階！", ImageController.COL.red, 38)
+		if ImageController.get("light_mode") != true:
+			fx.shake(14.0)

@@ -273,6 +273,8 @@ static func card_to_save(c) -> Variant:
 static func card_from_save(o) -> Variant:
 	if not o is Dictionary or not o.has("id"):
 		return null
+	if SaveData.REMOVED_CARDS.has(ActionList.base_id(str(o.id))):
+		return null  # 削除したカード（雷撃など）は戻さない
 	var c := ActionList.make_card(str(o.id))
 	if c.is_empty():
 		return null

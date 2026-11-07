@@ -57,7 +57,7 @@ const DATA = {
 	"astral_flame": {"name": "星炎の精", "stage": 3, "hp": 47, "spd": 4, "def": 0, "art": "fire_warriar@star",
 		"actions": ["star_flare", "astral_burn", "star_flare"]},
 	# 強敵 HP220
-	"star_paladin": {"name": "星の聖騎士", "stage": 3, "rank": "elite", "hp": 220, "spd": 4, "def": 2, "art": "dark_knight@star", "art_scale": 1.25,
+	"star_paladin": {"name": "星の聖騎士", "stage": 3, "rank": "elite", "hp": 220, "spd": 4, "def": 2, "art": "dark_knight@gold", "art_scale": 1.25,
 		"actions": ["paladin_blade", "paladin_flank", "paladin_aegis", "paladin_charge", "paladin_zeal"]},
 	# ボス HP420
 	"star_dragon": {"name": "大聖堂の星竜", "stage": 3, "rank": "boss", "hp": 420, "spd": 4, "def": 2, "art": "green_dragon@star", "art_scale": 1.35,
@@ -66,7 +66,7 @@ const DATA = {
 		"actions": ["judgment", "dark_mass", "bishop_heal", "rite_charge", "judgment"]},
 
 	# ---- ラスボス：堕ちた双星（HP750。50% で第 2 段階：全体攻撃＋スタン） ----
-	"fallen_twins": {"name": "堕ちた双星", "stage": 4, "rank": "lastboss", "hp": 750, "spd": 6, "def": 2, "art": "twins", "art_scale": 1.45,
+	"fallen_twins": {"name": "堕ちた双星", "stage": 4, "rank": "lastboss", "hp": 750, "spd": 6, "def": 2, "art": "twins", "art_scale": 1.7,
 		"actions": ["blue_star", "red_star", "twin_veil", "star_rain", "blue_star", "red_star"],
 		"phase2_at": 0.5,
 		"phase2_actions": ["twin_charge", "fallen_comet", "eclipse_rain", "fallen_comet", "red_star", "twin_charge"]},

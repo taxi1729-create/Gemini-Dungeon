@@ -38,7 +38,7 @@ func _process(delta: float) -> void:
 	if card.is_empty():
 		return
 	# 光の帯：一覧・ライトモードでは動かさない（毎フレームの描き直しをしない）。溜め満タンの点滅は残す
-	var shine := animate_shine and not ImageController.light_mode and card.get("rarity", "normal") != "normal"
+	var shine: bool = animate_shine and not ImageController.light_mode and card.get("rarity", "normal") != "normal"
 	if shine or charge >= 1.0:
 		queue_redraw()
 

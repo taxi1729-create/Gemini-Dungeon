@@ -1937,7 +1937,48 @@ func card_back(ci: CanvasItem, r: Rect2) -> void:
 # キャラクター（足元が origin、右向きで定義。facing=-1 で左右反転）
 # ============================================================
 
-func character(ci: CanvasItem, kind: String, origin: Vector2, sc: float, facing: float, t: float) -> void:
+## 敵の絵の色違い（9 回目・C）。"絵@色" の色の名前 → {shift: 色相をずらす量, sat: 彩度の倍率, val: 明るさの倍率, tint: 寄せる色, mix: 寄せる割合}
+## 形は今の絵のまま、色だけ変える（_k が色を変換する）。大きさは敵の art_scale（遠近の倍率と掛け合わせる）
+const ART_PAL = {
+	"hush": {"shift": 0.55, "sat": 0.35, "val": 0.95, "tint": Color("7f8fa6"), "mix": 0.4},  # 沈黙の回廊：くすんだ青紫
+	"stone": {"shift": 0.0, "sat": 0.15, "val": 0.9, "tint": Color("8a8f98"), "mix": 0.4},  # 石像
+	"bronze": {"shift": 0.73, "sat": 0.85, "val": 1.05, "tint": Color("b9773d"), "mix": 0.2},  # 青銅
+	"star": {"shift": 0.5, "sat": 1.1, "val": 1.0, "tint": Color("2f4fb0"), "mix": 0.4},  # 星の大聖堂：深い青
+	"gold": {"shift": 0.0, "sat": 0.7, "val": 1.45, "tint": Color("e8c26a"), "mix": 0.5},  # 金と白
+	"glass": {"shift": 0.0, "sat": 1.2, "val": 1.1, "tint": Color("c0507a"), "mix": 0.45},  # ローズの硝子
+	"crimson": {"shift": 0.0, "sat": 1.1, "val": 1.0, "tint": Color("a01830"), "mix": 0.5},  # 深紅
+	"twin_blue": {"shift": 0.0, "sat": 1.2, "val": 1.8, "tint": Color("3a8cff"), "mix": 0.7},  # 堕ちた双星（蒼）
+	"twin_red": {"shift": 0.0, "sat": 1.2, "val": 1.8, "tint": Color("ff3048"), "mix": 0.7},  # 堕ちた双星（紅）
+}
+var _pal: Dictionary = {}  # 今描いている絵の色違い（空 = そのまま）
+
+
+## 色違いの変換（_pal が空ならそのまま）
+func _k(c: Color) -> Color:
+	if _pal.is_empty():
+		return c
+	var h := fposmod(c.h + float(_pal.get("shift", 0.0)), 1.0)
+	var o := Color.from_hsv(h, clampf(c.s * float(_pal.get("sat", 1.0)), 0.0, 1.0), clampf(c.v * float(_pal.get("val", 1.0)), 0.0, 1.0), c.a)
+	var tint: Color = _pal.get("tint", o)
+	o = o.lerp(Color(tint, c.a), float(_pal.get("mix", 0.0)))
+	o.a = c.a
+	return o
+
+
+## キャラ・敵の絵。kind は "絵" か "絵@色"（ART_PAL）。pal を渡すとその色違いで描く
+func character(ci: CanvasItem, kind: String, origin: Vector2, sc: float, facing: float, t: float, pal: Dictionary = {}) -> void:
+	var at := kind.find("@")
+	if at >= 0:
+		if pal.is_empty():
+			pal = ART_PAL.get(kind.substr(at + 1), {})
+		kind = kind.substr(0, at)
+	if kind == "twins":
+		# 堕ちた双星：ネクロマンサーの絵を蒼と紅の 2 体で重ねる（左が蒼、右が紅。少しずつ揺れる）
+		var off := 30.0 * sc
+		character(ci, "necro", origin + Vector2(-off * facing, -6 * sc + sin(t * 1.7) * 3 * sc), sc * 0.92, facing, t, ART_PAL.twin_blue)
+		character(ci, "necro", origin + Vector2(off * facing, sin(t * 1.7 + PI) * 3 * sc), sc, facing, t + 1.3, ART_PAL.twin_red)
+		return
+	_pal = pal
 	ci.draw_set_transform(origin, 0.0, Vector2(sc * facing, sc))
 	match kind:
 		"knight": _c_armored(ci, t, false, {"steel": Color("8fa3b8"), "dark": Color("566a80"), "light": Color("cfdae6"),
@@ -1949,12 +1990,13 @@ func character(ci: CanvasItem, kind: String, origin: Vector2, sc: float, facing:
 		"skeleton": _c_skeleton(ci, t)
 		"harpy": _c_harpy(ci, t)
 		"fire_warriar": _c_fire(ci, t)
-		"dark_knight": _c_armored(ci, t, true, {"steel": Color("4a4060"), "dark": Color("2c2640"), "light": Color("6e6290"),
-				"cape": Color("6a1f3a"), "plume": Color("6a1f3a"), "blade": Color("b7a8e0")})
+		"dark_knight": _c_armored(ci, t, true, {"steel": _k(Color("4a4060")), "dark": _k(Color("2c2640")), "light": _k(Color("6e6290")),
+				"cape": _k(Color("6a1f3a")), "plume": _k(Color("6a1f3a")), "blade": _k(Color("b7a8e0"))})
 		"green_dragon": _c_dragon(ci, t)
 		"necro": _c_necro(ci, t)
 		_: ci.draw_circle(Vector2(0, -50), 40, Color.MAGENTA)
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_pal = {}
 
 
 func shadow(ci: CanvasItem, origin: Vector2, w: float) -> void:
@@ -1967,35 +2009,35 @@ func _c_armored(ci: CanvasItem, t: float, headless: bool, p: Dictionary) -> void
 	# 脚
 	ci.draw_rect(Rect2(-15, -36, 11, 30), p.dark)
 	ci.draw_rect(Rect2(4, -36, 11, 30), p.dark)
-	ci.draw_rect(Rect2(-18, -9, 15, 9), Color("2a2230"))
-	ci.draw_rect(Rect2(3, -9, 17, 9), Color("2a2230"))
+	ci.draw_rect(Rect2(-18, -9, 15, 9), _k(Color("2a2230")))
+	ci.draw_rect(Rect2(3, -9, 17, 9), _k(Color("2a2230")))
 	# 背中側の盾
 	var sh := pts([[-40, -74], [-12, -74], [-12, -54], [-18, -40], [-26, -32], [-34, -40], [-40, -54]])
-	ci.draw_colored_polygon(sh, ICON_DEFAULT.star.darkened(0.2))
+	ci.draw_colored_polygon(sh, _k(ICON_DEFAULT.star).darkened(0.2))
 	var sh2 := pts([[-37, -71], [-15, -71], [-15, -55], [-20, -43], [-26, -36], [-32, -43], [-37, -55]])
 	ci.draw_colored_polygon(sh2, p.cape.lightened(0.15))
 	# 胴
 	ci.draw_colored_polygon(pts([[-20, -84], [20, -84], [16, -34], [-16, -34]]), p.steel)
 	ci.draw_colored_polygon(pts([[-10, -80], [6, -80], [2, -52], [-8, -52]]), Color(p.light, 0.6))
-	ci.draw_rect(Rect2(-17, -42, 34, 7), Color("5a3a24"))
-	ci.draw_rect(Rect2(-4, -42, 8, 7), ICON_DEFAULT.star)
+	ci.draw_rect(Rect2(-17, -42, 34, 7), _k(Color("5a3a24")))
+	ci.draw_rect(Rect2(-4, -42, 8, 7), _k(ICON_DEFAULT.star))
 	ci.draw_circle(Vector2(-18, -80), 9, p.light)
 	ci.draw_circle(Vector2(18, -80), 9, p.light)
 	# 剣
 	var sw := sin(t * 2.0) * 2.0
 	ci.draw_line(Vector2(24, -56), Vector2(48 + sw, -122), p.blade, 7, true)
 	ci.draw_line(Vector2(26, -62), Vector2(46 + sw, -118), p.blade.lightened(0.6), 2, true)
-	ci.draw_line(Vector2(13, -60), Vector2(35, -50), ICON_DEFAULT.star, 5, true)
-	ci.draw_line(Vector2(24, -56), Vector2(20, -44), Color("5a3a24"), 5, true)
+	ci.draw_line(Vector2(13, -60), Vector2(35, -50), _k(ICON_DEFAULT.star), 5, true)
+	ci.draw_line(Vector2(24, -56), Vector2(20, -44), _k(Color("5a3a24")), 5, true)
 	if headless:
 		# 首元の青い鬼火
 		var sway := sin(t * 6.0) * 3.0
-		ci.draw_colored_polygon(_teardrop(Vector2(0, -88), 14, 44, sway), Color("5fd0ff", 0.85))
-		ci.draw_colored_polygon(_teardrop(Vector2(0, -88), 7, 26, sway * 0.6), Color("d8f6ff"))
+		ci.draw_colored_polygon(_teardrop(Vector2(0, -88), 14, 44, sway), _k(Color("5fd0ff", 0.85)))
+		ci.draw_colored_polygon(_teardrop(Vector2(0, -88), 7, 26, sway * 0.6), _k(Color("d8f6ff")))
 	else:
 		ci.draw_circle(Vector2(0, -100), 17, p.steel)
 		ci.draw_colored_polygon(ell(Vector2(-2, -104), 14, 9), p.light)
-		ci.draw_rect(Rect2(3, -103, 15, 5), Color("15121c"))
+		ci.draw_rect(Rect2(3, -103, 15, 5), _k(Color("15121c")))
 		ci.draw_colored_polygon(pts([[-2, -115], [-8, -122], [-32, -114], [-28, -101], [-12, -108]]), p.plume)
 
 
@@ -2019,55 +2061,55 @@ func _c_witch(ci: CanvasItem, t: float) -> void:
 
 
 func _c_goblin(ci: CanvasItem, t: float) -> void:
-	var g := Color("5fa04a")
+	var g := _k(Color("5fa04a"))
 	ci.draw_rect(Rect2(-12, -24, 9, 24), g.darkened(0.3))
 	ci.draw_rect(Rect2(3, -24, 9, 24), g.darkened(0.3))
 	ci.draw_colored_polygon(ell(Vector2(0, -40), 20, 20), g)
-	ci.draw_colored_polygon(pts([[-18, -32], [18, -32], [14, -18], [-14, -18]]), Color("7a5232"))
+	ci.draw_colored_polygon(pts([[-18, -32], [18, -32], [14, -18], [-14, -18]]), _k(Color("7a5232")))
 	ci.draw_colored_polygon(pts([[-14, -78], [-36, -90], [-12, -66]]), g.darkened(0.1))
 	ci.draw_colored_polygon(pts([[16, -78], [36, -92], [18, -64]]), g.darkened(0.1))
 	ci.draw_circle(Vector2(2, -72), 18, g.lightened(0.08))
-	ci.draw_circle(Vector2(9, -75), 4.5, Color("ffe24a"))
-	ci.draw_circle(Vector2(10, -75), 2.2, Color("c0201a"))
-	ci.draw_line(Vector2(4, -62), Vector2(16, -64), Color("2a1a10"), 2)
-	ci.draw_colored_polygon(pts([[8, -63], [11, -63], [9.5, -59]]), Color.WHITE)
+	ci.draw_circle(Vector2(9, -75), 4.5, _k(Color("ffe24a")))
+	ci.draw_circle(Vector2(10, -75), 2.2, _k(Color("c0201a")))
+	ci.draw_line(Vector2(4, -62), Vector2(16, -64), _k(Color("2a1a10")), 2)
+	ci.draw_colored_polygon(pts([[8, -63], [11, -63], [9.5, -59]]), _k(Color.WHITE))
 	var sw := sin(t * 3.0) * 4.0
-	ci.draw_line(Vector2(18, -42), Vector2(36 + sw, -80), Color("7a5232"), 6, true)
-	ci.draw_circle(Vector2(38 + sw, -84), 10, Color("5a3a24"))
+	ci.draw_line(Vector2(18, -42), Vector2(36 + sw, -80), _k(Color("7a5232")), 6, true)
+	ci.draw_circle(Vector2(38 + sw, -84), 10, _k(Color("5a3a24")))
 
 
 func _c_gool(ci: CanvasItem, t: float) -> void:
-	var g := Color("7d8f6a")
+	var g := _k(Color("7d8f6a"))
 	ci.draw_line(Vector2(-10, 0), Vector2(-6, -24), g.darkened(0.3), 7)
 	ci.draw_line(Vector2(10, 0), Vector2(8, -24), g.darkened(0.3), 7)
 	ci.draw_colored_polygon(pts([[-20, -20], [12, -20], [26, -70], [-4, -86], [-24, -60]]), g)
 	for i in 3:
 		ci.draw_line(Vector2(-14 + i * 3, -36 - i * 12), Vector2(6 + i * 4, -40 - i * 12), g.darkened(0.25), 2)
 	ci.draw_circle(Vector2(24, -84), 15, g.lightened(0.1))
-	glow(ci, Vector2(30, -86), 8, Color("ff3a2a", 0.9), 4)
-	ci.draw_circle(Vector2(30, -86), 3, Color("ffd0c0"))
+	glow(ci, Vector2(30, -86), 8, _k(Color("ff3a2a", 0.9)), 4)
+	ci.draw_circle(Vector2(30, -86), 3, _k(Color("ffd0c0")))
 	var sw := sin(t * 2.5) * 5.0
 	ci.draw_line(Vector2(14, -66), Vector2(42, -38 + sw), g.darkened(0.1), 6, true)
 	for i in 3:
-		ci.draw_line(Vector2(42, -38 + sw), Vector2(50, -34 + sw + i * 4), Color("e9e3d0"), 2)
+		ci.draw_line(Vector2(42, -38 + sw), Vector2(50, -34 + sw + i * 4), _k(Color("e9e3d0")), 2)
 
 
 func _c_zombie(ci: CanvasItem, t: float) -> void:
-	var skin := Color("8db07a")
-	ci.draw_rect(Rect2(-14, -36, 11, 36), Color("4a3a30"))
-	ci.draw_rect(Rect2(3, -36, 11, 36), Color("4a3a30"))
-	ci.draw_colored_polygon(pts([[-16, -82], [16, -82], [16, -40], [8, -32], [0, -40], [-8, -32], [-16, -40]]), Color("4b6a8f"))
+	var skin := _k(Color("8db07a"))
+	ci.draw_rect(Rect2(-14, -36, 11, 36), _k(Color("4a3a30")))
+	ci.draw_rect(Rect2(3, -36, 11, 36), _k(Color("4a3a30")))
+	ci.draw_colored_polygon(pts([[-16, -82], [16, -82], [16, -40], [8, -32], [0, -40], [-8, -32], [-16, -40]]), _k(Color("4b6a8f")))
 	var sw := sin(t * 2.0) * 3.0
 	ci.draw_line(Vector2(6, -76), Vector2(44, -70 + sw), skin, 9, true)
 	ci.draw_line(Vector2(0, -70), Vector2(40, -62 - sw), skin.darkened(0.15), 9, true)
 	ci.draw_circle(Vector2(2, -96), 15, skin)
-	ci.draw_colored_polygon(pts([[-14, -104], [12, -110], [16, -100], [-15, -94]]), Color("2a2a2a"))
-	ci.draw_circle(Vector2(9, -96), 3.2, Color("f4f4d0"))
-	ci.draw_line(Vector2(-6, -90), Vector2(-2, -86), Color("3a2a2a"), 2)
+	ci.draw_colored_polygon(pts([[-14, -104], [12, -110], [16, -100], [-15, -94]]), _k(Color("2a2a2a")))
+	ci.draw_circle(Vector2(9, -96), 3.2, _k(Color("f4f4d0")))
+	ci.draw_line(Vector2(-6, -90), Vector2(-2, -86), _k(Color("3a2a2a")), 2)
 
 
 func _c_skeleton(ci: CanvasItem, t: float) -> void:
-	var b := Color("e8e2cf")
+	var b := _k(Color("e8e2cf"))
 	ci.draw_line(Vector2(-8, 0), Vector2(-7, -34), b, 4)
 	ci.draw_line(Vector2(8, 0), Vector2(7, -34), b, 4)
 	ci.draw_colored_polygon(ell(Vector2(0, -36), 13, 6), b)
@@ -2078,63 +2120,63 @@ func _c_skeleton(ci: CanvasItem, t: float) -> void:
 	var sw := sin(t * 3.0) * 4.0
 	ci.draw_line(Vector2(-4, -78), Vector2(-20, -50), b, 3)
 	ci.draw_line(Vector2(4, -78), Vector2(22, -54), b, 3)
-	ci.draw_line(Vector2(22, -54), Vector2(40 + sw, -108), Color("a07a5a"), 5, true)
-	ci.draw_line(Vector2(14, -60), Vector2(30, -50), Color("7a6a5a"), 4)
+	ci.draw_line(Vector2(22, -54), Vector2(40 + sw, -108), _k(Color("a07a5a")), 5, true)
+	ci.draw_line(Vector2(14, -60), Vector2(30, -50), _k(Color("7a6a5a")), 4)
 	ci.draw_circle(Vector2(2, -96), 15, b)
 	ci.draw_rect(Rect2(-6, -86, 15, 8), b)
-	ci.draw_circle(Vector2(-3, -97), 4.5, Color("1a1420"))
-	ci.draw_circle(Vector2(9, -97), 4.5, Color("1a1420"))
+	ci.draw_circle(Vector2(-3, -97), 4.5, _k(Color("1a1420")))
+	ci.draw_circle(Vector2(9, -97), 4.5, _k(Color("1a1420")))
 
 
 func _c_harpy(ci: CanvasItem, t: float) -> void:
 	var lift := -18.0 + sin(t * 3.0) * 5.0
 	var flap := sin(t * 7.0) * 18.0
-	var feather := Color("8a5aa0")
+	var feather := _k(Color("8a5aa0"))
 	ci.draw_colored_polygon(pts([[0, -70 + lift], [-56, -104 + lift + flap], [-46, -72 + lift + flap * 0.5], [-34, -56 + lift], [-6, -50 + lift]]), feather.darkened(0.2))
-	ci.draw_line(Vector2(-6, -36 + lift), Vector2(-8, -20 + lift), Color("e8c24a"), 3)
-	ci.draw_line(Vector2(6, -36 + lift), Vector2(8, -20 + lift), Color("e8c24a"), 3)
-	ci.draw_colored_polygon(ell(Vector2(0, -58 + lift), 14, 22), Color("b07a6a"))
-	ci.draw_colored_polygon(pts([[-12, -96 + lift], [12, -98 + lift], [10, -76 + lift], [-16, -70 + lift]]), Color("c0507a"))
-	ci.draw_circle(Vector2(3, -90 + lift), 11, Color("f0c8b0"))
-	ci.draw_circle(Vector2(8, -91 + lift), 2.2, Color("4a1a2a"))
+	ci.draw_line(Vector2(-6, -36 + lift), Vector2(-8, -20 + lift), _k(Color("e8c24a")), 3)
+	ci.draw_line(Vector2(6, -36 + lift), Vector2(8, -20 + lift), _k(Color("e8c24a")), 3)
+	ci.draw_colored_polygon(ell(Vector2(0, -58 + lift), 14, 22), _k(Color("b07a6a")))
+	ci.draw_colored_polygon(pts([[-12, -96 + lift], [12, -98 + lift], [10, -76 + lift], [-16, -70 + lift]]), _k(Color("c0507a")))
+	ci.draw_circle(Vector2(3, -90 + lift), 11, _k(Color("f0c8b0")))
+	ci.draw_circle(Vector2(8, -91 + lift), 2.2, _k(Color("4a1a2a")))
 	ci.draw_colored_polygon(pts([[4, -68 + lift], [52, -98 + lift + flap], [44, -66 + lift + flap * 0.5], [30, -52 + lift], [6, -48 + lift]]), feather)
 
 
 func _c_fire(ci: CanvasItem, t: float) -> void:
 	var sway := sin(t * 5.0) * 7.0
-	ci.draw_colored_polygon(_teardrop(Vector2(0, -26), 30, 104, sway), Color("c8321e"))
-	ci.draw_colored_polygon(_teardrop(Vector2(0, -24), 22, 82, sway * 0.8), Color("ff7a1e"))
-	ci.draw_colored_polygon(_teardrop(Vector2(0, -22), 12, 50, sway * 0.5), Color("ffd34a"))
-	ci.draw_circle(Vector2(8, -64), 4, Color.WHITE)
-	ci.draw_circle(Vector2(-4, -64), 4, Color.WHITE)
-	ci.draw_circle(Vector2(9, -64), 2, Color("401008"))
-	ci.draw_circle(Vector2(-3, -64), 2, Color("401008"))
-	ci.draw_line(Vector2(22, -40), Vector2(46, -104), Color("ffb03a"), 6, true)
-	ci.draw_line(Vector2(14, -46), Vector2(30, -36), Color("6a3a1a"), 4)
+	ci.draw_colored_polygon(_teardrop(Vector2(0, -26), 30, 104, sway), _k(Color("c8321e")))
+	ci.draw_colored_polygon(_teardrop(Vector2(0, -24), 22, 82, sway * 0.8), _k(Color("ff7a1e")))
+	ci.draw_colored_polygon(_teardrop(Vector2(0, -22), 12, 50, sway * 0.5), _k(Color("ffd34a")))
+	ci.draw_circle(Vector2(8, -64), 4, _k(Color.WHITE))
+	ci.draw_circle(Vector2(-4, -64), 4, _k(Color.WHITE))
+	ci.draw_circle(Vector2(9, -64), 2, _k(Color("401008")))
+	ci.draw_circle(Vector2(-3, -64), 2, _k(Color("401008")))
+	ci.draw_line(Vector2(22, -40), Vector2(46, -104), _k(Color("ffb03a")), 6, true)
+	ci.draw_line(Vector2(14, -46), Vector2(30, -36), _k(Color("6a3a1a")), 4)
 
 
 func _c_dragon(ci: CanvasItem, t: float) -> void:
-	var g := Color("3f8f4f")
+	var g := _k(Color("3f8f4f"))
 	var flap := sin(t * 3.0) * 14.0
 	ci.draw_colored_polygon(pts([[-30, -22], [-74, -10], [-92, -30], [-66, -26], [-30, -42]]), g.darkened(0.15))
 	ci.draw_colored_polygon(pts([[-8, -78], [-62, -150 + flap], [-34, -118 + flap * 0.5], [-14, -132 + flap], [12, -88]]), g.darkened(0.35))
 	ci.draw_rect(Rect2(-30, -28, 16, 28), g.darkened(0.2))
 	ci.draw_rect(Rect2(12, -28, 16, 28), g.darkened(0.2))
 	ci.draw_colored_polygon(ell(Vector2(0, -52), 46, 34), g)
-	ci.draw_colored_polygon(ell(Vector2(12, -44), 26, 22), Color("c8d98a"))
+	ci.draw_colored_polygon(ell(Vector2(12, -44), 26, 22), _k(Color("c8d98a")))
 	ci.draw_colored_polygon(pts([[18, -72], [38, -112], [56, -106], [36, -62]]), g)
 	ci.draw_colored_polygon(ell(Vector2(56, -114), 24, 15), g.lightened(0.05))
 	ci.draw_colored_polygon(pts([[66, -118], [86, -110], [70, -104]]), g.lightened(0.05))
-	ci.draw_colored_polygon(pts([[44, -124], [36, -146], [52, -126]]), Color("e9e3d0"))
-	ci.draw_colored_polygon(pts([[54, -126], [52, -150], [62, -126]]), Color("e9e3d0"))
-	ci.draw_circle(Vector2(62, -118), 3.5, Color("ffe24a"))
-	ci.draw_line(Vector2(74, -106), Vector2(82, -106), Color("1a1420"), 2)
+	ci.draw_colored_polygon(pts([[44, -124], [36, -146], [52, -126]]), _k(Color("e9e3d0")))
+	ci.draw_colored_polygon(pts([[54, -126], [52, -150], [62, -126]]), _k(Color("e9e3d0")))
+	ci.draw_circle(Vector2(62, -118), 3.5, _k(Color("ffe24a")))
+	ci.draw_line(Vector2(74, -106), Vector2(82, -106), _k(Color("1a1420")), 2)
 	ci.draw_colored_polygon(pts([[2, -82], [48, -152 + flap], [36, -112 + flap * 0.5], [56, -118 + flap], [26, -84]]), g.lightened(0.12))
 
 
 func _c_necro(ci: CanvasItem, t: float) -> void:
 	var lift := -10.0 + sin(t * 2.0) * 4.0
-	var robe := Color("2b2338")
+	var robe := _k(Color("2b2338"))
 	var p := PackedVector2Array()
 	p.append(Vector2(16, -82 + lift))
 	p.append(Vector2(-16, -82 + lift))
@@ -2143,16 +2185,16 @@ func _c_necro(ci: CanvasItem, t: float) -> void:
 		p.append(Vector2(x, lift + (0.0 if i % 2 == 0 else -10.0)))
 	ci.draw_colored_polygon(p, robe)
 	ci.draw_colored_polygon(pts([[-19, -80 + lift], [19, -80 + lift], [15, -112 + lift], [0, -124 + lift], [-15, -112 + lift]]), robe.darkened(0.35))
-	ci.draw_circle(Vector2(3, -98 + lift), 10, Color("e9e3d0"))
-	glow(ci, Vector2(7, -100 + lift), 6, Color("c070ff"), 3)
-	ci.draw_circle(Vector2(7, -100 + lift), 2.4, Color("f0d0ff"))
-	ci.draw_line(Vector2(28, lift - 2), Vector2(28, -122 + lift), Color("5a4a3a"), 4, true)
+	ci.draw_circle(Vector2(3, -98 + lift), 10, _k(Color("e9e3d0")))
+	glow(ci, Vector2(7, -100 + lift), 6, _k(Color("c070ff")), 3)
+	ci.draw_circle(Vector2(7, -100 + lift), 2.4, _k(Color("f0d0ff")))
+	ci.draw_line(Vector2(28, lift - 2), Vector2(28, -122 + lift), _k(Color("5a4a3a")), 4, true)
 	var pulse := 0.5 + 0.5 * sin(t * 4.0)
-	glow(ci, Vector2(28, -128 + lift), 18 + pulse * 5, Color("b060ff", 0.9))
-	ci.draw_circle(Vector2(28, -128 + lift), 7, Color("e6c8ff"))
+	glow(ci, Vector2(28, -128 + lift), 18 + pulse * 5, _k(Color("b060ff", 0.9)))
+	ci.draw_circle(Vector2(28, -128 + lift), 7, _k(Color("e6c8ff")))
 	for i in 3:
 		var a := t * 1.5 + TAU * i / 3
-		ci.draw_circle(Vector2(cos(a) * 34, -60 + lift + sin(a) * 12), 3, Color("b060ff", 0.7))
+		ci.draw_circle(Vector2(cos(a) * 34, -60 + lift + sin(a) * 12), 3, _k(Color("b060ff", 0.7)))
 
 
 # ============================================================
@@ -2920,7 +2962,7 @@ func _icon_ext8(ci: CanvasItem, kind: String, k: Color) -> bool:
 		"rank_back": _i_rank_back(ci, k)
 		"tgt_front_pair": _i_tgt_front_pair(ci, k)
 		_:
-			return false
+			return _icon_boss9(ci, kind, k)
 	return true
 
 
@@ -2985,3 +3027,63 @@ func _i_tgt_front_pair(ci: CanvasItem, k: Color) -> void:
 		ci.draw_line(d * 0.38, d * 0.56, k, 0.09)
 	_pawn(ci, Vector2(-0.16, -0.02), 0.46, k.darkened(0.15))
 	_pawn(ci, Vector2(0.16, 0.02), 0.48, k)
+
+
+# ============================================================
+# 9 回目・C：ボスレリックのアイコン（金の縁＋ステンドグラスの色）
+# ============================================================
+const BOSS_ICON_COL = {
+	"r_boss_ap": Color("f2c94c"), "r_boss_witch_turn": Color("8a5cd0"), "r_boss_knight_turn": Color("2f7cf0"),
+	"r_boss_hold": Color("b9773d"), "r_boss_formation": Color("f7f5f0"), "r_boss_special": Color("f2c94c"),
+}
+
+
+func _icon_boss9(ci: CanvasItem, kind: String, k: Color) -> bool:
+	if not BOSS_ICON_COL.has(kind):
+		return false
+	var c: Color = BOSS_ICON_COL[kind] if k == Color.WHITE else k
+	# 後ろの光輪（ボスレリックの印）
+	ci.draw_colored_polygon(burst_pts(Vector2.ZERO, 0.52, 0.42, 16, 3), Color(COL.red, 0.85))
+	ci.draw_circle(Vector2.ZERO, 0.4, Color(GLASS.ivory_black, 0.9))
+	match kind:
+		"r_boss_ap":
+			# 暁の聖杯：金の杯から昇る朝日
+			ci.draw_colored_polygon(star_pts(Vector2(0, -0.2), 0.2, 0.12, 10), Color("ff9a3a"))
+			_ink_poly(ci, pts([[-0.26, -0.14], [0.26, -0.14], [0.18, 0.06], [0.05, 0.12], [0.05, 0.24], [0.16, 0.3], [-0.16, 0.3], [-0.05, 0.24], [-0.05, 0.12], [-0.18, 0.06]]), c, 0.04)
+			ci.draw_line(Vector2(-0.18, -0.06), Vector2(0.18, -0.06), c.darkened(0.35), 0.04)
+		"r_boss_witch_turn":
+			# 星詠みの砂時計：紫の砂時計に星
+			_ink_poly(ci, pts([[-0.24, -0.32], [0.24, -0.32], [0.04, 0.0], [0.24, 0.32], [-0.24, 0.32], [-0.04, 0.0]]), Color("dceaf4", 0.9), 0.04)
+			ci.draw_colored_polygon(pts([[-0.14, 0.2], [0.14, 0.2], [0.22, 0.3], [-0.22, 0.3]]), c)
+			ci.draw_colored_polygon(pts([[-0.16, -0.22], [0.16, -0.22], [0.03, -0.04], [-0.03, -0.04]]), c)
+			ci.draw_colored_polygon(star_pts(Vector2(0.24, -0.24), 0.14, 0.06), COL.gold)
+		"r_boss_knight_turn":
+			# 騎士王の角笛：曲がった金の角笛に青い帯
+			var horn := PackedVector2Array()
+			for i in 9:
+				var u := i / 8.0
+				horn.append(Vector2(-0.32 + u * 0.56, 0.18 - sin(u * PI) * 0.3 - u * 0.04) + Vector2(0, -0.02 - u * 0.04))
+			for i in range(8, -1, -1):
+				var u := i / 8.0
+				horn.append(Vector2(-0.32 + u * 0.56, 0.18 - sin(u * PI) * 0.3 - u * 0.04) + Vector2(0, 0.04 + u * 0.12))
+			_ink_poly(ci, horn, COL.gold, 0.04)
+			ci.draw_line(Vector2(-0.04, -0.1), Vector2(-0.02, 0.06), c, 0.07)
+			ci.draw_colored_polygon(ell(Vector2(0.25, 0.08), 0.06, 0.12), COL.gold.lightened(0.3))
+		"r_boss_hold":
+			# 封印の聖櫃：木の箱に金の封印
+			_ink_poly(ci, pts([[-0.3, -0.12], [0.3, -0.12], [0.3, 0.26], [-0.3, 0.26]]), c, 0.04)
+			_ink_poly(ci, pts([[-0.32, -0.12], [-0.22, -0.28], [0.22, -0.28], [0.32, -0.12]]), c.lightened(0.15), 0.04)
+			ci.draw_circle(Vector2(0, 0.06), 0.11, COL.red)
+			ci.draw_colored_polygon(star_pts(Vector2(0, 0.06), 0.08, 0.035), COL.gold)
+		"r_boss_formation":
+			# 双翼の紋章：白い両翼と紋章の盾
+			for sx in [-1.0, 1.0]:
+				_ink_poly(ci, pts([[sx * 0.08, -0.06], [sx * 0.38, -0.3], [sx * 0.34, -0.1], [sx * 0.4, -0.04], [sx * 0.3, 0.06], [sx * 0.32, 0.14], [sx * 0.1, 0.12]]), c, 0.035)
+			_ink_poly(ci, _crest_pts(0.5, Vector2(0, 0.04)), COL.red, 0.035)
+			ci.draw_colored_polygon(_crest_pts(0.32, Vector2(0, 0.04)), GLASS.sacred_blue)
+		"r_boss_special":
+			# 双星の宝冠：金の冠に蒼と紅の星
+			_ink_poly(ci, pts([[-0.32, 0.2], [-0.34, -0.16], [-0.16, 0.0], [0, -0.26], [0.16, 0.0], [0.34, -0.16], [0.32, 0.2]]), c, 0.04)
+			ci.draw_colored_polygon(star_pts(Vector2(-0.14, 0.1), 0.11, 0.05), Color("2f7cf0"))
+			ci.draw_colored_polygon(star_pts(Vector2(0.14, 0.1), 0.11, 0.05), Color("e8213a"))
+	return true

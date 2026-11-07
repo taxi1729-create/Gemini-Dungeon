@@ -69,7 +69,10 @@ func _show_stage_intro(ui: CanvasLayer) -> void:
 		tw.tween_method(func(v: float):
 			t0[0] = v
 			box.queue_redraw(), 0.0, 0.35, 0.35)
-	get_tree().create_timer(2.2).timeout.connect(close)
+	# 時間で消す（box に付いた tween なので、先に画面が変わって box が消えても呼ばれない）
+	var tw_close := box.create_tween()
+	tw_close.tween_interval(2.2)
+	tw_close.tween_callback(box.queue_free)
 
 
 func _process(delta: float) -> void:
@@ -281,8 +284,11 @@ func _open_specials(ui: CanvasLayer) -> void:
 			if open:
 				txt = "%s（AP%d）\n%s" % [sp.name, int(sp.ap), str(sp.get("desc", ""))]
 			var pos := Vector2(40 + (n % 2) * 324, y + 44 + (n >> 1) * 172)
-			var b := UiSystem.make_button(box, txt, pos, Vector2(316, 164), Callable(), 17)
-			b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			# 文字はボタンの上のラベルで折り返す（ボタンの文字だと横に伸びてしまう）
+			var b := UiSystem.make_button(box, "", pos, Vector2(316, 164), Callable(), 17)
+			var lb := UiSystem.make_label(b, txt, Vector2(18, 8), Vector2(280, 148), 18, col.paper if open else col.sub, HORIZONTAL_ALIGNMENT_CENTER, 4)
+			lb.set_meta("text", txt)
+			b.tooltip_text = txt
 			b.set_meta("sp", str(sp.id))
 			b.disabled = not open
 			btns.append(b)
