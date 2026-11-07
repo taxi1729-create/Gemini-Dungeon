@@ -29,9 +29,17 @@ func set_card(c: Dictionary) -> void:
 	queue_redraw()
 
 
+## レア・超レアの光の帯を動かすか。一覧（GuiDeckView）では false にして止める（何十枚も毎フレーム描き直すと重い）
+var animate_shine := true
+
+
 func _process(delta: float) -> void:
 	super(delta)
-	if not card.is_empty() and (card.get("rarity", "normal") != "normal" or charge >= 1.0):
+	if card.is_empty():
+		return
+	# 光の帯：一覧・ライトモードでは動かさない（毎フレームの描き直しをしない）。溜め満タンの点滅は残す
+	var shine := animate_shine and not ImageController.light_mode and card.get("rarity", "normal") != "normal"
+	if shine or charge >= 1.0:
 		queue_redraw()
 
 
@@ -151,24 +159,25 @@ func _draw() -> void:
 
 ## 多段攻撃の回数の表示（"×2" / "×X"。多段でなければ ""）
 static func hits_label(c: Dictionary) -> String:
-	if c.get("hits_x", false):
+	if c.get("hits_x", false) or c.get("hits_used", false):
 		return "×X"
 	var n := int(c.get("hits", 1))
 	return "×%d" % n if n > 1 else ""
 
 
-## バッジの紋章：絵柄の窓の右下に、赤い菱形の盾に白い 1 文字（BadgeList.DATA[b].short）
+## バッジの紋章：絵柄の窓の右下に、バッジ一覧と同じメダルのアイコン（BadgeList.DATA[b].icon）。
+## その左下に、一覧の名前（「鋭のバッジ」）の頭の 1 文字（short）を小さな札で添える
 func _draw_badge(art: Rect2) -> void:
 	var b := str(card.get("badge", ""))
 	if not BadgeList.DATA.has(b):
 		return
 	var IC = ImageController
-	var c := Vector2(art.end.x - 13, art.end.y - 13)
-	var pts := PackedVector2Array([c + Vector2(0, -17), c + Vector2(15, -8), c + Vector2(13, 9), c + Vector2(0, 17), c + Vector2(-13, 9), c + Vector2(-15, -8)])
-	IC.poly_box(self, pts, IC.COL.red, 2.5, IC.COL.ink)
-	draw_polyline(PackedVector2Array([c + Vector2(0, -12), c + Vector2(10, -6), c + Vector2(9, 6), c + Vector2(0, 12), c + Vector2(-9, 6), c + Vector2(-10, -6), c + Vector2(0, -12)]),
-			Color(IC.COL.paper, 0.7), 1.2, true)
-	IC.text(self, str(BadgeList.DATA[b].short), c + Vector2(0, 0.5), 16, IC.COL.paper, true, 3, 26, IC.COL.ink)
+	var d: Dictionary = BadgeList.DATA[b]
+	var c := Vector2(art.end.x - 16, art.end.y - 15)
+	IC.icon(self, str(d.icon), c, 36)
+	var tr := Rect2(c + Vector2(-30, 3), Vector2(20, 18))
+	IC.slant(self, tr, IC.COL.ink, 4, 1.5, IC.COL.paper)
+	IC.text(self, str(d.short), tr.get_center() + Vector2(0, -0.5), 13, IC.COL.paper, true, 0, 18)
 
 
 ## キーワードの札（廃棄／消費／即応／最後／陣形／転身）：絵柄の窓の左下に小さな斜めタグを縦に積む
@@ -258,6 +267,11 @@ func _draw_charge(r: Rect2) -> void:
 func _draw_shine(art: Rect2, rarity: String) -> void:
 	if rarity == "normal":
 		return
+	if not animate_shine or ImageController.light_mode:
+		# 止めている時：帯は描かず、絵柄の窓の上辺にレア度の色の細い線だけ（多角形の演算をしない）
+		var lc := Color(1.0, 0.9, 0.5, 0.7) if rarity == "rare" else Color.from_hsv(0.8, 0.4, 1.0, 0.8)
+		draw_rect(Rect2(art.position, Vector2(art.size.x, 3)), lc)
+		return
 	var period := 2.6 if rarity == "rare" else 2.0
 	var k := fmod(_t, period) / period
 	var x := lerpf(art.position.x - 60, art.end.x + 60, k)
@@ -285,8 +299,10 @@ static func summary(c: Dictionary) -> String:
 		parts.append(_power_summary(c))
 	# 多段攻撃は「5×2」「8×X」（数字は実際のダメージ）
 	var hl := hits_label(c)
+	if side_b.has("hits"):
+		hl = "×%d" % int(side_b.hits)  # 終焉の光：陣形 B は回数が変わる
 	if c.get("power_used", false):
-		parts.append("X×%d" % maxi(1, int(c.get("hits", 1))))  # 怒涛の締め（X＝使った枚数）
+		parts.append("X×%d" % maxi(1, int(c.get("hits", 1))))  # 怒涛の締め（8 回目の形）
 	elif str(c.get("power_from", "")) == "poison":
 		parts.append("毒の分")
 	elif hl != "" and int(c.get("power", 0)) > 0:
@@ -335,6 +351,8 @@ static func _eff_summary(effs: Array) -> Array:
 			"turnabout": parts.append("補充")
 			"extra_turn": parts.append("再行動")
 			"rank_swap": parts.append("前後入替")
+			"rank_to": parts.append("前衛へ" if int(e.get("eff_val", 1)) == 0 else "後衛へ")
+			"cleanse": parts.append("デバフ解除")
 			"repeat": parts.append("再発動")
 			"add_status":
 				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
@@ -352,7 +370,7 @@ static func _power_summary(c: Dictionary) -> String:
 	if pe.has("left") or pe.has("right"):
 		pe = pe.get("right" if str(c.get("kw_side", "左")) == "右" else "left", {})
 	if pe.has("status"):
-		return "%s+%d" % ["攻" if pe.get("status", "") == "atk_buff" else "防", int(pe.get("eff_val", 0))]
+		return "%s%s+%d" % ["全" if pe.get("all", false) else "", "攻" if pe.get("status", "") == "atk_buff" else "防", int(pe.get("eff_val", 0))]
 	if int(pe.get("aid_atk", 0)) > 0:
 		return "味方攻+%d" % int(pe.aid_atk)
 	match str(pe.get("kind", "")):
@@ -363,8 +381,17 @@ static func _power_summary(c: Dictionary) -> String:
 		"on_attack_poison": return "攻撃で毒%d" % int(pe.get("eff_val", 1))
 		"on_debuff_card": return "状態異常で盾%d" % int(pe.get("shield", 1))
 		"on_own_card": return "使うたび火傷盾%d" % int(pe.get("shield", 0))
-		"on_gekiha_card": return "撃破札で攻+%d" % int(pe.get("atk", 1))
+		"on_gekiha_card": return "%s札で攻+%d" % [_kws_short(pe.get("kws", ["gekiha"])), int(pe.get("atk", 1))]
+		"on_kw_card": return "%s札で全%d" % [_kws_short(pe.get("kws", [])), int(pe.get("dmg", 0))]
 		"on_gekiha_hangeki": return "撃破反撃で%d×%d" % [int(pe.get("power", 2)), int(pe.get("hits", 5))]
 		"end_herb": return "終了時 薬草"
 		"end_convert": return "終了時 消費AP+"
 	return " ".join(_eff_summary(pe.get("once", [])))
+
+
+## 札の名前の頭の 1 文字をつなぐ（例：即応・転身 → 即転）
+static func _kws_short(kws: Array) -> String:
+	var s := ""
+	for k in kws:
+		s += str(DeckController.KW_NAME.get(str(k), "?")).substr(0, 1)
+	return s

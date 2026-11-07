@@ -59,6 +59,13 @@ func goto(scene_key: String) -> void:
 	FlickInput.reset()
 	_fade_rect.mouse_filter = Control.MOUSE_FILTER_STOP
 	_wipe_k = 0.0
+	if ImageController.light_mode:
+		# ライトモード：ワイプを省いてすぐ切り替える
+		get_tree().change_scene_to_file(SCENES[scene_key])
+		await get_tree().process_frame
+		_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_busy = false
+		return
 	var tw := create_tween()
 	tw.tween_property(self, "_wipe_k", 1.0, 0.26).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	await tw.finished

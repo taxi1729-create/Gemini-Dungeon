@@ -45,6 +45,16 @@ class_name ActionList
 ##     "exhaust_now": true なら手札に入った時の効果の後すぐ廃棄札へ
 ##     "left" / "right" : 陣形のパワー。手札に入った時の位置で、どちらかの power_effect を使う
 ##   パワーの「〜するたび」は、持ち主のパワーが効いている間（次の自分のターンまで）に味方のどちらかで条件が起きるたびに発動する
+##
+## 9 回目に追加した項目（カード修正 39 件）
+##   bonus_sokuou / bonus_saigo / bonus_tenshin : 即応・最後・転身の札ごとの追加効果（無ければ "bonus"。渾身の一撃は転身と即応の両方）
+##   bonus の "hits" は多段の回数を差し替える（終焉の光の陣形 B）
+##   hits_used   : true なら hits ＝ このターンにこのキャラが使ったカードの枚数（このカードは含まない。怒涛の締め：8×X）
+##   pre_rank    : 発動する前に自分をこの段へ移す（0＝前衛。魔弾）
+##   効果 rank_to : 自分を eff_val の段へ移す（1＝後衛。魔法準備）／ cleanse : 対象のデバフ（ActionController.DEBUFFS）を外す（闘志）
+##   power_effect の "all": true は status の効果を味方全体に（鋼鉄化・フォース。もう 1 人の分は aid_atk / aid_def）
+##   kind on_kw_card : "kws" の札が付いたカードが発動するたび敵全体に dmg（即応で +sokuou_add。連撃の気迫）
+##   kind on_gekiha_card の "kws" : この札のどれかが付いたカードを使うたび（狩人の本能＝陣形・予約。無ければ撃破）
 ## art は ImageController.icon の種類名（画像ファイルは使わない）
 
 const ALLY_CARDS = {
@@ -53,32 +63,37 @@ const ALLY_CARDS = {
 		"strike": {"owner": "knight", "name": "ストライク", "type": "attack", "target": "front_pair", "art": "sword", "power": 8, "ap": 1},
 		"block": {"owner": "knight", "name": "ブロック", "type": "skill", "target": "self", "art": "shield", "ap": 1,
 			"effects": [{"effect": "add_shield", "eff_val": 7}]},
-		"sweep": {"owner": "knight", "name": "薙ぎ払い", "type": "attack", "target": "front_enemy_group", "art": "sweep", "power": 5, "ap": 1},
-		"spirit": {"owner": "knight", "name": "気合", "type": "skill", "target": "self", "art": "chevrons", "ap": 2,
-			"effects": [{"effect": "add_status", "status": "ap_next", "eff_val": 2, "turns": 1}, {"effect": "add_shield", "eff_val": 5}]},
+		"sweep": {"owner": "knight", "name": "薙ぎ払い", "type": "attack", "target": "front_row", "art": "sweep", "power": 6, "ap": 1},
+		"spirit": {"owner": "knight", "name": "気合", "type": "skill", "target": "self", "art": "chevrons", "ap": 2, "keywords": ["yoyaku"],
+			"effects": [{"effect": "add_shield", "eff_val": 10}],
+			"bonus_yoyaku": {"effects": [{"effect": "add_ap", "eff_val": 2, "to": "self"}]}},
 		"big_shield": {"owner": "knight", "name": "ビッグシールド", "type": "skill", "target": "self", "art": "c_big_shield", "ap": 2,
 			"effects": [{"effect": "add_shield", "eff_val": 14}]},
 		"hone": {"owner": "knight", "name": "研ぎ澄ます", "type": "skill", "target": "self", "art": "c_hone", "ap": 1,
 			"effects": [{"effect": "add_shield", "eff_val": 9}, {"effect": "add_status", "status": "spd_buff", "eff_val": 1}]},
-		"flash": {"owner": "knight", "name": "一閃", "type": "attack", "target": "front_row", "art": "c_flash", "power": 6, "ap": 1},
-		"chop": {"owner": "knight", "name": "切り刻み", "type": "attack", "target": "front_pair", "art": "c_chop", "power": 8, "ap": 2, "on_kill": "reuse", "keywords": ["gekiha"]},
+		"flash": {"owner": "knight", "name": "一閃", "type": "attack", "target": "front_row", "art": "c_flash", "power": 4, "ap": 1, "keywords": ["sokuou"],
+			"bonus_sokuou": {"power": 5}},
+		"chop": {"owner": "knight", "name": "切り刻み", "type": "attack", "target": "front_pair", "art": "c_chop", "power": 8, "ap": 2, "on_kill": "reuse_free", "keywords": ["gekiha"]},
 		"flurry": {"owner": "knight", "name": "乱撃", "type": "attack", "target": "front_pair", "art": "c_flurry", "power": 5, "hits": 2, "ap": 1},
 		"rampart": {"owner": "knight", "name": "城壁", "type": "skill", "target": "self", "art": "c_rampart", "ap": 1, "keywords": ["consume"],
 			"effects": [{"effect": "add_shield", "eff_val": 16}]},
-		"parry": {"owner": "knight", "name": "受け流し", "type": "skill", "target": "front_row", "art": "c_parry", "ap": 2,
+		"parry": {"owner": "knight", "name": "受け流し", "type": "skill", "target": "front_row", "art": "c_parry", "ap": 1,
 			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}, {"effect": "add_shield", "eff_val": 8, "to": "self"},
 				{"effect": "draw", "eff_val": 1, "to": "self"}]},
 		"taunt": {"owner": "knight", "name": "挑発", "type": "skill", "target": "front_enemy_group", "art": "c_taunt", "ap": 0,
 			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}]},
 		# --- ウィッチ ---
 		"missile": {"owner": "witch", "name": "マジックミサイル", "type": "attack", "target": "front_pair", "art": "star", "power": 7, "ap": 1},
-		"firebolt": {"owner": "witch", "name": "ファイアボルト", "type": "attack", "target": "enemy_all", "art": "flame", "power": 6, "ap": 2},
-		"sparks": {"owner": "witch", "name": "火の粉", "type": "skill", "target": "enemy_all", "art": "burst", "ap": 1,
+		"firebolt": {"owner": "witch", "name": "ファイアボルト", "type": "attack", "target": "enemy_all", "art": "flame", "power": 6, "ap": 2,
 			"effects": [{"effect": "add_status", "status": "fire", "eff_val": 3}]},
+		"sparks": {"owner": "witch", "name": "魔法準備", "type": "skill", "target": "self", "art": "formation", "ap": 1, "keywords": ["yoyaku"],
+			"effects": [{"effect": "rank_to", "eff_val": 1}],
+			"bonus_yoyaku": {"effects": [{"effect": "add_ap", "eff_val": 1, "to": "self"}]}},
 		"barrier": {"owner": "witch", "name": "マジックバリア", "type": "skill", "target": "self", "art": "shield", "ap": 1,
 			"effects": [{"effect": "add_shield", "eff_val": 7}]},
-		"chant": {"owner": "witch", "name": "高速詠唱", "type": "skill", "target": "self", "art": "chevrons", "ap": 0,
-			"effects": [{"effect": "add_ap", "eff_val": 1}]},
+		"chant": {"owner": "witch", "name": "高速詠唱", "type": "skill", "target": "self", "art": "chevrons", "ap": 0, "keywords": ["tenshin"],
+			"effects": [{"effect": "add_shield", "eff_val": 3}],
+			"bonus_tenshin": {"effects": [{"effect": "add_ap", "eff_val": 1, "to": "self"}]}},
 		"swap_card": {"owner": "witch", "name": "スワップ", "type": "skill", "target": "self", "art": "c_swap", "ap": 0,
 			"effects": [{"effect": "swap"}]},
 		"draw_magic": {"owner": "witch", "name": "ドローマジック", "type": "attack", "target": "front_pair", "art": "c_draw_magic", "power": 5, "ap": 1,
@@ -89,19 +104,22 @@ const ALLY_CARDS = {
 			"effects": [{"effect": "add_ap", "eff_val": 1}]},
 		"golem": {"owner": "witch", "name": "ゴーレム", "type": "skill", "target": "self", "art": "c_golem", "ap": 1, "keywords": ["consume"],
 			"effects": [{"effect": "add_shield", "eff_val": 11}]},
-		"reblock": {"owner": "witch", "name": "リブロック", "type": "skill", "target": "self", "art": "c_reblock", "ap": 1,
-			"effects": [{"effect": "add_shield", "eff_val": 4}, {"effect": "add_status", "status": "reblock", "eff_val": 4}]},
-		"drain": {"owner": "witch", "name": "ドレイン", "type": "attack", "target": "front_enemy_group", "art": "c_drain", "power": 6, "ap": 1, "kill_ap": 1, "keywords": ["gekiha"]},
+		"reblock": {"owner": "witch", "name": "リブロック", "type": "skill", "target": "self", "art": "c_reblock", "ap": 1, "keywords": ["yoyaku"],
+			"effects": [{"effect": "add_shield", "eff_val": 4}],
+			"bonus_yoyaku": {"effects": [{"effect": "add_shield", "eff_val": 4, "to": "self"}]}},
+		"drain": {"owner": "witch", "name": "ドレイン", "type": "attack", "target": "front_enemy_group", "art": "c_drain", "power": 6, "ap": 1, "kill_ap": 1, "keywords": ["gekiha"],
+			"effects": [{"effect": "add_status", "status": "poison", "eff_val": 1}]},
 		"absorb": {"owner": "witch", "name": "アブソーブ", "type": "skill", "target": "front_enemy_group", "art": "c_absorb", "ap": 1,
 			"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 2, "turns": 1}, {"effect": "add_status", "status": "atk_buff", "eff_val": 1, "to": "self"}]},
 		"poison_gas": {"owner": "witch", "name": "毒ガス", "type": "skill", "target": "front_enemy_group", "art": "c_poison_gas", "ap": 1,
 			"effects": [{"effect": "add_status", "status": "poison", "eff_val": 4, "turns": 4}]},
 		# --- 8 回目の新カード：ナイト ---
-		"k_rand_thrust": {"owner": "knight", "name": "乱れ突き", "type": "attack", "target": "random_enemy", "art": "c_flurry", "power": 4, "hits": 3, "reroll": true, "ap": 1},
-		"k_rear_raid": {"owner": "knight", "name": "後方強襲", "type": "attack", "target": "back_row", "art": "dagger", "power": 8, "ap": 1},
+		"k_rand_thrust": {"owner": "knight", "name": "乱れ突き", "type": "attack", "target": "random_enemy", "art": "c_flurry", "power": 4, "hits": 3, "reroll": true, "ap": 1,
+			"effects": [{"effect": "add_status", "status": "fire", "eff_val": 1, "to": "self"}]},
+		"k_rear_raid": {"owner": "knight", "name": "後方強襲", "type": "attack", "target": "back_row", "art": "dagger", "power": 8, "ap": 0},
 		"k_sweep_leg": {"owner": "knight", "name": "足払い", "type": "attack", "target": "front_enemy_group", "art": "def_debuff", "power": 5, "ap": 0,
 			"keywords": ["saigo"], "saigo_only": true,
-			"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 1, "turns": 1}]},
+			"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 1}]},
 		"k_escort": {"owner": "knight", "name": "護衛の構え", "type": "skill", "target": "other_ally", "art": "shield_sword", "ap": 1, "keywords": ["jinkei"],
 			"bonus_left": {"effects": [{"effect": "add_shield", "eff_val": 8}]},
 			"bonus_right": {"effects": [{"effect": "add_shield", "eff_val": 4}, {"effect": "add_status", "status": "spd_buff", "eff_val": 2}]}},
@@ -133,33 +151,34 @@ const ALLY_CARDS = {
 	},
 	"rare": {
 		# --- ナイト ---
-		"heavy": {"owner": "knight", "name": "重撃", "type": "attack", "target": "front_pair", "art": "sword", "power": 18, "ap": 2},
+		"heavy": {"owner": "knight", "name": "重撃", "type": "attack", "target": "front_pair", "art": "sword", "power": 16, "ap": 2},
 		"guard_all": {"owner": "knight", "name": "守護の陣", "type": "skill", "target": "ally_all", "art": "shield", "ap": 2,
 			"effects": [{"effect": "add_shield", "eff_val": 8}]},
 		"fire_guard": {"owner": "knight", "name": "ファイアガード", "type": "skill", "target": "self", "art": "c_fire_guard", "ap": 2, "keywords": ["hangeki"],
 			"effects": [{"effect": "add_shield", "eff_val": 8}, {"effect": "add_status", "status": "fire_guard", "eff_val": 2, "turns": 1}]},
-		"big_swing": {"owner": "knight", "name": "大振り", "type": "attack", "target": "front_pair", "art": "c_big_swing", "power": 20, "ap": 3},
+		"big_swing": {"owner": "knight", "name": "大振り", "type": "attack", "target": "front_pair", "art": "c_big_swing", "power": 24, "ap": 3},
 		"store": {"owner": "knight", "name": "貯める", "type": "skill", "target": "self", "art": "c_store", "ap": 3,
 			"effects": [{"effect": "add_shield", "eff_val": 10}, {"effect": "add_status", "status": "ap_next", "eff_val": 3, "turns": 1},
 				{"effect": "add_status", "status": "def_buff", "eff_val": 1}]},
-		"focus": {"owner": "knight", "name": "精神統一", "type": "skill", "target": "self", "art": "c_focus", "ap": 3,
+		"focus": {"owner": "knight", "name": "精神統一", "type": "skill", "target": "self", "art": "c_focus", "ap": 3, "keywords": ["yoyaku"],
 			"effects": [{"effect": "add_status", "status": "focus", "eff_val": 1}]},
 		"barricade": {"owner": "knight", "name": "バリケード", "type": "skill", "target": "self", "art": "c_barricade", "ap": 3,
 			"effects": [{"effect": "add_status", "status": "barricade", "eff_val": 1}]},
 		"dance": {"owner": "knight", "name": "演舞", "type": "attack", "target": "enemy_all", "art": "c_dance", "power": 5, "hits": 3, "ap": 2, "keywords": ["consume"]},
-		"declare": {"owner": "knight", "name": "宣言", "type": "skill", "target": "self", "art": "c_declare", "ap": 1,
+		"declare": {"owner": "knight", "name": "宣言", "type": "skill", "target": "self", "art": "c_declare", "ap": 1, "keywords": ["yoyaku"],
 			"effects": [{"effect": "add_status", "status": "declare", "eff_val": 3}]},
 		"holy": {"owner": "knight", "name": "聖なる加護", "type": "skill", "target": "self", "art": "c_holy", "ap": 1, "ap_x": true,
 			"effects": [{"effect": "add_shield", "eff_val": 6, "x": true}]},
-		"steel": {"owner": "knight", "name": "鋼鉄化", "type": "unselectable", "target": "self", "art": "c_steel",
-			"keywords": ["power"], "power_effect": {"status": "def_buff", "eff_val": 2}},
+		"steel": {"owner": "knight", "name": "鋼鉄化", "type": "unselectable", "target": "ally_all", "art": "c_steel",
+			"keywords": ["power"], "power_effect": {"status": "def_buff", "eff_val": 2, "all": true}},
 		# --- ウィッチ ---
-		"thunder": {"owner": "witch", "name": "雷撃", "type": "attack", "target": "enemy_all", "art": "bolt", "power": 9, "ap": 2},
-		"ice_lance": {"owner": "witch", "name": "氷の槍", "type": "attack", "target": "front_pair", "art": "snow", "power": 15, "ap": 2},
-		"weaken": {"owner": "witch", "name": "攻撃力低下", "type": "skill", "target": "enemy_all", "art": "c_atk_down", "ap": 2,
+		"ice_lance": {"owner": "witch", "name": "氷の槍", "type": "attack", "target": "front_pair", "art": "snow", "power": 15, "ap": 2,
+			"effects": [{"effect": "rank_swap"}]},
+		"weaken": {"owner": "witch", "name": "アタックダウン", "type": "skill", "target": "enemy_all", "art": "c_atk_down", "ap": 2, "keywords": ["consume"],
 			"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 6, "turns": 1}]},
-		"break_armor": {"owner": "witch", "name": "防御力低下", "type": "skill", "target": "front_enemy_group", "art": "c_def_down", "ap": 2,
-			"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 3, "turns": 1}]},
+		"break_armor": {"owner": "witch", "name": "防御力低下", "type": "skill", "target": "front_enemy_group", "art": "c_def_down", "ap": 2, "keywords": ["tenshin"],
+			"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 1, "turns": 1}],
+			"bonus_tenshin": {"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 3, "turns": 1}]}},
 		"meditate": {"owner": "witch", "name": "瞑想", "type": "skill", "target": "self", "art": "c_meditate", "ap": 2,
 			"effects": [{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 3}]},
 		"quake": {"owner": "witch", "name": "アースクエイク", "type": "attack", "target": "front_row", "art": "c_quake", "power": 15, "ap": 2, "keywords": ["consume"]},
@@ -167,8 +186,8 @@ const ALLY_CARDS = {
 			"effects": [{"effect": "absorb_block"}]},
 		"energy": {"owner": "witch", "name": "エナジーチャージ", "type": "skill", "target": "self", "art": "c_energy", "ap": 0, "keywords": ["consume", "exhaust"],
 			"effects": [{"effect": "add_ap", "eff_val": 2}]},
-		"force": {"owner": "witch", "name": "フォース", "type": "unselectable", "target": "self", "art": "c_force",
-			"keywords": ["power"], "power_effect": {"status": "atk_buff", "eff_val": 2}},
+		"force": {"owner": "witch", "name": "フォース", "type": "unselectable", "target": "ally_all", "art": "c_force",
+			"keywords": ["power"], "power_effect": {"status": "atk_buff", "eff_val": 2, "all": true}},
 		# --- 8 回目の新カード：ナイト ---
 		"k_reckless": {"owner": "knight", "name": "捨て身斬り", "type": "attack", "target": "front_pair", "art": "c_big_swing", "power": 14, "ap": 1,
 			"effects": [{"effect": "add_status", "status": "fire", "eff_val": 2, "to": "self"}]},
@@ -192,53 +211,55 @@ const ALLY_CARDS = {
 				"left": {"once": [{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 1, "to": "other_ally"}]},
 				"right": {"aid_atk": 3}}},
 		"k_fervor": {"owner": "knight", "name": "連撃の気迫", "type": "unselectable", "target": "enemy_all", "art": "c_dance",
-			"keywords": ["power", "sokuou"], "power_effect": {"kind": "on_plain_card", "dmg": 3, "sokuou_add": 2}},
+			"keywords": ["power", "sokuou"], "power_effect": {"kind": "on_kw_card", "kws": ["sokuou", "tenshin"], "dmg": 3, "sokuou_add": 3}},
 		# --- 8 回目の新カード：ウィッチ ---
 		"w_homing": {"owner": "witch", "name": "追尾弾", "type": "attack", "target": "random_enemy", "art": "chevrons", "power": 15, "ap": 2, "keywords": ["gekiha"],
 			"bonus_gekiha": {"effects": [{"effect": "repeat"}]}},
 		"w_chain_bolt": {"owner": "witch", "name": "連鎖雷", "type": "attack", "target": "enemy_all", "art": "bolt", "power": 5, "hits": 2, "ap": 3, "keywords": ["gekiha"],
 			"bonus_gekiha": {"effects": [{"effect": "add_ap", "eff_val": 3, "to": "self"}]}},
-		"w_last_light": {"owner": "witch", "name": "終焉の光", "type": "attack", "target": "front_enemy_group", "art": "burst", "power": 25, "ap": 2,
-			"keywords": ["saigo"], "saigo_only": true},
-		"w_magic_shot": {"owner": "witch", "name": "魔弾", "type": "attack", "target": "random_enemy", "art": "c_energy", "power": 14, "ap": 0},
-		"w_toxic_rain": {"owner": "witch", "name": "毒の雨", "type": "attack", "target": "front_row", "art": "st_poison", "power": 3, "hits_x": true, "ap": 1, "ap_x": true,
-			"hit_effects": [{"effect": "add_status", "status": "poison", "eff_val": 1}]},
+		"w_last_light": {"owner": "witch", "name": "終焉の光", "type": "attack", "target": "enemy_all", "art": "burst", "power": 5, "hits": 4, "ap": 2,
+			"keywords": ["saigo", "jinkei"], "saigo_only": true,
+			"bonus_left": {"text": "敵全体に5×4ダメージ"},
+			"bonus_right": {"target": "front_enemy_group", "hits": 5, "text": "目の前の敵グループに5×5ダメージ"}},
+		"w_magic_shot": {"owner": "witch", "name": "魔弾", "type": "attack", "target": "random_enemy", "art": "c_energy", "power": 14, "ap": 0, "pre_rank": 0},
 		"w_sanctuary": {"owner": "witch", "name": "聖域", "type": "skill", "target": "ally_all", "art": "c_magic_wall", "ap": 2,
 			"keywords": ["saigo"], "saigo_only": true,
 			"effects": [{"effect": "add_shield", "eff_val": 20}]},
-		"w_needle_storm": {"owner": "witch", "name": "毒針の嵐", "type": "skill", "target": "random_enemy", "art": "c_poison_gas", "ap": 2, "hits": 3, "reroll": true,
+		"w_needle_storm": {"owner": "witch", "name": "毒針の嵐", "type": "skill", "target": "random_enemy", "art": "c_poison_gas", "ap": 2, "hits": 5, "reroll": true,
 			"hit_effects": [{"effect": "add_status", "status": "poison", "eff_val": 4}]},
 		"w_corrode": {"owner": "witch", "name": "腐食", "type": "attack", "target": "enemy_all", "art": "skull", "power": 0, "fixed": true, "power_from": "poison", "ap": 1},
 		"w_venom_edge": {"owner": "witch", "name": "毒の刃", "type": "unselectable", "target": "self", "art": "dagger",
 			"keywords": ["power"], "power_effect": {"kind": "on_attack_poison", "eff_val": 1}},
 		"w_hex_guard": {"owner": "witch", "name": "呪術の加護", "type": "unselectable", "target": "self", "art": "c_absorb",
-			"keywords": ["power"], "power_effect": {"kind": "on_debuff_card", "shield": 1}},
+			"keywords": ["power"], "power_effect": {"kind": "on_debuff_card", "shield": 2}},
 		"w_flame_aura": {"owner": "witch", "name": "炎の守り", "type": "unselectable", "target": "other_ally", "art": "flame",
-			"keywords": ["power"], "power_effect": {"kind": "on_own_card", "fire": 1, "shield": 7}},
+			"keywords": ["power"], "power_effect": {"kind": "on_own_card", "fire": 1, "shield": 4}},
 		"w_hunter": {"owner": "witch", "name": "狩人の本能", "type": "unselectable", "target": "self", "art": "horns",
-			"keywords": ["power"], "power_effect": {"kind": "on_gekiha_card", "atk": 1}},
+			"keywords": ["power"], "power_effect": {"kind": "on_gekiha_card", "kws": ["jinkei", "yoyaku"], "atk": 1}},
+		# --- 9 回目に超レアから移した（ウィッチ） ---
+		"magic_wall": {"owner": "witch", "name": "マジックウォール", "type": "skill", "target": "ally_all", "art": "c_magic_wall", "ap": 2, "keywords": ["exhaust"],
+			"effects": [{"effect": "add_shield", "eff_val": 40}]},
 	},
 	"super_rare": {
 		# --- ナイト ---
-		"fighting": {"owner": "knight", "name": "闘志", "type": "skill", "target": "self", "art": "atk_buff", "ap": 1,
-			"effects": [{"effect": "add_status", "status": "atk_buff", "eff_val": 2}]},
-		"full_strike": {"owner": "knight", "name": "渾身の一撃", "type": "attack", "target": "front_enemy_group", "art": "c_full_strike", "power": 20, "ap": 1,
-			"keywords": ["exhaust"]},
+		"fighting": {"owner": "knight", "name": "闘志", "type": "skill", "target": "ally_all", "art": "atk_buff", "ap": 1,
+			"effects": [{"effect": "cleanse"}]},
+		"full_strike": {"owner": "knight", "name": "渾身の一撃", "type": "attack", "target": "front_enemy_group", "art": "c_full_strike", "power": 10, "ap": 3,
+			"keywords": ["tenshin", "sokuou"], "bonus_tenshin": {"power": 10}, "bonus_sokuou": {"power": 10}},
 		"stand": {"owner": "knight", "name": "仁王立ち", "type": "skill", "target": "enemy_all", "art": "c_stand", "ap": 3, "keywords": ["exhaust"],
-			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}, {"effect": "add_shield", "eff_val": 20, "to": "self"}]},
+			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}, {"effect": "add_shield", "eff_val": 60, "to": "self"}]},
 		"mushin": {"owner": "knight", "name": "無心乱舞", "type": "attack", "target": "front_row", "art": "c_mushin", "power": 8, "hits_x": true, "ap": 1, "ap_x": true,
 			"keywords": ["exhaust"]},
 		# --- ウィッチ ---
 		"inferno": {"owner": "witch", "name": "豪炎", "type": "attack", "target": "enemy_all", "art": "c_inferno", "power": 5, "hits_x": true, "ap": 1, "ap_x": true},
-		"overload": {"owner": "witch", "name": "魔力暴走", "type": "attack", "target": "front_pair", "art": "c_overload", "power": 18, "ap": 3, "on_kill": "reuse_free", "keywords": ["gekiha"]},
+		"overload": {"owner": "witch", "name": "魔力暴走", "type": "attack", "target": "front_pair", "art": "c_overload", "power": 18, "ap": 3, "on_kill": "reuse_free", "keywords": ["gekiha"],
+			"bonus_gekiha": {"effects": [{"effect": "add_ap", "eff_val": 3, "to": "self"}]}},
 		"insight": {"owner": "witch", "name": "ひらめき", "type": "skill", "target": "self", "art": "cards", "ap": 0,
 			"effects": [{"effect": "draw", "eff_val": 2}]},
-		"magic_wall": {"owner": "witch", "name": "マジックウォール", "type": "skill", "target": "ally_all", "art": "c_magic_wall", "ap": 3, "keywords": ["exhaust"],
-			"effects": [{"effect": "add_shield", "eff_val": 30}]},
 		"double_cast": {"owner": "witch", "name": "連続魔法", "type": "skill", "target": "self", "art": "c_double", "ap": 1, "keywords": ["exhaust"],
 			"effects": [{"effect": "double"}]},
 		# --- 8 回目の新カード：ナイト ---
-		"k_finisher": {"owner": "knight", "name": "怒涛の締め", "type": "attack", "target": "front_pair", "art": "c_mushin", "power": 0, "power_used": true, "hits": 8, "ap": 0,
+		"k_finisher": {"owner": "knight", "name": "怒涛の締め", "type": "attack", "target": "front_pair", "art": "c_mushin", "power": 8, "hits_used": true, "ap": 0,
 			"keywords": ["saigo"], "saigo_only": true},
 		"k_thousand": {"owner": "knight", "name": "千本突き", "type": "attack", "target": "enemy_all", "art": "target_all", "power": 1, "hits": 6, "ap": 3},
 		"k_command": {"owner": "knight", "name": "陣頭指揮", "type": "skill", "target": "ally_all", "art": "crown", "ap": 1, "keywords": ["jinkei"],
@@ -261,6 +282,9 @@ const ALLY_CARDS = {
 			"keywords": ["power", "exhaust"], "power_effect": {"kind": "end_herb"}},
 		"w_mana_convert": {"owner": "witch", "name": "魔力の転換", "type": "unselectable", "target": "self", "art": "c_meditate",
 			"keywords": ["power", "consume"], "power_effect": {"kind": "end_convert"}},
+		# --- 9 回目にレアから移した（ウィッチ） ---
+		"w_toxic_rain": {"owner": "witch", "name": "毒の雨", "type": "attack", "target": "front_row", "art": "st_poison", "power": 3, "hits_x": true, "ap": 1, "ap_x": true,
+			"hit_effects": [{"effect": "add_status", "status": "poison", "eff_val": 1}]},
 	},
 }
 
@@ -272,17 +296,46 @@ const UNIQUE_SKILLS = {
 			"effects": [{"effect": "turnabout", "eff_val": 1}]},
 }
 
-## 必殺技（中央長押し。マップ画面でキャラごとに 1 つセット）
+## 必殺技（中央長押し。マップ画面でキャラごとに 1 つセット。9 回目で各キャラ 4 種）
+## 最初に解放済み＝SPECIAL_START。残りは強敵を倒すとランダムに 1 つずつ解放（CurrentStatus.special_unlocked）
+## 必殺技だけの項目（実際に使う行動は Cont_Battle._special_play が作る）
+##   desc       : 説明文（マップの選択画面・戦闘の説明帯）
+##   left/right : 陣形の札。左（lane 0）／右（lane 1）に立っている時の行動（target・power・effects を上書き）
+##   void_hits  : 虚空連斬。消費が発動した後の「カードアクション（手札 4 枠＋保留枠）の空き数」× power_per ダメージ、× shield_per 自分にブロック
+##   sokuou_only: 即応の条件（このラウンドに左右の入替をした）を満たした時だけ使える
+##   poison_hits: 毒が付いた敵が 1 体でもいれば hits 回攻撃
+##   効果 purge_self：自分のデバフ（火傷・毒・攻撃力低下・防御力低下・回復不可・スタン）を解除。
+##                    火傷を解除した時、火傷の残りターン分 攻撃力・防御力+（戦闘中）
+const SPECIAL_START := ["k_sp_formation", "k_sp_guard", "w_sp_explosion", "w_sp_turnskip"]
 const SPECIALS = {
-	"witch": [
-		{"id": "explosion", "name": "爆発", "type": "attack", "target": "enemy_all", "art": "burst", "power": 14, "ap": 3},
-		{"id": "turn_skip", "name": "ターンスキップ", "type": "skill", "target": "self", "art": "hourglass", "ap": 5,
-			"effects": [{"effect": "extra_turn"}]},
-	],
 	"knight": [
-		{"id": "sky_slash", "name": "空烈斬", "type": "attack", "target": "front_enemy_group", "art": "sweep", "power": 17, "ap": 2},
-		{"id": "great_guard", "name": "大防御", "type": "skill", "target": "self", "art": "shield", "ap": 1,
-			"effects": [{"effect": "add_shield", "eff_val": 13}]},
+		{"id": "k_sp_formation", "name": "双陣斬", "type": "attack", "target": "front_pair", "art": "sweep", "ap": 1, "keywords": ["jinkei"],
+			"power": 11,
+			"left": {"type": "attack", "target": "front_pair", "power": 11},
+			"right": {"type": "skill", "target": "ally_all", "effects": [{"effect": "add_shield", "eff_val": 7}]},
+			"desc": "陣形　左：目の前の敵前衛に11ダメージ／右：味方全体にブロック+7"},
+		{"id": "k_sp_void", "name": "虚空連斬", "type": "attack", "target": "enemy_all", "art": "c_mushin", "ap": 2, "keywords": ["consume"],
+			"power": 0, "void_hits": {"power_per": 8, "shield_per": 6},
+			"desc": "消費　消費が発動した後、カードアクションの空き数×8ダメージを敵全体に。自分に空き数×6ブロック"},
+		{"id": "k_sp_purge", "name": "浄化の誓い", "type": "skill", "target": "self", "art": "c_holy", "ap": 1,
+			"effects": [{"effect": "purge_self"}],
+			"desc": "自分のデバフを解除。火傷を解除した時、火傷の残りターン分 攻撃力・防御力+（戦闘中）"},
+		{"id": "k_sp_guard", "name": "大防御", "type": "skill", "target": "self", "art": "shield", "ap": 2,
+			"effects": [{"effect": "add_shield", "eff_val": 20}],
+			"desc": "自分にブロック+20"},
+	],
+	"witch": [
+		{"id": "w_sp_explosion", "name": "爆発", "type": "attack", "target": "enemy_all", "art": "burst", "power": 14, "ap": 3,
+			"desc": "敵全体に14ダメージ"},
+		{"id": "w_sp_turnskip", "name": "ターンスキップ", "type": "skill", "target": "self", "art": "hourglass", "ap": 5,
+			"effects": [{"effect": "extra_turn"}],
+			"desc": "ターン終了時、もう一度ターンを得る"},
+		{"id": "w_sp_stun", "name": "星縛り", "type": "skill", "target": "random_enemy", "art": "star", "ap": 1, "keywords": ["sokuou"],
+			"sokuou_only": true, "effects": [{"effect": "add_status", "status": "stun", "eff_val": 1}],
+			"desc": "即応　ランダムな敵1体にスタン1（即応の条件を満たした時だけ使える）"},
+		{"id": "w_sp_venom", "name": "毒蛇の舞", "type": "attack", "target": "front_enemy_group", "art": "st_poison", "power": 8, "ap": 2,
+			"poison_hits": 3,
+			"desc": "目の前の敵グループに8ダメージ。毒が付いた敵がいれば3回攻撃"},
 	],
 }
 
@@ -315,6 +368,95 @@ const ENEMY_ACTIONS = {
 	"tail": {"name": "尻尾の一撃", "type": "attack", "target": "front_enemy_single", "power": 24},
 	"dark_wave": {"name": "暗黒波", "type": "attack", "target": "enemy_all", "power": 12},
 	"dark_heal": {"name": "闇の再生", "type": "skill", "target": "self", "effects": [{"effect": "heal", "eff_val": 24}]},
+
+	# ---- 2 階：沈黙の回廊（9 回目・C。単体 12〜16／全体 9〜12） ----
+	"hush_club": {"name": "黙打ち", "type": "attack", "target": "front_enemy_single", "power": 12},
+	"hush_flank": {"name": "忍び寄り", "type": "attack", "target": "front_enemy_single", "power": 13, "move": true},
+	"hush_guard": {"name": "口を閉ざす", "type": "skill", "target": "self", "effects": [{"effect": "add_shield", "eff_val": 12}]},
+	"hush_rend": {"name": "裂き爪", "type": "attack", "target": "front_enemy_single", "power": 14},
+	"mute_spit": {"name": "沈黙の毒液", "type": "skill", "target": "front_enemy_single", "effects": [{"effect": "add_status", "status": "poison", "eff_val": 4, "turns": 4}]},
+	"vow_strike": {"name": "誓いの拳", "type": "attack", "target": "front_enemy_single", "power": 13},
+	"vow_guard": {"name": "沈黙の誓い", "type": "skill", "target": "ally_all", "effects": [{"effect": "add_shield", "eff_val": 9}]},
+	"bone_slash": {"name": "骨の刃", "type": "attack", "target": "front_enemy_single", "power": 14},
+	"requiem": {"name": "鎮魂歌", "type": "attack", "target": "enemy_all", "power": 9},
+	"stone_claw": {"name": "石の爪", "type": "attack", "target": "front_enemy_single", "power": 13},
+	"stone_gust": {"name": "石礫の風", "type": "attack", "target": "enemy_all", "power": 9},
+	"stone_dive": {"name": "急降下", "type": "attack", "target": "front_enemy_single", "power": 14, "move": true},
+	"candle_flame": {"name": "蒼い灯火", "type": "skill", "target": "front_enemy_single", "effects": [{"effect": "add_status", "status": "fire", "eff_val": 5}]},
+	"candle_wave": {"name": "燭台の揺らめき", "type": "attack", "target": "enemy_all", "power": 10},
+	"candle_slash": {"name": "蝋の刃", "type": "attack", "target": "front_enemy_single", "power": 12},
+	"silent_blade": {"name": "無音の剣", "type": "attack", "target": "front_enemy_single", "power": 16},
+	"silent_flank": {"name": "影渡り", "type": "attack", "target": "front_enemy_single", "power": 15, "move": true},
+	"silent_wall": {"name": "黙する鉄壁", "type": "skill", "target": "self", "effects": [{"effect": "add_shield", "eff_val": 24}]},
+	"silent_charge": {"name": "息を潜める", "type": "skill", "target": "self", "effects": [{"effect": "set_next_action", "next": "silent_burst"}]},
+	"silent_burst": {"name": "沈黙の波動", "type": "attack", "target": "enemy_all", "power": 12,
+		"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 2, "turns": 2}]},
+	"silent_vow": {"name": "静寂の誓い", "type": "skill", "target": "ally_all", "effects": [{"effect": "add_status", "status": "atk_buff", "eff_val": 2}]},
+	"abbess_wave": {"name": "沈黙の讃歌", "type": "attack", "target": "enemy_all", "power": 11,
+		"effects": [{"effect": "add_status", "status": "no_heal", "eff_val": 1, "turns": 2}]},
+	"abbess_slash": {"name": "戒律の鞭", "type": "attack", "target": "front_enemy_single", "power": 16},
+	"abbess_heal": {"name": "静かな祈り", "type": "skill", "target": "self", "effects": [{"effect": "heal", "eff_val": 30}]},
+	"abbess_charge": {"name": "鐘を待つ", "type": "skill", "target": "self", "effects": [{"effect": "set_next_action", "next": "abbess_judgment"}]},
+	"abbess_judgment": {"name": "沈黙の審判", "type": "attack", "target": "enemy_all", "power": 12,
+		"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 2, "turns": 2}]},
+	"bell_breath": {"name": "鐘楼の息", "type": "attack", "target": "enemy_all", "power": 11,
+		"effects": [{"effect": "add_status", "status": "fire", "eff_val": 3}]},
+	"bell_tail": {"name": "青銅の尾", "type": "attack", "target": "front_enemy_single", "power": 16},
+	"bell_toll": {"name": "弔いの鐘", "type": "skill", "target": "ally_all", "effects": [{"effect": "add_status", "status": "atk_buff", "eff_val": 2}]},
+	"bell_charge": {"name": "鐘が鳴りだす", "type": "skill", "target": "self", "effects": [{"effect": "set_next_action", "next": "great_toll"}]},
+	"great_toll": {"name": "大鐘の響き", "type": "attack", "target": "enemy_all", "power": 12,
+		"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 2, "turns": 2}]},
+
+	# ---- 3 階：星の大聖堂（単体 15〜20／全体 12〜15） ----
+	"imp_strike": {"name": "小悪魔の槍", "type": "attack", "target": "front_enemy_single", "power": 15},
+	"imp_flank": {"name": "回り込み突き", "type": "attack", "target": "front_enemy_single", "power": 16, "move": true},
+	"imp_guard": {"name": "翼で守る", "type": "skill", "target": "self", "effects": [{"effect": "add_shield", "eff_val": 15}]},
+	"censer_rend": {"name": "灰の爪", "type": "attack", "target": "front_enemy_single", "power": 17},
+	"censer_smoke": {"name": "毒香", "type": "skill", "target": "enemy_all", "effects": [{"effect": "add_status", "status": "poison", "eff_val": 3, "turns": 3}]},
+	"pilgrim_blow": {"name": "巡礼の杖", "type": "attack", "target": "front_enemy_single", "power": 18},
+	"penance": {"name": "贖罪の祈り", "type": "skill", "target": "ally_all", "effects": [{"effect": "add_shield", "eff_val": 12}]},
+	"star_spear": {"name": "星の槍", "type": "attack", "target": "front_enemy_single", "power": 17},
+	"sentinel_guard": {"name": "番兵の盾", "type": "skill", "target": "self", "effects": [{"effect": "add_shield", "eff_val": 18}]},
+	"glass_feather": {"name": "硝子の羽", "type": "attack", "target": "enemy_all", "power": 12},
+	"glass_dive": {"name": "硝子の急降下", "type": "attack", "target": "front_enemy_single", "power": 17, "move": true},
+	"glass_hymn": {"name": "光の聖歌", "type": "skill", "target": "ally_all", "effects": [{"effect": "add_shield", "eff_val": 12}]},
+	"star_flare": {"name": "星の閃き", "type": "attack", "target": "front_enemy_single", "power": 15,
+		"effects": [{"effect": "add_status", "status": "fire", "eff_val": 2}]},
+	"astral_burn": {"name": "星炎の渦", "type": "skill", "target": "enemy_all", "effects": [{"effect": "add_status", "status": "fire", "eff_val": 4}]},
+	"paladin_blade": {"name": "星の聖剣", "type": "attack", "target": "front_enemy_single", "power": 20},
+	"paladin_flank": {"name": "天翔け", "type": "attack", "target": "front_enemy_single", "power": 18, "move": true},
+	"paladin_aegis": {"name": "星の盾", "type": "skill", "target": "self", "effects": [{"effect": "add_shield", "eff_val": 30}]},
+	"paladin_charge": {"name": "祈りを捧げる", "type": "skill", "target": "self", "effects": [{"effect": "set_next_action", "next": "paladin_meteor"}]},
+	"paladin_meteor": {"name": "流星の裁き", "type": "attack", "target": "enemy_all", "power": 15,
+		"effects": [{"effect": "add_status", "status": "fire", "eff_val": 3}]},
+	"paladin_zeal": {"name": "聖戦の誓い", "type": "skill", "target": "ally_all", "effects": [{"effect": "add_status", "status": "atk_buff", "eff_val": 3}]},
+	"star_breath": {"name": "星の息", "type": "attack", "target": "enemy_all", "power": 14},
+	"star_tail": {"name": "星屑の尾", "type": "attack", "target": "front_enemy_single", "power": 20},
+	"star_charge": {"name": "星を呑む", "type": "skill", "target": "self", "effects": [{"effect": "set_next_action", "next": "supernova"}]},
+	"supernova": {"name": "超新星", "type": "attack", "target": "enemy_all", "power": 15,
+		"effects": [{"effect": "add_status", "status": "fire", "eff_val": 4}]},
+	"star_wing": {"name": "星の翼", "type": "skill", "target": "self", "effects": [{"effect": "add_shield", "eff_val": 30}]},
+	"judgment": {"name": "断罪", "type": "attack", "target": "front_enemy_single", "power": 19},
+	"dark_mass": {"name": "黒ミサ", "type": "attack", "target": "enemy_all", "power": 13,
+		"effects": [{"effect": "add_status", "status": "no_heal", "eff_val": 1, "turns": 2}]},
+	"bishop_heal": {"name": "偽りの奇跡", "type": "skill", "target": "self", "effects": [{"effect": "heal", "eff_val": 40}]},
+	"rite_charge": {"name": "儀式の支度", "type": "skill", "target": "self", "effects": [{"effect": "set_next_action", "next": "last_rite"}]},
+	"last_rite": {"name": "終油の秘跡", "type": "attack", "target": "enemy_all", "power": 15,
+		"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 2, "turns": 2}]},
+
+	# ---- ラスボス：堕ちた双星（単体 18〜28／全体 14〜18。第 2 段階で全体攻撃＋スタン） ----
+	"blue_star": {"name": "蒼星の刃", "type": "attack", "target": "front_enemy_single", "power": 22,
+		"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 2, "turns": 2}]},
+	"red_star": {"name": "紅星の槍", "type": "attack", "target": "front_enemy_single", "power": 24,
+		"effects": [{"effect": "add_status", "status": "fire", "eff_val": 3}]},
+	"twin_veil": {"name": "双星の帳", "type": "skill", "target": "self", "effects": [{"effect": "add_shield", "eff_val": 40}]},
+	"star_rain": {"name": "星の雨", "type": "attack", "target": "enemy_all", "power": 14},
+	"twin_charge": {"name": "双星が重なる", "type": "skill", "target": "self", "effects": [{"effect": "set_next_action", "next": "twin_doom"}]},
+	"twin_doom": {"name": "双星の終焉", "type": "attack", "target": "enemy_all", "power": 18,
+		"effects": [{"effect": "add_status", "status": "stun", "eff_val": 1}]},
+	"fallen_comet": {"name": "堕ちる彗星", "type": "attack", "target": "front_enemy_single", "power": 28},
+	"eclipse_rain": {"name": "蝕の流星雨", "type": "attack", "target": "enemy_all", "power": 16,
+		"effects": [{"effect": "add_status", "status": "fire", "eff_val": 3}]},
 }
 
 
@@ -405,3 +547,21 @@ static func special(char_id: String, special_id: String) -> Dictionary:
 		if s.id == special_id:
 			return s
 	return SPECIALS[char_id][0]
+
+
+## 必殺技の ID の一覧（両キャラ）
+static func special_ids() -> Array:
+	var out: Array = []
+	for ch in ["knight", "witch"]:
+		for s in SPECIALS[ch]:
+			out.append(str(s.id))
+	return out
+
+
+## 必殺技の ID → 持ち主（無ければ ""）
+static func special_owner(special_id: String) -> String:
+	for ch in ["knight", "witch"]:
+		for s in SPECIALS[ch]:
+			if s.id == special_id:
+				return ch
+	return ""

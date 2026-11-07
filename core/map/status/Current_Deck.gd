@@ -7,9 +7,10 @@ var decks = {
 }
 
 
+## 新しい冒険を始める時：初期デッキに、候補からランダムに 1 枚ずつ足す（InitAllyDeck.EXTRA）
 func sync_from_init() -> void:
-	decks["knight"] = InitAllyDeck.get_deck("knight")
-	decks["witch"] = InitAllyDeck.get_deck("witch")
+	decks["knight"] = InitAllyDeck.get_start_deck("knight")
+	decks["witch"] = InitAllyDeck.get_start_deck("witch")
 
 
 func add_card(char_id: String, card_id: String) -> void:

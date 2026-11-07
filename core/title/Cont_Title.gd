@@ -6,10 +6,13 @@ const VERSION := "0.03"  # 公開するたびに上げる（右下に表示）
 var deco: Control
 var _t := 0.0
 var ui: CanvasLayer
+var bg: GuiBackground
+var _deco_light := false  # ライトモードで最後に描いた時の値（切り替わった時だけ描き直す）
 
 
 func _ready() -> void:
-	add_child(GuiBackground.new("title"))
+	bg = GuiBackground.new("title")
+	add_child(bg)
 	ui = CanvasLayer.new()
 	add_child(ui)
 	deco = Control.new()
@@ -28,6 +31,8 @@ func _ready() -> void:
 	UiSystem.make_button(ui, "カード一覧", Vector2(30, 1094), Vector2(208, 60), open_card_list, 22)
 	UiSystem.make_button(ui, "レリック一覧", Vector2(256, 1094), Vector2(208, 60), open_relic_list, 22)
 	UiSystem.make_button(ui, "バッジ一覧", Vector2(482, 1094), Vector2(208, 60), open_badge_list, 22)
+	# 設定（右上）
+	UiSystem.make_button(ui, "設定", Vector2(566, 24), Vector2(130, 56), open_settings, 22)
 	# 操作のヒントは白いギザギザ吹き出しで
 	UiSystem.make_bubble(ui, Rect2(70, 1166, 520, 64), Vector2(100, 1250), 4)
 	var hint := UiSystem.make_label(ui, "カードをタップ、または下半分でフリックして使う\n長押しで説明・敵をタップで詳細",
@@ -39,8 +44,25 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	# 一覧・設定で覆っている間は後ろの背景と飾りを描き直さない（カード一覧を開いた時の重さ対策）
+	var covered := _covered()
+	bg.paused = covered
+	var light: bool = ImageController.light_mode
+	if light != _deco_light:
+		_deco_light = light
+		deco.queue_redraw()
+	if covered or light:
+		return  # ライトモードでは後光を回さない（止まった 1 枚の絵）
 	_t += delta
 	deco.queue_redraw()
+
+
+## 一覧・設定のオーバーレイが開いているか
+func _covered() -> bool:
+	for c in ui.get_children():
+		if c is GuiDeckView or c.has_meta("overlay"):
+			return true
+	return false
 
 
 func _draw_deco() -> void:
@@ -152,6 +174,46 @@ func _open_list(title: String, note: String, rows: Array) -> Control:
 			IC.rich_text(list, rows[i][2], Vector2(92, y + 40), 17, IC.GLASS.ash_gray.darkened(0.35), 548, 0, 22))
 	v.add_child(list)
 	UiSystem.make_button(v, "閉じる", Vector2(210, 1110), Vector2(300, 80), v.queue_free, 26)
+	v.set_meta("overlay", true)
+	ui.add_child(v)
+	return v
+
+
+# ------------------------------------------------------------
+# 設定
+# ------------------------------------------------------------
+## 設定画面：演出ライトモードの ON／OFF。user://settings.json に保存（セーブを消しても残る）
+func open_settings() -> Control:
+	var col: Dictionary = ImageController.COL
+	var v := Control.new()
+	v.size = Vector2(720, 1280)
+	v.mouse_filter = Control.MOUSE_FILTER_STOP
+	v.z_index = 200
+	v.set_meta("overlay", true)
+	var shade := ColorRect.new()
+	shade.color = Color(ImageController.GLASS.ivory_black, 0.8)
+	shade.size = v.size
+	v.add_child(shade)
+	UiSystem.make_panel(v, Rect2(20, 300, 680, 600))
+	UiSystem.make_banner(v, "設定", Rect2(40, 274, 300, 66), 32)
+	var head := UiSystem.make_label(v, "演出ライトモード", Vector2(56, 372), Vector2(608, 48), 28, col.paper, HORIZONTAL_ALIGNMENT_LEFT, 4)
+	head.add_theme_font_override("font", ImageController.font_head)
+	UiSystem.make_label(v, "ONにすると、背景の動き・光の帯・粒・カードの光る演出・必殺技のカットイン・画面の揺れ・画面切り替えのワイプを省いて軽くします。動きが重い時に使ってください。",
+			Vector2(56, 428), Vector2(608, 150), 20, col.sub, HORIZONTAL_ALIGNMENT_LEFT, 0)
+	var off := UiSystem.make_button(v, "OFF", Vector2(80, 600), Vector2(260, 90), Callable(), 30)
+	var on := UiSystem.make_button(v, "ON", Vector2(380, 600), Vector2(260, 90), Callable(), 30)
+	var refresh := func():
+		UiSystem.set_button_red(on, ImageController.light_mode)
+		UiSystem.set_button_red(off, not ImageController.light_mode)
+	off.pressed.connect(func():
+		Settings.set_light_mode(false)
+		refresh.call())
+	on.pressed.connect(func():
+		Settings.set_light_mode(true)
+		refresh.call())
+	refresh.call()
+	UiSystem.make_label(v, "設定はセーブを消しても残ります", Vector2(56, 708), Vector2(608, 40), 18, col.sub, HORIZONTAL_ALIGNMENT_LEFT, 0)
+	UiSystem.make_button(v, "閉じる", Vector2(210, 780), Vector2(300, 80), v.queue_free, 26)
 	ui.add_child(v)
 	return v
 

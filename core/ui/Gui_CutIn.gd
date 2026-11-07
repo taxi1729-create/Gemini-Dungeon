@@ -21,6 +21,9 @@ func setup(cid: String, sname: String) -> void:
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if ImageController.light_mode:
+		queue_free()  # ライトモードではカットインを出さない
+		return
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	z_index = 200
 	_start = Time.get_ticks_usec()

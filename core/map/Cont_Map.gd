@@ -214,10 +214,12 @@ func _draw_belongings(c: Control) -> void:
 			IC.icon(c, str(RelicList.DATA[Inventory.relics[i]].icon), p, 38)
 
 
-## 必殺技のセット（キャラごとに 2 つから 1 つ）。戦闘中は中央の長押しで発動する
+## 必殺技のセット（キャラごとに 4 つから 1 つ。未解放は「？？？」で選べない）。戦闘中は中央の長押しで発動する
 func _open_specials(ui: CanvasLayer) -> void:
 	var col: Dictionary = ImageController.COL
+	CurrentStatus.fix_specials()
 	var box := Control.new()
+	box.name = "Specials"
 	box.size = Vector2(720, 1280)
 	box.mouse_filter = Control.MOUSE_FILTER_STOP
 	box.z_index = 100
@@ -226,26 +228,36 @@ func _open_specials(ui: CanvasLayer) -> void:
 	dim.color = Color(0, 0, 0, 0.75)
 	dim.size = box.size
 	box.add_child(dim)
-	UiSystem.make_panel(box, Rect2(30, 280, 660, 680))
-	UiSystem.make_banner(box, "必殺技をセット", Rect2(50, 252, 380, 64), 32)
-	UiSystem.make_label(box, "戦闘中は中央を長押しして発動（AP消費）", Vector2(30, 334), Vector2(660, 50), 20, col.sub)
-	var y := 404.0
+	UiSystem.make_panel(box, Rect2(20, 150, 680, 1000))
+	UiSystem.make_banner(box, "必殺技をセット", Rect2(40, 122, 380, 64), 32)
+	UiSystem.make_label(box, "戦闘中は中央を長押しして発動（AP消費）。強敵を倒すと新しい必殺技が解放される", Vector2(40, 196), Vector2(640, 60), 18, col.sub)
+	var y := 262.0
 	for a in CurrentStatus.allies:
-		UiSystem.make_banner(box, a.name, Rect2(54, y - 2, 170, 38), 22, col.get(a.id, col.ink), col.paper, 12)
+		UiSystem.make_banner(box, a.name, Rect2(44, y, 170, 38), 22, col.get(a.id, col.ink), col.paper, 12)
 		var btns: Array = []
-		var x := 60.0
+		var n := 0
 		for sp in ActionList.SPECIALS[a.id]:
-			var eff: String = ("%dダメージ" % sp.power) if sp.has("power") else DeckController.plain(DeckController.effect_text({}, sp))
-			var b := UiSystem.make_button(box, "%s（AP%d）\n%s" % [sp.name, sp.ap, eff], Vector2(x, y + 40), Vector2(290, 110), Callable(), 19)
+			var open: bool = CurrentStatus.is_special_unlocked(str(sp.id))
+			var txt := "？？？\n（強敵を倒すと解放）"
+			if open:
+				txt = "%s（AP%d）\n%s" % [sp.name, int(sp.ap), str(sp.get("desc", ""))]
+			var pos := Vector2(40 + (n % 2) * 324, y + 44 + (n >> 1) * 172)
+			var b := UiSystem.make_button(box, txt, pos, Vector2(316, 164), Callable(), 17)
 			b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			b.set_meta("sp", sp.id)
+			b.set_meta("sp", str(sp.id))
+			b.disabled = not open
 			btns.append(b)
-			x += 310
+			n += 1
 		for b in btns:
 			b.pressed.connect(func():
+				if not CurrentStatus.is_special_unlocked(str(b.get_meta("sp"))):
+					return
 				CurrentStatus.special_choice[a.id] = b.get_meta("sp")
 				for o in btns:
 					o.modulate = Color.WHITE if o == b else Color(1, 1, 1, 0.4))
-			b.modulate = Color.WHITE if b.get_meta("sp") == CurrentStatus.special_choice.get(a.id, "") else Color(1, 1, 1, 0.4)
-		y += 175
-	UiSystem.make_red_button(box, "決定", Vector2(210, 860), Vector2(300, 80), box.queue_free, 30)
+			var picked: bool = b.get_meta("sp") == CurrentStatus.special_choice.get(a.id, "")
+			b.modulate = Color.WHITE if picked else Color(1, 1, 1, 0.4)
+		y += 404
+	UiSystem.make_red_button(box, "決定", Vector2(210, 1070), Vector2(300, 74), func():
+		SaveData.save("map")
+		box.queue_free(), 30)

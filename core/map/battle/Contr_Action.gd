@@ -19,11 +19,26 @@ static func get_atk(u: Dictionary) -> int:
 
 
 static func get_def(u: Dictionary) -> int:
-	return int(u.get("def", 0)) + StatusController.val(u, "def_buff") - StatusController.val(u, "def_down") + int(u.get("power_def", 0)) + formation_def(u)
+	return int(u.get("def", 0)) + StatusController.val(u, "def_buff") - StatusController.val(u, "def_down") + int(u.get("power_def", 0)) + formation_def(u) + aid_def(u)
+
+
+## もう 1 人の味方のパワーで上がった防御力（鋼鉄化：味方全体）。u.aid_def = {渡した味方の id: n}
+static func aid_def(u: Dictionary) -> int:
+	var add := 0
+	var aid: Dictionary = u.get("aid_def", {})
+	for k in aid:
+		add += int(aid[k])
+	return add
+
+
+## デバフ（闘志・浄化で外す）：火傷・毒・攻撃力低下・防御力低下・回復不可・スタン
+const DEBUFFS := ["fire", "poison", "atk_down", "def_down", "no_heal", "stun"]
 
 
 ## 陣形効果（味方だけ）：前衛（rank 0）は攻撃力+2、後衛（rank 1）は防御力+2
 const FORMATION_BONUS := 2
+## 浄化の誓い（D）が解除するデバフ
+const PURGE_DEBUFFS := ["fire", "poison", "atk_down", "def_down", "no_heal", "stun"]
 
 
 static func formation_atk(u: Dictionary) -> int:
@@ -114,7 +129,7 @@ static func active_bonuses(user: Dictionary, card: Dictionary, ctx: Dictionary) 
 			if b is Dictionary:
 				out.append(b)
 		elif k in ["sokuou", "saigo", "tenshin"] and keyword_on(user, k, ctx):
-			var b2 = card.get("bonus")
+			var b2 = card.get("bonus_" + k, card.get("bonus"))  # 札ごとの追加効果（渾身の一撃は転身と即応の両方）
 			if b2 is Dictionary:
 				out.append(b2)
 	return out
@@ -208,6 +223,8 @@ static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}
 			effs.append((e as Dictionary).duplicate(true))
 		if b.has("target"):
 			a["target"] = str(b.target)  # 星降り：陣形で対象が変わる
+		if b.has("hits"):
+			a["hits"] = int(b.hits)  # 終焉の光：陣形で回数が変わる
 	# 二連詠唱：使う前の AP（ctx.ap_before。プレビューでは今の AP）が min 以上なら hits を増やす
 	var aph = card.get("ap_hits")
 	if aph is Dictionary and int(ctx.get("ap_before", user.get("ap", 0))) >= int(aph.get("min", 0)):
@@ -215,6 +232,9 @@ static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}
 	# 怒涛の締め：power ＝ このターンにこのキャラが使ったカードの枚数（このカードは含まない）
 	if card.get("power_used", false):
 		a["power"] = int(user.get("cards_used", 0))
+	# 怒涛の締め（9 回目）：hits ＝ このターンにこのキャラが使ったカードの枚数（このカードは含まない）
+	if card.get("hits_used", false):
+		a["hits"] = int(user.get("cards_used", 0))
 	# 撃破・反撃・予約の札：使った時には効かず、後で効く効果として行動に持たせる（timed_bonus の説明を参照）
 	for k in KW_TIMED:
 		if not ActionList.has_keyword(card, k):
@@ -269,16 +289,33 @@ static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}
 static func effective_power(user: Dictionary, action: Dictionary, allies: Array, enemies: Array) -> int:
 	if not action.has("power"):
 		return 0
+	var rk := _pre_rank_begin(user, action)
 	var t := resolve_targets(user, action.get("target", "self"), allies, enemies)
-	if t.is_empty():
-		return maxi(0, int(action.power) + get_atk(user) + relic_atk(user))
-	return calc_damage(user, action, t[0])
+	var out := maxi(0, int(action.power) + get_atk(user) + relic_atk(user)) if t.is_empty() else calc_damage(user, action, t[0])
+	_pre_rank_end(user, rk)
+	return out
 
 
-## 多段攻撃の回数（hits_x なら X 回）
+## 魔弾（pre_rank）：予想の間だけ移動先の段で計算する。元の段を返す（-1 = 変えていない）
+static func _pre_rank_begin(user: Dictionary, action: Dictionary) -> int:
+	if not action.has("pre_rank") or str(user.get("side", "")) != "ally" or not user.has("rank"):
+		return -1
+	var old := int(user.rank)
+	user["rank"] = int(action.pre_rank)
+	return old
+
+
+static func _pre_rank_end(user: Dictionary, old: int) -> void:
+	if old >= 0:
+		user["rank"] = old
+
+
+## 多段攻撃の回数（hits_x なら X 回。hits_used なら play_action が入れた回数で、0 回もある）
 static func hit_count(action: Dictionary, x: int = 1) -> int:
 	if action.get("hits_x", false):
 		return maxi(0, x)
+	if action.get("hits_used", false):
+		return maxi(0, int(action.get("hits", 0)))
 	return maxi(1, int(action.get("hits", 1)))
 
 
@@ -287,7 +324,8 @@ static func preview(user: Dictionary, action: Dictionary, allies: Array, enemies
 	var out: Array = []
 	var n := hit_count(action, x)
 	if action.get("reroll", false):
-		n = 1  # 1 ヒットごとに引き直す攻撃は、1 ヒット目の敵だけ予想する
+		n = mini(n, 1)  # 1 ヒットごとに引き直す攻撃は、1 ヒット目の敵だけ予想する
+	var rk := _pre_rank_begin(user, action)
 	for t in resolve_targets(user, action.get("target", "self"), allies, enemies):
 		var ev := {"target": t}
 		if action.has("power"):
@@ -302,12 +340,17 @@ static func preview(user: Dictionary, action: Dictionary, allies: Array, enemies
 			ev["damage"] = total
 			ev["kill"] = total >= int(t.hp)
 		out.append(ev)
+	_pre_rank_end(user, rk)
 	return out
 
 
 ## x は APX の X（hits_x の回数と、効果の "x": true の倍率に使う）
 static func execute_action(user: Dictionary, action: Dictionary, allies: Array, enemies: Array, x: int = 1) -> Array:
 	var events: Array = []
+	# 魔弾：自分が前衛（pre_rank）に移動してから発動する（表示側は special "rank_to" で絵を動かす）
+	if action.has("pre_rank") and str(user.get("side", "")) == "ally" and user.has("rank"):
+		user["rank"] = int(action.pre_rank)
+		events.append({"target": user, "special": "rank_to", "val": int(action.pre_rank)})
 	var targets := resolve_targets(user, action.get("target", "self"), allies, enemies)
 	var is_ally: bool = user.get("side", "ally") == "ally"
 	var friends := (allies if is_ally else enemies).filter(func(e): return e.hp > 0)
@@ -372,7 +415,33 @@ static func execute_action(user: Dictionary, action: Dictionary, allies: Array, 
 			recips = friends
 		elif to == "other_ally":
 			recips = friends.filter(func(f): return f != user)
+		elif to in ["left_ally", "right_ally"]:
+			# D（双色の香）：左（lane 0）／右（lane 1）に立つ味方
+			var want_lane := 0 if to == "left_ally" else 1
+			recips = friends.filter(func(f): return int(f.get("lane", 0)) == want_lane)
+		elif to in ["front_ally", "back_ally"]:
+			# D（陣中の酒）：前衛（rank 0）／後衛（rank 1）の味方
+			var want_rank := 0 if to == "front_ally" else 1
+			recips = friends.filter(func(f): return int(f.get("rank", 0)) == want_rank)
 		var kind: String = eff.get("effect", "")
+		if kind == "rank_to":
+			# 魔法準備：自分を指定の段へ（1＝後衛）。表示側は special "rank_to" で絵を動かす
+			if str(user.get("side", "")) == "ally" and user.has("rank"):
+				user["rank"] = int(eff.get("eff_val", 1))
+			events.append({"target": user, "special": "rank_to", "val": int(eff.get("eff_val", 1))})
+			continue
+		if kind == "cleanse":
+			# 闘志：対象のデバフを外す
+			for t in recips:
+				if t.hp <= 0:
+					continue
+				var gone: Array = []
+				for sid in DEBUFFS:
+					if StatusController.has(t, sid):
+						StatusController.remove(t, sid)
+						gone.append(sid)
+				events.append({"target": t, "cleanse": gone})
+			continue
 		if kind in ["draw", "swap", "double", "turnabout", "extra_turn", "rank_swap", "repeat"]:
 			events.append({"target": user, "special": kind, "val": int(eff.get("eff_val", 0))})
 			continue
@@ -456,6 +525,22 @@ static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: 
 		"set_next_action":
 			t["next_action"] = eff.get("next", "strong_attack")
 			ev["charge"] = true
+		"purge_self":
+			# D（浄化の誓い）：デバフを解除。火傷を解除した時は、火傷の残りターン分 攻撃力・防御力+（戦闘中）
+			var fire_left := 0
+			var f = t.status_effects.get("fire")
+			if f is Dictionary:
+				fire_left = maxi(0, int(f.turns))
+			var gone: Array = []
+			for sid in PURGE_DEBUFFS:
+				if t.status_effects.has(sid):
+					t.status_effects.erase(sid)
+					gone.append(sid)
+			ev["purge"] = gone
+			if fire_left > 0:
+				StatusController.apply_status(t, "atk_buff", fire_left)
+				StatusController.apply_status(t, "def_buff", fire_left)
+				ev["purge_bonus"] = fire_left
 
 
 static func resolve_targets(user: Dictionary, target_type: String, allies: Array, enemies: Array) -> Array:

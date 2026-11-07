@@ -11,6 +11,14 @@ const RED := Color("e8213a")
 const LANE_COL := [Color("3d8bff"), Color("ff3b3b")]  # 左＝青、右＝赤（BattleFx と同じ）
 const AP_COL := Color("b88cff")  # AP の菱形（ImageController.COL.ap と同じ）
 const BACK_ROW_TINT := Color(0.62, 0.64, 0.74)  # 後衛の体の色（暗く・少し青く＝奥にいる感じ）
+## 遠近法：絵の大きさ＝ data.art_scale（敵ごとの体の大きさ。色違い・大きさ違いの敵はここ）× data.depth_scale（段の倍率。
+## Cont_Battle.DEPTH_SCALE）× VIEW_BASE。影・足元の輪・吹き出し・手番の印の位置はこの大きさ（body_height）から決まる
+const VIEW_BASE := 0.9
+const FIELD_RECT := Rect2(6, 56, 708, 594)  # 状態の列と吹き出しを収める範囲（上の手番の帯の下〜下の行動順の帯の上、画面端）
+const CHIP_STEP := 30.0  # 状態の丸の間隔
+const CHIP_R := 14.0
+const LABEL_R := 30.0  # 丸の中心から右下の数字（「攻+2」など）の右端まで
+const LABEL_B := 22.0  # 丸の中心から数字の下端まで
 
 var data: Dictionary
 var art_scale := 1.0
@@ -45,8 +53,13 @@ func _init() -> void:
 func setup(d: Dictionary, f: float) -> void:
 	data = d
 	facing = f
-	art_scale = float(d.get("art_scale", 1.0)) * float(d.get("view_scale", 1.0))
+	art_scale = scale_of(d)
 	_body.modulate = BACK_ROW_TINT if _is_back() else Color.WHITE
+
+
+## ユニットの絵の倍率（体の大きさ × 段の倍率 × 全体の基準）
+static func scale_of(d: Dictionary) -> float:
+	return float(d.get("art_scale", 1.0)) * float(d.get("depth_scale", 1.0)) * VIEW_BASE
 
 
 ## 後衛の敵か
@@ -181,14 +194,51 @@ func _draw_hp(IC) -> void:
 		IC.text(self, str(sh), p + Vector2(0, 1), 15, PAPER, true, 4, -1.0, INK)
 
 
+## 状態の丸の中心（ローカル座標）を並べる。足元の HP バーの下に横 1 列。
+## 画面の端・下の行動順の帯（y 652〜）に隠れないよう、列ごと FIELD_RECT の中へずらす。多い時は間隔を詰める
+func status_points(n: int) -> Array:
+	var out: Array = []
+	if n <= 0:
+		return out
+	var step := CHIP_STEP
+	var maxw := FIELD_RECT.size.x - CHIP_R * 2 - 12.0
+	if (n - 1) * step > maxw:
+		step = maxw / float(n - 1)
+	var y := _hp_y() + 13.0 + 4.0 + CHIP_R + 1.0  # HP バーの縁のすぐ下
+	var w := (n - 1) * step
+	var gp := position  # 戦場（field）の中の位置。field はずれない（揺れは一時的）ので画面の位置とみなす
+	var left := -w / 2.0
+	# 横：画面端からはみ出さない（右端は数字の分だけ余白を多めに）
+	var lo := FIELD_RECT.position.x + CHIP_R - gp.x
+	var hi := FIELD_RECT.end.x - LABEL_R - gp.x - w
+	left = clampf(left, lo, maxf(lo, hi))
+	# 縦：下の帯に隠れるなら上へ（数字の分も入れる）
+	var bottom := FIELD_RECT.end.y - LABEL_B - gp.y
+	y = minf(y, bottom)
+	for i in n:
+		out.append(Vector2(left + i * step, y))
+	return out
+
+
+## 状態の列が画面上で占める範囲（テスト・配置の確認用。数字の分も含む）
+func status_rect() -> Rect2:
+	var pts := status_points(GuiInfoPanel.display_status(data).size())
+	if pts.is_empty():
+		return Rect2()
+	var r := Rect2(position + Vector2(pts[0]) - Vector2(CHIP_R, CHIP_R), Vector2(CHIP_R * 2, CHIP_R * 2))
+	for p in pts:
+		r = r.expand(position + Vector2(p) + Vector2(LABEL_R, LABEL_B))
+		r = r.expand(position + Vector2(p) - Vector2(CHIP_R, CHIP_R))
+	return r
+
+
 func _draw_status(IC) -> void:
 	# 予約（次のターンに効く状態）は 1 つにまとめ、数珠の残り回数も並べる（GuiInfoPanel.display_status）
 	var chips: Array = GuiInfoPanel.display_status(data)
 	var i := 0
-	var n := chips.size()
-	var y := 44.0 if data.get("side") == "ally" else 42.0  # 味方は AP の列の分だけ少し下（下の操作エリアに入りすぎないよう詰める）
+	var pts := status_points(chips.size())
 	for ch in chips:
-		var p := Vector2(-((n - 1) * 15) + i * 30, y)
+		var p: Vector2 = pts[i]
 		var good: bool = ch.good
 		draw_circle(p, 14, INK)
 		draw_arc(p, 13, 0, TAU, 20, PAPER if good else RED, 2.0, true)
@@ -266,6 +316,8 @@ func _draw_intent(IC) -> void:
 	if act.is_empty():
 		return
 	var y := -body_height() - 20
+	# 体の大きい敵（ボス・大きさ違い）でも吹き出しが上の手番の帯に隠れないよう、画面の上端より下に収める
+	y = maxf(y, FIELD_RECT.position.y + 30.0 - position.y)
 	var c := Vector2(0, y + sin(_t * 3.0) * 3)
 	# 攻撃の数字は実際に受けるダメージ（Cont_Battle が data.intent_dmg = [{"lane", "dmg"}] に入れる。
 	# 味方の防御力・防御力アップ/ダウン・パワーを反映、ブロックは引かない）

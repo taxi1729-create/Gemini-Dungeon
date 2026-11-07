@@ -49,6 +49,10 @@ const COL = {
 var font: Font
 var font_bold: Font
 var font_head: Font  # 見出し用（極太＋斜体）
+## 演出ライトモード（設定画面で切り替え。Settings が user://settings.json から読み込んで入れる）。
+## true の時は背景の動き・光の帯・粒・カードの光・カットイン・画面の揺れ・ワイプなどを省く。全員がこの値を見る
+var light_mode := false
+var _glass_cache := {}  # ステンドグラスの窓の切り抜き済みガラス片（毎フレームの多角形演算を省く）
 
 
 func _ready() -> void:
@@ -2202,7 +2206,8 @@ func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool) -> void:
 		var w := 150.0 if i == 1 else 120.0
 		var cx2 := r.position.x + r.size.x * (0.2 + 0.3 * i)
 		var top := wy + (0.0 if i == 1 else 40.0)
-		glow(ci, Vector2(cx2, top + wh * 0.42), w * 1.25, Color(G.sacred_sky, 0.30), 7)
+		if not light_mode:  # ライトモード：窓の後ろの光のにじみ（重ね塗り）を省く
+			glow(ci, Vector2(cx2, top + wh * 0.42), w * 1.25, Color(G.sacred_sky, 0.30), 7)
 	for i in 3:
 		var w := 150.0 if i == 1 else 120.0
 		var cx2 := r.position.x + r.size.x * (0.2 + 0.3 * i)
@@ -2210,10 +2215,11 @@ func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool) -> void:
 		gothic_window(ci, Rect2(cx2 - w / 2, top, w, wh - (0.0 if i == 1 else 40.0)), i * 7 + 3, 0.80 + 0.06 * sin(t * 0.8 + i))
 	# 床：ホーリーブルーとアッシュグレイの市松（遠近で奥ほど細かく）
 	_floor_checker(ci, r, ground_y)
-	# 窓から差す光（セイクレッドスカイの帯）
-	_slash(ci, r, r.position.y + r.size.y * 0.30, r.position.y - r.size.y * 0.05, r.size.y * 0.16, Color(G.sacred_sky, 0.08))
-	_slash(ci, r, r.position.y + r.size.y * 0.47, r.position.y + r.size.y * 0.10, 4, Color(G.deep_rose, 0.35))
-	_slash(ci, r, r.position.y + r.size.y * 0.50, r.position.y + r.size.y * 0.13, 2, Color(G.angel_white, 0.16))
+	# 窓から差す光（セイクレッドスカイの帯）。ライトモードでは省く
+	if not light_mode:
+		_slash(ci, r, r.position.y + r.size.y * 0.30, r.position.y - r.size.y * 0.05, r.size.y * 0.16, Color(G.sacred_sky, 0.08))
+		_slash(ci, r, r.position.y + r.size.y * 0.47, r.position.y + r.size.y * 0.10, 4, Color(G.deep_rose, 0.35))
+		_slash(ci, r, r.position.y + r.size.y * 0.50, r.position.y + r.size.y * 0.13, 2, Color(G.angel_white, 0.16))
 	# 壁と床の境目（ストーングレイの幅木）
 	ci.draw_rect(Rect2(r.position.x, ground_y - 6, r.size.x, 6), Color(G.stone_gray, 0.35))
 	ci.draw_line(Vector2(r.position.x, ground_y), Vector2(r.end.x, ground_y), Color(G.ivory_black, 0.6), 2)
@@ -2223,11 +2229,14 @@ func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool) -> void:
 		var tx: float = cx + side * r.size.x * 0.46
 		var ty := ground_y - (90.0 if title else 190.0)
 		var fl := 0.85 + 0.15 * sin(t * 9.0 + side) + 0.08 * sin(t * 23.0)
-		glow(ci, Vector2(tx, ty), 110 * fl, Color(COL.red, 0.30), 8)
+		if not light_mode:
+			glow(ci, Vector2(tx, ty), 110 * fl, Color(COL.red, 0.30), 8)
 		ci.draw_line(Vector2(tx, ty + 6), Vector2(tx, ty + 46), G.ash_gray, 6)
 		ci.draw_colored_polygon(_teardrop(Vector2(tx, ty + 4), 9, 30 * fl, sin(t * 7.0 + side) * 3), COL.red)
 		ci.draw_colored_polygon(_teardrop(Vector2(tx, ty + 6), 4, 16 * fl, 0), COL.paper)
-	# 漂う光の粒（白とローズ）
+	# 漂う光の粒（白とローズ）。ライトモードでは省く
+	if light_mode:
+		return
 	for i in 14:
 		var px := r.position.x + fmod(i * 97.0 + t * (8 + i % 5), r.size.x)
 		var py := r.position.y + fmod(i * 61.0 - t * (5 + i % 3) * 3.0 + 2000.0, ground_y - r.position.y)
@@ -2256,6 +2265,8 @@ func _bg_camp(ci: CanvasItem, r: Rect2, t: float) -> void:
 	ci.draw_colored_polygon(_teardrop(c + Vector2(0, -6), 46 * fl, 140 * fl, sway), COL.red_d)
 	ci.draw_colored_polygon(_teardrop(c + Vector2(0, -4), 32 * fl, 100 * fl, sway * 0.7), COL.red)
 	ci.draw_colored_polygon(_teardrop(c + Vector2(0, -2), 16 * fl, 56 * fl, sway * 0.4), COL.paper)
+	if light_mode:
+		return  # 火の粉を省く
 	for i in 8:
 		var k := fmod(t * 0.6 + i * 0.137, 1.0)
 		ci.draw_rect(Rect2(c + Vector2(sin(i * 3.1 + t) * 30, -60 - k * 220), Vector2(3, 3)), Color(COL.red.lightened(0.3), 1.0 - k))
@@ -2272,6 +2283,8 @@ func _bg_map(ci: CanvasItem, r: Rect2, t: float) -> void:
 			Vector2(r.position.x + 720, r.position.y), Vector2(r.position.x, r.position.y + 420)])
 	ci.draw_colored_polygon(band, Color(G.sacred_sky, 0.10))
 	_slash(ci, r, r.position.y + 470, r.position.y - 60, 4, Color(G.deep_rose, 0.45))
+	if light_mode:
+		return  # 粒を省く
 	for i in 30:
 		var p := Vector2(fmod(i * 173.0, r.size.x), fmod(i * 291.0, r.size.y)) + r.position
 		ci.draw_rect(Rect2(p, Vector2(2, 2)), Color(G.angel_white, 0.16 + 0.08 * sin(t + i)))
@@ -2285,23 +2298,32 @@ func gothic_window(ci: CanvasItem, r: Rect2, seed_v: int, a: float) -> void:
 	var inner := _arch_pts(r.grow(-7))
 	var cols: Array = [G.sacred_blue, G.sacred_sky, G.holy_blue, G.deep_rose, G.angel_white, G.sacred_blue, G.holy_blue]
 	# 縦横の格子を少しずらしたガラス片で埋め、窓の形で切り抜く
-	var cw := 22.0
-	var chh := 26.0
-	var rows := int(r.size.y / chh) + 1
-	var cols_n := int(r.size.x / cw) + 1
-	for yy in rows:
-		for xx in cols_n:
-			var h := absi(int(hash(Vector3i(xx, yy, seed_v))))
-			var c: Color = cols[h % cols.size()]
-			var j := float(h % 7) - 3.0
-			var x0 := r.position.x + xx * cw + (j if yy % 2 == 0 else -j)
-			var y0 := r.position.y + yy * chh
-			var quad := PackedVector2Array([Vector2(x0, y0), Vector2(x0 + cw, y0 + j), Vector2(x0 + cw + j, y0 + chh), Vector2(x0 - j, y0 + chh - j)])
-			for poly in Geometry2D.intersect_polygons(quad, inner):
-				ci.draw_colored_polygon(poly, Color(c, a))
-				var loop := poly.duplicate()
-				loop.append(poly[0])
-				ci.draw_polyline(loop, Color(G.ivory_black, 0.85), 2.0)
+	# 切り抜いたガラス片は窓ごとに 1 回だけ計算して使い回す（背景は毎フレーム描き直すので軽くする）
+	var key := "%s|%d" % [str(r), seed_v]
+	var pieces: Array = _glass_cache.get(key, [])
+	if not _glass_cache.has(key):
+		var cw := 22.0
+		var chh := 26.0
+		var rows := int(r.size.y / chh) + 1
+		var cols_n := int(r.size.x / cw) + 1
+		for yy in rows:
+			for xx in cols_n:
+				var h := absi(int(hash(Vector3i(xx, yy, seed_v))))
+				var j := float(h % 7) - 3.0
+				var x0 := r.position.x + xx * cw + (j if yy % 2 == 0 else -j)
+				var y0 := r.position.y + yy * chh
+				var quad := PackedVector2Array([Vector2(x0, y0), Vector2(x0 + cw, y0 + j), Vector2(x0 + cw + j, y0 + chh), Vector2(x0 - j, y0 + chh - j)])
+				for poly in Geometry2D.intersect_polygons(quad, inner):
+					var loop := poly.duplicate()
+					loop.append(poly[0])
+					pieces.append([poly, h % cols.size(), loop])
+		if _glass_cache.size() > 64:
+			_glass_cache.clear()
+		_glass_cache[key] = pieces
+	for pc in pieces:
+		var c: Color = cols[int(pc[1])]
+		ci.draw_colored_polygon(pc[0], Color(c, a))
+		ci.draw_polyline(pc[2], Color(G.ivory_black, 0.85), 2.0)
 	# 中央のバラ窓
 	var rc := Vector2(r.get_center().x, r.position.y + r.size.x * 0.62)
 	var rr := r.size.x * 0.26

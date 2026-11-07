@@ -4,7 +4,8 @@ extends Node
 ## ・Web 版の user:// は IndexedDB に置かれる。Godot は書き込み用に開いたファイルを close すると
 ##   次のフレームで IndexedDB へ同期するので、保存は「一時ファイルに書いて close → 名前を変える」を同じフレームで行う。
 ## ・削除だけでは同期されないため、clear() は「消した印」のファイルを書いて上書きする。
-## ・戦闘中は保存しない（再読み込みしたらその戦闘をはじめからやり直す）。
+## ・戦闘中は味方のキャラのターン開始時に保存する（save_battle）。再読み込みしたらそのターン開始から再開する。
+##   戦闘の状態は screen["battle_state"] に var_to_str の文字列で入れる（Vector2 や整数をそのまま戻すため）。
 
 const VERSION := 1
 const PATH := "user://save.json"
@@ -13,10 +14,13 @@ const RESUMES := ["map", "battle", "event", "shop", "rest", "result", "treasure"
 # 味方で戦闘の外へ持ち越す項目（uid・pos・lane・status_effects・shield・ap などの戦闘用の項目は保存しない）
 const ALLY_KEYS := ["id", "name", "hp", "max_hp", "spd", "def", "atk", "max_ap", "side", "art"]
 const ALLY_INT_KEYS := ["hp", "max_hp", "spd", "def", "atk", "max_ap"]
+const REMOVED_CARDS := ["thunder"]  # 削除したカード（読み込み時にデッキから外す。9 回目：雷撃）
 
 ## 画面ごとの途中の状態（イベントの id、戦利品、ショップの品ぞろえなど）。
 ## マップに戻った時（save("map")）とマスを選んだ時に空にする。
 var screen: Dictionary = {}
+const BATTLE_KEY := "battle_state"  # screen の中の戦闘の途中の状態
+const BATTLE_VERSION := 1  # 戦闘の途中の状態の形の版（変えたら古い途中セーブは捨てて戦闘をはじめからやり直す）
 var _cache := -1  # has_save() の結果のキャッシュ（-1＝未確認、0＝無し、1＝有り）
 
 
@@ -27,9 +31,45 @@ func save(resume: String) -> void:
 		return
 	if resume == "map":
 		screen = {}
+	if resume != "battle":
+		screen.erase(BATTLE_KEY)  # 戦闘が終わったら途中の状態は要らない
 	var data := _collect(resume)
 	if _write(JSON.stringify(data, "", true, true)):
 		_cache = 1
+
+
+## 戦闘の途中の状態を保存する（Cont_Battle.battle_snapshot() の辞書）。再開先は戦闘
+func save_battle(state: Dictionary) -> void:
+	var d := state.duplicate(true)
+	d["v"] = BATTLE_VERSION
+	screen[BATTLE_KEY] = var_to_str(d)
+	save("battle")
+
+
+## 保存してある戦闘の途中の状態（無い・壊れている・形が違うなら空）。Cont_Battle が戦闘の開始時に読む
+func battle_state() -> Dictionary:
+	var s = screen.get(BATTLE_KEY)
+	if not s is String or str(s) == "":
+		return {}
+	var d = str_to_var(str(s))
+	if not d is Dictionary or int((d as Dictionary).get("v", 0)) != BATTLE_VERSION or _has_object(d):
+		return {}
+	return d
+
+
+## 戻した値に Object が混ざっていないか（セーブの文字列から作られた Object は使わない）
+func _has_object(v) -> bool:
+	if v is Object:
+		return true
+	if v is Dictionary:
+		for k in v:
+			if _has_object(k) or _has_object(v[k]):
+				return true
+	elif v is Array:
+		for x in v:
+			if _has_object(x):
+				return true
+	return false
 
 
 ## 続きから再開できるセーブがあるか
@@ -85,6 +125,7 @@ func _collect(resume: String) -> Dictionary:
 		"time": int(Time.get_unix_time_from_system()),
 		"status": {
 			"area": CS.current_area_id,
+			"stage": CS.stage,
 			"allies": allies,
 			"map_floors": floors,
 			"current_floor": CS.current_floor,
@@ -95,6 +136,7 @@ func _collect(resume: String) -> Dictionary:
 			"gold_multiplier": CS.gold_multiplier,
 			"next_battle": CS.next_battle.duplicate(true),
 			"special_choice": CS.special_choice.duplicate(true),
+			"special_unlocked": CS.special_unlocked.duplicate(),  # D：解放済みの必殺技
 		},
 		"inventory": {
 			"items": Inventory.items.duplicate(),
@@ -198,6 +240,9 @@ func _apply(data: Dictionary) -> bool:
 				var b := ActionList.badge_of(cid)
 				if b != "" and not BadgeList.DATA.has(b):
 					cid = ActionList.base_id(cid)
+				# 削除したカード（9 回目：雷撃）は古いセーブのデッキから外す
+				if REMOVED_CARDS.has(ActionList.base_id(cid)):
+					continue
 				if not ActionList.make_card(cid).is_empty():
 					ids.append(cid)
 		decks[a.id] = ids
@@ -206,6 +251,9 @@ func _apply(data: Dictionary) -> bool:
 	CS.current_area_id = str(st.get("area", "cave"))
 	if not AreaList.DATA.has(CS.current_area_id):
 		CS.current_area_id = "cave"
+	# 階（9 回目・C）。古いセーブは 1 階。エリアは階に合わせる
+	CS.stage = clampi(int(st.get("stage", 1)) if (st.get("stage") is float or st.get("stage") is int) else 1, 1, CS.STAGE_MAX)
+	CS.current_area_id = CS.STAGES[CS.stage - 1]
 	CS.allies = allies
 	CS.enemies = []
 	CS.map_floors = floors
@@ -217,6 +265,9 @@ func _apply(data: Dictionary) -> bool:
 	CS.gold_multiplier = maxi(1, int(st.get("gold_multiplier", 1)))
 	CS.next_battle = next_battle
 	CS.special_choice = specials
+	# D：解放済みの必殺技（古いセーブには無いので最初の 4 つ）。未解放・旧 ID のセットは初期に戻す
+	CS.special_unlocked = (st.special_unlocked as Array).map(func(x): return str(x)) if st.get("special_unlocked") is Array else ActionList.SPECIAL_START.duplicate()
+	CS.fix_specials()
 	CS.initialized = true
 	Inventory.items = items
 	Inventory.foods = foods

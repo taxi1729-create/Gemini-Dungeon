@@ -147,6 +147,7 @@ func _switch(id: String) -> void:
 		for c in g[1]:
 			var v := GuiCard.new()
 			v.set_card(c)
+			v.animate_shine = false  # 一覧では光の帯を止める（枚数が多いと毎フレームの描き直しが重い）
 			v.base_scale = sc
 			v.hover_scale = 1.15
 			v.scale = Vector2(sc, sc)

@@ -32,6 +32,7 @@ var battle: Node
 var field: Node2D
 var ui: CanvasLayer
 var lanes: Array = [Vector2(230, 600), Vector2(490, 600)]
+var lane_scale: Array = [1.0, 1.0]  # 地面ターゲットの段の倍率（味方の depth_scale。Cont_Battle._sync_lanes が入れる）
 var intents: Array = []
 var shake_amt := 0.0
 var top: FxTop
@@ -93,7 +94,7 @@ func _draw() -> void:
 		for lane in it.lanes:
 			cnt[int(lane)] += 1
 	for i in 2:
-		_draw_target(lanes[i], LANE_COL[i], int(cnt[i]))
+		_draw_target(lanes[i], LANE_COL[i], int(cnt[i]), float(lane_scale[i]))
 	for it in intents:
 		if it.get("move_to") != null:
 			_draw_move_hint(it)
@@ -111,10 +112,10 @@ func _ring_pts(c: Vector2, rx: float, ry: float, n: int = 32) -> PackedVector2Ar
 	return p
 
 
-func _draw_target(p: Vector2, col: Color, n: int) -> void:
+func _draw_target(p: Vector2, col: Color, n: int, depth: float = 1.0) -> void:
 	var pulse := 0.5 + 0.5 * sin(_t * 5.0)
-	var rx := TARGET_R.x
-	var ry := TARGET_R.y
+	var rx := TARGET_R.x * depth
+	var ry := TARGET_R.y * depth
 	draw_colored_polygon(ImageController.ell(p, rx + 6, ry + 3, 32), Color(0, 0, 0, 0.35))
 	draw_colored_polygon(ImageController.ell(p, rx, ry, 32), Color(col, 0.18 + (0.12 * pulse if n > 0 else 0.0)))
 	draw_polyline(_ring_pts(p, rx, ry), Color(col, 0.95), 4.0, true)
@@ -534,8 +535,8 @@ func _update_flyers(delta: float) -> void:
 # ============================================================
 
 func cut_in(char_id: String, special_name: String) -> void:
-	if ui == null:
-		return
+	if ui == null or ImageController.light_mode:
+		return  # ライトモードではカットインを出さない
 	if is_instance_valid(_cut):
 		_cut.queue_free()
 	var c := GuiCutIn.new()
@@ -545,6 +546,8 @@ func cut_in(char_id: String, special_name: String) -> void:
 
 
 func shake(amount: float) -> void:
+	if ImageController.light_mode:
+		return  # ライトモードでは画面を揺らさない
 	shake_amt = clampf(maxf(shake_amt, amount), 0.0, 30.0)
 
 
@@ -599,6 +602,8 @@ class FxTop extends Node2D:
 	var flashes: Array = []  # 画面フラッシュ {col, life, max}（life が負の間は待ち）
 
 	func sparks(p: Vector2, n: int, speed: float, cols: Array, dir: Vector2, spread: float) -> void:
+		if ImageController.light_mode:
+			n = mini(n, 4)  # ライトモード：火花は少しだけ
 		for i in n:
 			if parts.size() >= MAX_PARTS:
 				return
@@ -635,7 +640,7 @@ class FxTop extends Node2D:
 			"rot": randf_range(-0.16, 0.16) if dmg else randf_range(-0.05, 0.05), "life": 0.0, "max": mx})
 
 	func flash(col: Color, mx: float, delay: float) -> void:
-		if flashes.size() >= 4:
+		if flashes.size() >= 4 or ImageController.light_mode:
 			return
 		flashes.append({"col": col, "life": -delay, "max": mx})
 
