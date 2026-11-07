@@ -34,7 +34,7 @@ const ENEMY_MAX := 7
 ## ボス・強敵は C（後衛）に立つが本体が大きいので別の倍率（"boss"）。PNG に差し替える時もこの値はそのまま使う
 const DEPTH_SCALE := {"enemy_back": 0.62, "enemy_front": 0.82, "ally_front": 0.92, "ally_back": 1.0, "boss": 0.7}
 const BOSS_POS := Vector2(360, 206)  # 強敵・ボスが C に立つ時の足元（体が大きいので少し手前に。吹き出しが上の帯に隠れないように）。体が大きいほど下げる
-const BOSS_MAX_SCALE := 1.0  # C に立つボスの絵の倍率（art_scale × depth_scale × VIEW_BASE）の上限
+const BOSS_MAX_SCALE := 0.95  # C に立つボスの絵の倍率（art_scale × depth_scale × VIEW_BASE）の上限
 const BOSS_HEAD_ROOM := 106.0  # 頭の上に要る高さ（手番の帯の下 56 ＋ 吹き出し）。足元 ≥ これ ＋ 体の高さ
 const BOSS_MAX_Y := 240.0  # ボスの足元の下限（これより下げると前衛の敵の吹き出しと重なる）
 ## 味方の位置 [lane][rank]。lane 0 = 左（青）/ 1 = 右（赤）、rank 0 = 前衛 / 1 = 後衛（手前）
