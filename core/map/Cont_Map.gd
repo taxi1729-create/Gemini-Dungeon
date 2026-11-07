@@ -13,6 +13,8 @@ var _hover := []
 
 func _ready() -> void:
 	CurrentStatus.ensure_started()
+	# 1 階・2 階のボスを倒した後なら次の階のマップを作る（3 階構成）
+	var new_stage := CurrentStatus.advance_stage_if_cleared()
 	SaveData.save("map")  # マップに入った時の自動セーブ
 	add_child(GuiBackground.new("map"))
 	var ui := CanvasLayer.new()
@@ -25,12 +27,49 @@ func _ready() -> void:
 	ui.add_child(view)
 	var col: Dictionary = ImageController.COL
 	var area: String = AreaList.DATA[CurrentStatus.current_area_id].name
-	UiSystem.make_banner(ui, area, Rect2(28, 22, 400, 72), 42)
+	UiSystem.make_banner(ui, "%d階　%s" % [CurrentStatus.stage, area], Rect2(28, 22, 440, 72), 40)
 	var f := CurrentStatus.current_floor + 1
-	UiSystem.make_banner(ui, "進む道を選んでください（%d / %d 階）" % [mini(f + 1, CurrentStatus.FLOORS), CurrentStatus.FLOORS],
-			Rect2(250, 92, 450, 40), 21, col.paper, col.ink, 16)
+	UiSystem.make_banner(ui, "進む道を選んでください（%d / %d）" % [mini(f + 1, CurrentStatus.FLOORS), CurrentStatus.FLOORS],
+			Rect2(270, 92, 430, 40), 21, col.paper, col.ink, 16)
 	_build_footer(ui)
 	UiSystem.make_red_button(ui, "必殺技", Vector2(566, 1048), Vector2(138, 56), _open_specials.bind(ui), 24)
+	if new_stage:
+		_show_stage_intro(ui)
+
+
+## 階が変わった時の演出：ステンドグラスの帯に「2階 沈黙の回廊」。タップかしばらくで消える（ライトモードは動きなし）
+func _show_stage_intro(ui: CanvasLayer) -> void:
+	var light: bool = ImageController.get("light_mode") == true
+	var box := Control.new()
+	box.size = Vector2(720, 1280)
+	box.mouse_filter = Control.MOUSE_FILTER_STOP
+	box.z_index = 120
+	ui.add_child(box)
+	var st := CurrentStatus.stage
+	var nm := CurrentStatus.stage_name()
+	var t0 := [0.0]
+	box.draw.connect(func():
+		var IC = ImageController
+		var k := clampf(t0[0] / 0.35, 0.0, 1.0) if not light else 1.0
+		box.draw_rect(Rect2(0, 0, 720, 1280), Color(IC.GLASS.ivory_black, 0.72 * k))
+		var band := Rect2(-20, 480, 760, 260)
+		IC.stained(box, IC.pts([[band.position.x, band.position.y + 30], [band.end.x, band.position.y], [band.end.x, band.end.y - 30], [band.position.x, band.end.y]]),
+				17 + st, 0.6 * k, [], Color(0, 0, 0, 0), 26.0, 30.0)
+		IC.slant(box, Rect2(70, 540, 580, 140), Color(IC.COL.ink, 0.92 * k), 30, 4.0, Color(IC.COL.paper, k), Color(IC.COL.red, k), Vector2(10, 10))
+		IC.head(box, "%d階" % st, Vector2(360, 580), 40, Color(IC.COL.gold, k), 300)
+		IC.head(box, nm, Vector2(360, 638), 56, Color(IC.COL.paper, k), 540, Color(IC.COL.red, k), Vector2(5, 5)))
+	var close := func():
+		if is_instance_valid(box):
+			box.queue_free()
+	box.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed:
+			close.call())
+	if not light:
+		var tw := box.create_tween()
+		tw.tween_method(func(v: float):
+			t0[0] = v
+			box.queue_redraw(), 0.0, 0.35, 0.35)
+	get_tree().create_timer(2.2).timeout.connect(close)
 
 
 func _process(delta: float) -> void:
