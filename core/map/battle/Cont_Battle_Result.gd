@@ -10,6 +10,8 @@ extends Node2D
 ## 1・2 階のボス：CurrentStatus.boss_rewards()（C）の超レア確定のカード 3 枚から 1 枚・ボスレリック 3 つから 1 つ。
 ## ラスボスに勝った時（CurrentStatus.is_final_clear()）だけ「踏破！」。3 階のボスの後は結果画面に来ない（C がラスボスへ直行）。
 ## 状態（カード・その他の報酬・受け取ったか）は SaveData.screen に残す（再読み込みで取り直しにならない）。
+## 10 回目（C）：受け取れるその他の報酬（2・3・1）は大きく・光らせ・弾ませて「受け取れる！」の札を付ける（ライトモードでは止めた絵）。
+##   受け取っていない報酬（カードを含む）があるまま「閉じる」を押すと注釈を出し、もう一度押すと閉じる。
 
 const CARD_KEYS := [8, 4, 6]
 const OTHER_KEYS := [2, 3, 1]
@@ -28,6 +30,11 @@ var _title := ""
 var _title_col := Color.WHITE
 var deco: Control
 var _busy := false  # 受け取りの演出中
+var _fx_back: Control  # 受け取れる報酬の後ろの光（操作エリアの中、マスの下）
+var _fx_front: Control  # 「受け取れる！」の札（マスの上）
+var _leave_warned := false  # 受け取っていない報酬の注釈を出した（次の「閉じる」で閉じる）
+var _warn_box: Control
+const PENDING_SCALE := 1.18  # 受け取れる報酬のボタンの大きさ
 
 
 func _ready() -> void:
@@ -58,6 +65,7 @@ func _process(delta: float) -> void:
 	_t += delta
 	if not ImageController.get("light_mode"):
 		deco.queue_redraw()
+		_animate_pending()
 
 
 func _draw_deco() -> void:
@@ -109,6 +117,7 @@ func _show_win() -> void:
 	pad.hint = "弾いて（タップで）受け取る・長押しで説明"
 	ui.add_child(pad)
 	pad.chosen.connect(_on_chosen)
+	_build_reward_fx()
 	_save_state()
 	SaveData.save("result")
 	_refresh()
@@ -216,7 +225,11 @@ func _refresh() -> void:
 		pad.set_cell(CARD_KEYS[i], info)
 	for i in others.size():
 		pad.set_cell(OTHER_KEYS[i], _other_info(others[i]))
-	pad.set_cell("ok", {"title": "閉じる", "icon": "enter", "accent": ImageController.COL.red, "desc": "結果画面を閉じてマップへ進む（受け取っていない報酬は無くなる）"})
+	if _leave_warned:
+		pad.set_cell("ok", {"title": "本当に閉じる", "icon": "enter", "accent": ImageController.COL.red, "desc": "受け取っていない報酬を残したまま閉じてマップへ進む（残した報酬は無くなる）"})
+	else:
+		pad.set_cell("ok", {"title": "閉じる", "icon": "enter", "accent": ImageController.COL.red, "desc": "結果画面を閉じてマップへ進む（受け取っていない報酬は無くなる）"})
+	_style_pending()
 	pad.queue_redraw()
 
 
@@ -279,6 +292,7 @@ func _refresh_sub() -> void:
 					"desc": "%sのカード（%sのデッキに入る）\n%s" % [InitAllyStatus.DATA[owner].name, InitAllyStatus.DATA[owner].name,
 							DeckController.card_text(CurrentStatus.ally(owner), c)]})
 	pad.set_cell("ok", {"title": "戻る", "icon": "enter", "accent": ImageController.GLASS.stone_gray, "desc": "選ばずに報酬の一覧へ戻る"})
+	_style_pending()
 	pad.queue_redraw()
 
 
@@ -302,6 +316,8 @@ func _on_chosen(key) -> void:
 				sub_mode = ""
 				sub_index = -1
 				_refresh()
+			elif not _leave_warned and unclaimed_note() != "":
+				_warn_unclaimed()  # 1 回目は注釈だけ（もう一度で閉じる）
 			else:
 				_leave()
 			return
@@ -398,6 +414,7 @@ func _take_sub(i: int) -> void:
 
 func _after_take() -> void:
 	_busy = false
+	_clear_warn()
 	if pad:
 		pad.locked = false
 	if sub_mode == "":
@@ -528,6 +545,156 @@ func _restart() -> void:
 func _to_title() -> void:
 	CurrentStatus.initialized = false
 	UiSystem.goto("title")
+
+
+# ------------------------------------------------------------
+# 受け取れる報酬の演出・閉じる時の注釈
+# ------------------------------------------------------------
+
+## 受け取れる（まだ受け取っていない・今受け取れる）その他の報酬のマス
+func pending_keys() -> Array:
+	var keys: Array = []
+	if pad == null or sub_mode != "":
+		return keys
+	for i in mini(others.size(), OTHER_KEYS.size()):
+		if not others[i].done and pad.is_usable(OTHER_KEYS[i]):
+			keys.append(OTHER_KEYS[i])
+	return keys
+
+
+## 受け取っていない報酬の注釈の文（無ければ ""）
+func unclaimed_note() -> String:
+	var no_card := card_taken < 0 and not reward_cards.is_empty()
+	var n := pending_keys().size()
+	if no_card and n > 0:
+		return "カードを選んでいない・その他の報酬が %d つ残っている" % n
+	if no_card:
+		return "カードを選ばずに閉じる（選ばなくてもよい）"
+	if n > 0:
+		return "その他の報酬（2・3・1）が %d つ残っている" % n
+	return ""
+
+
+func _warn_unclaimed() -> void:
+	var note := unclaimed_note()
+	_leave_warned = true
+	_clear_warn_box()
+	var IC = ImageController
+	var col: Dictionary = IC.COL
+	var head := "カードを選ばずに閉じますか？" if note.begins_with("カードを選ばず") else "まだ受け取っていない報酬があります"
+	var box := Control.new()
+	box.position = Vector2(30, 512)
+	box.size = Vector2(660, 132)
+	box.pivot_offset = box.size / 2
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.z_index = 40
+	box.draw.connect(func():
+		var r := Rect2(6, 6, 640, 116)
+		IC.slant(box, r, col.paper, 22, 4.0, col.ink, col.red, Vector2(9, 9))
+		box.draw_colored_polygon(IC.slant_pts(Rect2(r.position.x + 20, r.position.y, 14, r.size.y), 22), col.red)
+		IC.icon(box, "info", Vector2(80, 64), 52)
+		IC.head(box, head, Vector2(366, 42), 30, col.red, 520)
+		IC.text(box, note, Vector2(366, 80), 20, col.ink, true, 0, 520)
+		IC.text(box, "もう一度「閉じる」で閉じる", Vector2(366, 106), 18, IC.GLASS.sacred_blue, true, 0, 520))
+	ui.add_child(box)
+	_warn_box = box
+	if not IC.light_mode:
+		box.scale = Vector2(0.85, 0.85)
+		var tw := box.create_tween()
+		tw.tween_property(box, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	pad.flash(head, note + "。もう一度「閉じる」で閉じる", col.bad)
+	_refresh()
+
+
+## 注釈を消す（何か受け取った時）
+func _clear_warn() -> void:
+	_leave_warned = false
+	_clear_warn_box()
+
+
+func _clear_warn_box() -> void:
+	if _warn_box != null and is_instance_valid(_warn_box):
+		_warn_box.queue_free()
+	_warn_box = null
+
+
+## 受け取れる報酬の光（マスの後ろ）と札（マスの上）
+func _build_reward_fx() -> void:
+	_fx_back = Control.new()
+	_fx_back.size = pad.size
+	_fx_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fx_back.draw.connect(_draw_fx_back)
+	pad.add_child(_fx_back)
+	pad.move_child(_fx_back, 0)  # マスより先に描く（後ろ）
+	_fx_front = Control.new()
+	_fx_front.size = pad.size
+	_fx_front.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fx_front.z_index = 31  # 拡大したマス（z 30）より上、説明の吹き出し（z 60）より下
+	_fx_front.draw.connect(_draw_fx_front)
+	pad.add_child(_fx_front)
+
+
+## 受け取れる報酬のボタンを大きくする（それ以外は元の大きさ）
+func _style_pending() -> void:
+	var pend := pending_keys()
+	for k in OTHER_KEYS:
+		var w = pad.widget_of(k)
+		if w is GuiPad:
+			var gp: GuiPad = w
+			var s := PENDING_SCALE if pend.has(k) else 1.0
+			gp.pivot_offset = gp.size / 2
+			gp.base_scale = s
+			gp.scale = Vector2(s, s)
+	if _fx_back:
+		_fx_back.queue_redraw()
+		_fx_front.queue_redraw()
+
+
+## 弾む・光る（ライトモードでは呼ばない）
+func _animate_pending() -> void:
+	if pad == null or _fx_back == null:
+		return
+	var pend := pending_keys()
+	for i in pend.size():
+		var w = pad.widget_of(pend[i])
+		if w is Control:
+			var wc: Control = w
+			var base := pad.cell_center_global(pend[i]) - pad.global_position - wc.size / 2
+			wc.position = base + Vector2(0, -absf(sin(_t * 3.2 + i * 0.9)) * 9.0)
+	_fx_back.queue_redraw()
+	_fx_front.queue_redraw()
+
+
+## 受け取れる報酬の後ろ：金色のにじみと回るギザギザ
+func _draw_fx_back() -> void:
+	var IC = ImageController
+	var light: bool = IC.light_mode
+	var i := 0
+	for k in pending_keys():
+		var c := pad.cell_center_global(k) - pad.global_position
+		var p := 0.6 if light else 0.5 + 0.5 * sin(_t * 4.0 + i)
+		var rot := 0.0 if light else _t * 0.6
+		_fx_back.draw_colored_polygon(IC.burst_pts(c, 84 + 6 * p, 66, 12, 5 + i, rot), Color(IC.COL.gold, 0.35 + 0.3 * p))
+		IC.glow(_fx_back, c, 92, Color(IC.COL.gold, 0.5 + 0.3 * p), 4)
+		i += 1
+
+
+## 受け取れる報酬の上：「受け取れる！」の赤い札
+func _draw_fx_front() -> void:
+	var IC = ImageController
+	var light: bool = IC.light_mode
+	var i := 0
+	for k in pending_keys():
+		var w = pad.widget_of(k)
+		if w is GuiPad and (w as GuiPad).highlighted:
+			i += 1
+			continue  # 選んでいる（拡大中の）マスには出さない
+		var c := pad.cell_center_global(k) - pad.global_position
+		var dy := 0.0 if light else -absf(sin(_t * 3.2 + i * 0.9)) * 9.0
+		var tag := Rect2(c.x - 64, c.y - 84 + dy, 128, 28)
+		IC.slant(_fx_front, tag, IC.COL.red, 9, 2.0, IC.COL.paper, IC.COL.ink, Vector2(3, 3))
+		IC.head(_fx_front, "受け取れる！", tag.get_center(), 18, IC.COL.paper, 112)
+		i += 1
 
 
 func _leave() -> void:

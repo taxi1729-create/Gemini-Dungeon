@@ -623,6 +623,68 @@ func _add_btn(id: String, title: String, ik: String, acc: Color, num: int, sz: V
 	btn[id] = b
 
 
+## 所持レリックのアイコンの列（画面の左上。ログの帯の左で、敵・吹き出しに重ならない所に縦に並べる）
+func _build_relic_bar() -> void:
+	relic_bar = Control.new()
+	relic_bar.position = Vector2.ZERO
+	relic_bar.size = Vector2(64, RELIC_Y0 + RELIC_STEP * RelicList.MAX)
+	relic_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	relic_bar.z_index = 6
+	relic_bar.draw.connect(_draw_relic_bar)
+	ui.add_child(relic_bar)
+
+
+## 戦闘画面に並べるレリック（持っている順。表にあるものだけ）
+func battle_relics() -> Array:
+	return Inventory.relics.filter(func(id): return RelicList.DATA.has(str(id)))
+
+
+## i 番目のレリックのアイコンの中心（ui 座標）
+func relic_icon_pos(i: int) -> Vector2:
+	return Vector2(RELIC_X, RELIC_Y0 + RELIC_STEP * i)
+
+
+func _draw_relic_bar() -> void:
+	var IC = ImageController
+	var ids := battle_relics()
+	for i in ids.size():
+		var c := relic_icon_pos(i)
+		var rd: Dictionary = RelicList.DATA[str(ids[i])]
+		relic_bar.draw_circle(c, RELIC_R + 2.0, IC.COL.ink)
+		relic_bar.draw_arc(c, RELIC_R, 0, TAU, 24, IC.COL.red if rd.get("boss", false) else IC.COL.paper, 2.0, true)
+		IC.icon(relic_bar, str(rd.icon), c, RELIC_R * 1.6)
+
+
+## p（ui 座標）にあるレリック（"" = 無し）
+func _relic_at(p: Vector2) -> String:
+	var ids := battle_relics()
+	for i in ids.size():
+		if p.distance_to(relic_icon_pos(i)) <= RELIC_R + 6.0:
+			return str(ids[i])
+	return ""
+
+
+## レリックをタップした時：効果の吹き出し（キャラの情報と同じ吹き出し。どこかをタップすると閉じる）
+func show_relic_info(id: String) -> void:
+	_close_info()
+	var i := battle_relics().find(id)
+	if i < 0:
+		return
+	var rd: Dictionary = RelicList.DATA[id]
+	var lines: Array = ["[i:%s]%s" % [str(rd.icon), str(rd.desc)]]
+	if rd.get("boss", false):
+		lines.append("ボスレリック")
+	var w := 470.0
+	var h: float = GuiInfoPanel.measure(lines, w)
+	var c := relic_icon_pos(i)
+	var panel := GuiInfoPanel.new()
+	info_panel = panel
+	panel.setup(str(rd.name), lines, Rect2(c.x + 46.0, clampf(c.y - 10.0, 56.0, 640.0 - h), w, h), false)
+	panel.tail_to = c + Vector2(RELIC_R + 2.0, 0)
+	panel.z_index = 50
+	ui.add_child(panel)
+
+
 func _draw_strip() -> void:
 	var IC = ImageController
 	strip.draw_rect(Rect2(0, 0, 720, 42), Color(IC.COL.ink, 0.0))
@@ -1235,6 +1297,10 @@ func _input(event: InputEvent) -> void:
 func _on_press(p: Vector2) -> void:
 	if info_panel != null:
 		_close_info()
+		return
+	# レリックのアイコン：敵の手番中でもタップで効果を見られる（オーバーレイ表示中は除く）
+	if overlay == null and phase != "over" and _relic_at(p) != "":
+		show_relic_info(_relic_at(p))
 		return
 	if not _input_ok():
 		return

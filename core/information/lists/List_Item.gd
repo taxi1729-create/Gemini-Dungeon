@@ -3,7 +3,7 @@ class_name Item_List
 ## 道具（AP 0）。行動と同じ形式なので ActionController でそのまま処理できる。
 ## 9 回目の追加（D）：効果の "to" に left_ally / right_ally（左＝lane 0・右＝lane 1 の味方）、front_ally / back_ally（前衛・後衛の味方）。
 ## item_only の効果は Cont_Battle が処理する：
-##   prophecy  … 山札のランダムなカードを保留枠へ（保留枠が空で山札が 1 枚以上の時だけ使える。"need": "prophecy"）
+##   prophecy  … 山札のランダムなカード 1 枚を手札の空き欄（9→3）へ（空き欄が無いか山札が 0 枚なら使えない。"need": "prophecy"）
 ##   fate_dice … FATE の中からランダムに 1 つを味方全体に
 
 const DATA = {
@@ -30,7 +30,7 @@ const DATA = {
 		"desc": "前衛のキャラに攻撃力+3、後衛のキャラに防御力+3（戦闘中）"},
 	"prophecy": {"name": "予言の栞", "art": "cards", "icon": "cards", "art_col": Color("f2c14e"), "type": "skill",
 		"target": "self", "item_only": "prophecy", "need": "prophecy", "effects": [],
-		"desc": "山札のランダムなカードを保留枠へ（保留枠が空で山札が1枚以上の時だけ）"},
+		"desc": "山札のランダムなカード1枚を手札の空き欄へ（空き欄が無いか山札が0枚なら使えない）"},
 	"wasp_jar": {"name": "毒蜂の瓶", "art": "st_poison", "icon": "st_poison", "art_col": Color("9ad04a"), "type": "attack",
 		"target": "random_enemy", "power": 10, "fixed": true, "hits": 3, "reroll": true,
 		"hit_effects": [{"effect": "add_status", "status": "poison", "eff_val": 2}],

@@ -7,10 +7,10 @@ const AP_MAX := 7  # 大きな砂時計で +5（12）
 
 const DATA = {
 	"knight": {"id": "knight", "name": "ナイト",
-		"hp": 60, "max_hp": 60, "spd": 3, "def": 2, "atk": 0, "shield": 0,
+		"hp": 60, "max_hp": 60, "def": 2, "atk": 0, "shield": 0,
 		"ap": 0, "max_ap": AP_MAX, "side": "ally", "art": "knight", "status_effects": {}},
 	"witch": {"id": "witch", "name": "ウィッチ",
-		"hp": 33, "max_hp": 33, "spd": 8, "def": 0, "atk": 0, "shield": 0,
+		"hp": 33, "max_hp": 33, "def": 0, "atk": 0, "shield": 0,
 		"ap": 0, "max_ap": AP_MAX, "side": "ally", "art": "witch", "status_effects": {}},
 }
 

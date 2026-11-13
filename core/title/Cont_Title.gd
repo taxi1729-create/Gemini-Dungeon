@@ -109,7 +109,7 @@ func _start() -> void:
 # ------------------------------------------------------------
 # 一覧
 # ------------------------------------------------------------
-## カード一覧：持ち主のタブ、レア度ごとの見出しで全カード。タップで説明
+## カード一覧：持ち主のタブで全カード。上のボタンで並べ替え（No.・レア度・種類・AP・名前）、タップで拡大して説明
 func open_card_list() -> GuiDeckView:
 	var secs := {}
 	for owner in ["knight", "witch"]:
@@ -122,7 +122,7 @@ func open_card_list() -> GuiDeckView:
 			if not cards.is_empty():
 				groups.append([tier[1], cards])
 		secs[owner] = groups
-	return GuiDeckView.open(ui, "カード一覧", Callable(), secs)
+	return GuiDeckView.open_list(ui, "カード一覧", secs)
 
 
 func open_relic_list() -> Control:

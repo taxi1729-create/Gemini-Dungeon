@@ -80,7 +80,6 @@ static func stat_items(u: Dictionary) -> Array:
 		["stat_hp", "%d/%d" % [int(u.get("hp", 0)), int(u.get("max_hp", 0))]],
 		["stat_atk", str(ActionController.get_atk(u) + ActionController.relic_atk(u))],
 		["stat_def", str(ActionController.get_def(u))],
-		["stat_spd", str(ActionController.get_spd(u))],
 	]
 	var sh := int(u.get("shield", 0))
 	if sh > 0:

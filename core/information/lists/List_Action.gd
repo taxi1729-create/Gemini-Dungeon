@@ -12,8 +12,8 @@ class_name ActionList
 ##              front_row          = 前衛の敵全体
 ##   power    : ダメージ（対象全員に与える）
 ##   effects  : 効果の配列。各効果 {"effect": 種類, "eff_val": 値, "status": 状態ID, "turns": ターン数, "to": "target"/"self"/"ally_all"}
-##              種類：add_shield / add_status / heal / add_ap / draw / swap / double / turnabout / extra_turn / set_next_action
-##   keywords : "exhaust"（廃棄：使うと廃棄札へ）、"power"（パワー：発動不可。手札にある間 power_effect が効く）
+##              種類：add_shield / add_status / heal / add_ap / draw / swap / double / extra_turn / set_next_action / add_gauge（必殺技ゲージ+）
+##   keywords : "exhaust"（廃棄：使うと廃棄札へ）、"power"（パワー：type "power"・AP2 で使う。使うと戦闘終了まで power_effect が効く。10 回目）
 ##              "consume"（消費：使う時、このカード以外の手札からランダムに 1 枚を捨札へ。捨てるカードが無ければ使えない）
 ##   ap_x     : true なら APX（使う時に全ての AP を消費し、その量を X とする。AP 1 以上で使える。"ap" は 1 を入れておく）
 ##   hits     : 多段攻撃の回数（power を hits 回与える）。hits_x = true なら X 回
@@ -35,16 +35,16 @@ class_name ActionList
 ##   bonus の "target" は対象を差し替える（星降り）、"text" は説明文を差し替える
 ##   bonus_gekiha / bonus_hangeki / bonus_yoyaku : 撃破・反撃・予約の追加効果（仕組みは ActionController）
 ##   power_effect（パワー）："status"+"eff_val"（自分の攻撃力・防御力）のほか
-##     "kind" : burn_atk（火傷の残りターン分 攻撃力+）/ last_stand（HP% で攻撃力・素早さ+）/
+##     "kind" : burn_atk（火傷の残りターン分 攻撃力+）/ last_stand（HP% で攻撃力・防御力+）/
 ##              on_plain_card（札の無いカードが発動するたび敵全体に dmg。即応で +sokuou_add）/ on_burn（消費・廃棄のたび敵全体に dmg）/
 ##              on_attack_poison（アタックカードのたび当たった敵に毒）/ on_debuff_card（状態異常を付けるカードのたび自分にブロック）/
 ##              on_own_card（このキャラがカードを使うたびもう 1 人に火傷・ブロック）/ on_gekiha_card（撃破のカードのたび自分に攻撃力+1）/
-##              on_gekiha_hangeki（撃破・反撃が発動するたびランダムな敵に power×hits）/ end_herb・end_convert（ターン終了時に手札にあれば）
-##     "once"  : 手札に入った時に 1 回だけ発動する効果の配列（"to" は self / other_ally / ally_all）
-##     "aid_atk": もう 1 人の味方の攻撃力 +n（次の自分のターンまで）
-##     "exhaust_now": true なら手札に入った時の効果の後すぐ廃棄札へ
-##     "left" / "right" : 陣形のパワー。手札に入った時の位置で、どちらかの power_effect を使う
-##   パワーの「〜するたび」は、持ち主のパワーが効いている間（次の自分のターンまで）に味方のどちらかで条件が起きるたびに発動する
+##              on_gekiha_hangeki（撃破・反撃が発動するたびランダムな敵に power×hits）/ end_herb・end_convert（自分のターン終了時）
+##     "once"  : 使った時に 1 回だけ発動する効果の配列（"to" は self / other_ally / ally_all）
+##     "aid_atk": もう 1 人の味方の攻撃力 +n（戦闘終了まで）
+##     "exhaust_now": true なら使った時の効果の後、廃棄札へ（天啓。廃棄の札のパワーは使うと廃棄札へ行く）
+##     "left" / "right" : 陣形のパワー。効果はその時の位置で毎回判定（入替・陣形変更で切り替わる）。once は使った時の位置
+##   パワーの「〜するたび」は、使った後から戦闘終了まで、味方のどちらかで条件が起きるたびに発動する（同じカード 2 枚なら 2 回）
 ##
 ## 9 回目に追加した項目（カード修正 39 件）
 ##   bonus_sokuou / bonus_saigo / bonus_tenshin : 即応・最後・転身の札ごとの追加効果（無ければ "bonus"。渾身の一撃は転身と即応の両方）
@@ -227,7 +227,7 @@ const ALLY_CARDS = {
 			"effects": [{"effect": "add_status", "status": "declare", "eff_val": 3}]},
 		"holy": {"no": "K030", "owner": "knight", "name": "聖なる加護", "type": "skill", "target": "self", "art": "c_holy", "ap": 1, "ap_x": true,
 			"effects": [{"effect": "add_shield", "eff_val": 6, "x": true}]},
-		"steel": {"no": "K031", "owner": "knight", "name": "鋼鉄化", "type": "unselectable", "target": "ally_all", "art": "c_steel",
+		"steel": {"no": "K031", "owner": "knight", "name": "鋼鉄化", "type": "power", "ap": 2,"target": "ally_all", "art": "c_steel",
 			"keywords": ["power"], "power_effect": {"status": "def_buff", "eff_val": 2, "all": true}},
 		# --- ウィッチ ---
 		"ice_lance": {"no": "W021", "owner": "witch", "name": "氷の槍", "type": "attack", "target": "front_pair", "art": "snow", "power": 15, "ap": 2,
@@ -244,7 +244,7 @@ const ALLY_CARDS = {
 			"effects": [{"effect": "absorb_block"}]},
 		"energy": {"no": "W027", "owner": "witch", "name": "エナジーチャージ", "type": "skill", "target": "self", "art": "c_energy", "ap": 0, "keywords": ["consume", "exhaust"],
 			"effects": [{"effect": "add_ap", "eff_val": 2}]},
-		"force": {"no": "W028", "owner": "witch", "name": "フォース", "type": "unselectable", "target": "ally_all", "art": "c_force",
+		"force": {"no": "W028", "owner": "witch", "name": "フォース", "type": "power", "ap": 2,"target": "ally_all", "art": "c_force",
 			"keywords": ["power"], "power_effect": {"status": "atk_buff", "eff_val": 2, "all": true}},
 		# --- 8 回目の新カード：ナイト ---
 		"k_reckless": {"no": "K032", "owner": "knight", "name": "捨て身斬り", "type": "attack", "target": "front_pair", "art": "c_big_swing", "power": 14, "ap": 1,
@@ -258,17 +258,17 @@ const ALLY_CARDS = {
 			"bonus_yoyaku": {"effects": [{"effect": "add_shield", "eff_val": 7}]}},
 		"k_burning_shield": {"no": "K036", "owner": "knight", "name": "灼熱の盾", "type": "skill", "target": "self", "art": "c_fire_guard", "ap": 1, "keywords": ["consume"],
 			"effects": [{"effect": "add_shield", "eff_val": 16}, {"effect": "add_status", "status": "fire", "eff_val": 1}]},
-		"k_burning_spirit": {"no": "K037", "owner": "knight", "name": "燃える闘志", "type": "unselectable", "target": "self", "art": "flame",
+		"k_burning_spirit": {"no": "K037", "owner": "knight", "name": "燃える闘志", "type": "power", "ap": 2,"target": "self", "art": "flame",
 			"keywords": ["power"], "power_effect": {"kind": "burn_atk"}},
-		"k_guard_stance": {"no": "K038", "owner": "knight", "name": "守りの陣", "type": "unselectable", "target": "self", "art": "c_barricade",
+		"k_guard_stance": {"no": "K038", "owner": "knight", "name": "守りの陣", "type": "power", "ap": 2,"target": "self", "art": "c_barricade",
 			"keywords": ["power", "jinkei"], "power_effect": {
 				"left": {"once": [{"effect": "add_shield", "eff_val": 5, "to": "self"}]},
 				"right": {"status": "def_buff", "eff_val": 3}}},
-		"k_rally": {"no": "K039", "owner": "knight", "name": "鼓舞", "type": "unselectable", "target": "other_ally", "art": "atk_buff",
+		"k_rally": {"no": "K039", "owner": "knight", "name": "鼓舞", "type": "power", "ap": 2,"target": "other_ally", "art": "atk_buff",
 			"keywords": ["power", "jinkei"], "power_effect": {
 				"left": {"once": [{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 1, "to": "other_ally"}]},
 				"right": {"aid_atk": 3}}},
-		"k_fervor": {"no": "K040", "owner": "knight", "name": "連撃の気迫", "type": "unselectable", "target": "enemy_all", "art": "c_dance",
+		"k_fervor": {"no": "K040", "owner": "knight", "name": "連撃の気迫", "type": "power", "ap": 2,"target": "enemy_all", "art": "c_dance",
 			"keywords": ["power", "sokuou"], "power_effect": {"kind": "on_kw_card", "kws": ["sokuou", "tenshin"], "dmg": 3, "sokuou_add": 3}},
 		# --- 8 回目の新カード：ウィッチ ---
 		"w_homing": {"no": "W029", "owner": "witch", "name": "追尾弾", "type": "attack", "target": "random_enemy", "art": "chevrons", "power": 15, "ap": 2, "keywords": ["gekiha"],
@@ -286,13 +286,13 @@ const ALLY_CARDS = {
 		"w_needle_storm": {"no": "W034", "owner": "witch", "name": "毒針の嵐", "type": "skill", "target": "random_enemy", "art": "c_poison_gas", "ap": 2, "hits": 5, "reroll": true,
 			"hit_effects": [{"effect": "add_status", "status": "poison", "eff_val": 4}]},
 		"w_corrode": {"no": "W035", "owner": "witch", "name": "腐食", "type": "attack", "target": "enemy_all", "art": "skull", "power": 0, "fixed": true, "power_from": "poison", "ap": 1},
-		"w_venom_edge": {"no": "W036", "owner": "witch", "name": "毒の刃", "type": "unselectable", "target": "self", "art": "dagger",
+		"w_venom_edge": {"no": "W036", "owner": "witch", "name": "毒の刃", "type": "power", "ap": 2,"target": "self", "art": "dagger",
 			"keywords": ["power"], "power_effect": {"kind": "on_attack_poison", "eff_val": 1}},
-		"w_hex_guard": {"no": "W037", "owner": "witch", "name": "呪術の加護", "type": "unselectable", "target": "self", "art": "c_absorb",
+		"w_hex_guard": {"no": "W037", "owner": "witch", "name": "呪術の加護", "type": "power", "ap": 2,"target": "self", "art": "c_absorb",
 			"keywords": ["power"], "power_effect": {"kind": "on_debuff_card", "shield": 2}},
-		"w_flame_aura": {"no": "W038", "owner": "witch", "name": "炎の守り", "type": "unselectable", "target": "other_ally", "art": "flame",
+		"w_flame_aura": {"no": "W038", "owner": "witch", "name": "炎の守り", "type": "power", "ap": 2,"target": "other_ally", "art": "flame",
 			"keywords": ["power"], "power_effect": {"kind": "on_own_card", "fire": 1, "shield": 4}},
-		"w_hunter": {"no": "W039", "owner": "witch", "name": "狩人の本能", "type": "unselectable", "target": "self", "art": "horns",
+		"w_hunter": {"no": "W039", "owner": "witch", "name": "狩人の本能", "type": "power", "ap": 2,"target": "self", "art": "horns",
 			"keywords": ["power"], "power_effect": {"kind": "on_gekiha_card", "kws": ["jinkei", "yoyaku"], "atk": 1}},
 		# --- 9 回目に超レアから移した（ウィッチ） ---
 		"magic_wall": {"no": "W040", "owner": "witch", "name": "マジックウォール", "type": "skill", "target": "ally_all", "art": "c_magic_wall", "ap": 2, "keywords": ["exhaust"],
@@ -323,22 +323,22 @@ const ALLY_CARDS = {
 		"k_command": {"no": "K047", "owner": "knight", "name": "陣頭指揮", "type": "skill", "target": "ally_all", "art": "crown", "ap": 1, "keywords": ["jinkei"],
 			"bonus_left": {"effects": [{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 2, "to": "self"}]},
 			"bonus_right": {"effects": [{"effect": "add_shield", "eff_val": 7, "to": "other_ally"}]}},
-		"k_last_stand": {"no": "K048", "owner": "knight", "name": "背水の陣", "type": "unselectable", "target": "self", "art": "c_declare",
+		"k_last_stand": {"no": "K048", "owner": "knight", "name": "背水の陣", "type": "power", "ap": 2,"target": "self", "art": "c_declare",
 			"keywords": ["power"], "power_effect": {"kind": "last_stand"}},
-		"k_scorched": {"no": "K049", "owner": "knight", "name": "焦土の誓い", "type": "unselectable", "target": "enemy_all", "art": "burst",
+		"k_scorched": {"no": "K049", "owner": "knight", "name": "焦土の誓い", "type": "power", "ap": 2,"target": "enemy_all", "art": "burst",
 			"keywords": ["power"], "power_effect": {"kind": "on_burn", "dmg": 5}},
-		"k_revelation": {"no": "K050", "owner": "knight", "name": "天啓", "type": "unselectable", "target": "ally_all", "art": "st_ap_plus",
+		"k_revelation": {"no": "K050", "owner": "knight", "name": "天啓", "type": "power", "ap": 2,"target": "ally_all", "art": "st_ap_plus",
 			"keywords": ["power", "exhaust"], "power_effect": {"exhaust_now": true, "once": [
 				{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 2, "to": "ally_all"}, {"effect": "add_ap", "eff_val": 2, "to": "ally_all"}]}},
 		# --- 8 回目の新カード：ウィッチ ---
 		"w_meteor": {"no": "W045", "owner": "witch", "name": "流星群", "type": "attack", "target": "random_enemy", "art": "c_inferno", "power": 10, "hits": 4, "reroll": true, "ap": 5},
 		"w_star_judge": {"no": "W046", "owner": "witch", "name": "星の審判", "type": "attack", "target": "random_enemy", "art": "crown", "power": 7, "hits": 6, "reroll": true, "ap": 7,
 			"hit_effects": [{"effect": "add_status", "status": "stun", "eff_val": 1, "if_damaged": true}]},
-		"w_retribution": {"no": "W047", "owner": "witch", "name": "断罪の連鎖", "type": "unselectable", "target": "random_enemy", "art": "c_drain",
+		"w_retribution": {"no": "W047", "owner": "witch", "name": "断罪の連鎖", "type": "power", "ap": 2,"target": "random_enemy", "art": "c_drain",
 			"keywords": ["power"], "power_effect": {"kind": "on_gekiha_hangeki", "power": 2, "hits": 5}},
-		"w_herbalist": {"no": "W048", "owner": "witch", "name": "薬師の加護", "type": "unselectable", "target": "self", "art": "item_herb",
+		"w_herbalist": {"no": "W048", "owner": "witch", "name": "薬師の加護", "type": "power", "ap": 2,"target": "self", "art": "item_herb",
 			"keywords": ["power", "exhaust"], "power_effect": {"kind": "end_herb"}},
-		"w_mana_convert": {"no": "W049", "owner": "witch", "name": "魔力の転換", "type": "unselectable", "target": "self", "art": "c_meditate",
+		"w_mana_convert": {"no": "W049", "owner": "witch", "name": "魔力の転換", "type": "power", "ap": 2,"target": "self", "art": "c_meditate",
 			"keywords": ["power", "consume"], "power_effect": {"kind": "end_convert"}},
 		# --- 9 回目にレアから移した（ウィッチ） ---
 		"w_toxic_rain": {"no": "W050", "owner": "witch", "name": "毒の雨", "type": "attack", "target": "front_row", "art": "st_poison", "power": 3, "hits_x": true, "ap": 1, "ap_x": true,

@@ -6,6 +6,8 @@ class_name GuiDeckView
 ## sections を渡すと戦闘用表示（山札／捨札／保留などの見出しごとに並べる）。
 ## open_badge で開くと「バッジを付けるカード選び」：付けられないカードは暗く、選ぶと badge_cb(char_id, デッキの index) を呼ぶ。
 ## pick_cb に渡す card_id はデッキの ID（バッジ付きなら "カードID@バッジID"。CurrentDeck.remove_card にそのまま渡せる）。
+## 10 回目（C）：上のボタンで並べ替え（No.・レア度・種類・AP・名前。選んだ並びは開き直しても残る）。
+##   カードをタップ（選ぶ画面では長押し）すると大きく表示（説明つき。どこかをタップで閉じる）。
 
 signal closed
 
@@ -23,6 +25,12 @@ var _tab_btns := {}
 var badge_id := ""  # バッジを付けるカード選びの時のバッジ
 var badge_cb := Callable()  # badge_cb(char_id, index)
 var _picked_index := -1
+## 並べ替え：[キー, ボタンの文字]。sort_key は static（一覧を開き直しても同じ並び）
+const SORTS := [["no", "No."], ["rarity", "レア度"], ["type", "種類"], ["ap", "AP"], ["name", "名前"]]
+static var sort_key := "no"
+var regroup := true  # true＝並べ替えの種類で見出しを作り直す（タイトルの一覧・デッキ）。false＝見出し（山札・捨札など）の中だけ並べ替える
+var _sort_btns := {}
+var _zoom_view: Control  # 拡大表示（開いていなければ null）
 
 
 static func open(parent: Node, title: String = "デッキ", pick: Callable = Callable(), secs: Dictionary = {}, first: String = "knight") -> GuiDeckView:
@@ -31,6 +39,18 @@ static func open(parent: Node, title: String = "デッキ", pick: Callable = Cal
 	v.pick_cb = pick
 	v.sections = secs
 	v.current = first
+	v.regroup = secs.is_empty()  # 戦闘の山札・捨札などの見出しはそのまま
+	parent.add_child(v)
+	return v
+
+
+## カード一覧（タイトル）：sections のカードを、並べ替えの種類ごとの見出しに並べ直して出す
+static func open_list(parent: Node, title: String, secs: Dictionary, first: String = "knight") -> GuiDeckView:
+	var v := GuiDeckView.new()
+	v.title_text = title
+	v.sections = secs
+	v.current = first
+	v.regroup = true
 	parent.add_child(v)
 	return v
 
@@ -68,9 +88,16 @@ func _ready() -> void:
 		var b := UiSystem.make_button(self, InitAllyStatus.DATA[id].name, Vector2(x, 136), Vector2(290, 64), _switch.bind(id), 26)
 		_tab_btns[id] = b
 		x += 310
+	# 並べ替えのボタン（選んでいるものは赤）
+	var bx := 40.0
+	for so in SORTS:
+		var sb := UiSystem.make_button(self, so[1], Vector2(bx, 208), Vector2(120, 44), _set_sort.bind(so[0]), 20)
+		_sort_btns[so[0]] = sb
+		bx += 130
+	_paint_sort_btns()
 	_grid = Control.new()
-	_grid.position = Vector2(40, 214)
-	_grid.size = Vector2(640, 740)
+	_grid.position = Vector2(40, 262)
+	_grid.size = Vector2(640, 692)
 	_grid.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(_grid)
 	# 説明は白いギザギザ吹き出しに黒文字で
@@ -106,7 +133,8 @@ func _switch(id: String) -> void:
 	for c in _grid.get_children():
 		c.queue_free()
 	var groups: Array = sections.get(id, [])
-	if groups.is_empty():
+	var from_deck := groups.is_empty()
+	if from_deck:
 		var cards: Array = []
 		var deck: Array = CurrentDeck.decks[id]
 		for i in deck.size():
@@ -115,9 +143,10 @@ func _switch(id: String) -> void:
 				continue
 			c["_deck_index"] = i  # バッジを付ける時に使う（表示用の印。デッキには残らない）
 			cards.append(c)
-		cards.sort_custom(func(a, b): return a.name < b.name if a.name != b.name else str(a.deck_id) < str(b.deck_id))
 		groups = [["%d 枚" % cards.size(), cards]]
+	groups = _sorted_groups(groups, from_deck)
 	var y := 0.0
+	var no_size := 12
 	# 入りきらない時はカードを小さくする（1 行の枚数を増やす）
 	var sc := 0.66
 	var cols := 7
@@ -133,6 +162,7 @@ func _switch(id: String) -> void:
 		if total <= _grid.size.y or sc <= 0.36:
 			break
 		sc -= 0.03
+	no_size = clampi(int(8.0 / sc), 12, 20)  # 小さく並べた時も No. が読めるように
 	for g in groups:
 		var gl := UiSystem.make_label(_grid, "%s（%d）" % [g[0], g[1].size()], Vector2(12, y), Vector2(628, 32), 20, ImageController.COL.paper, HORIZONTAL_ALIGNMENT_LEFT, 0)
 		gl.add_theme_font_override("font", ImageController.font_head)
@@ -151,12 +181,14 @@ func _switch(id: String) -> void:
 			v.base_scale = sc
 			v.hover_scale = 1.15
 			v.scale = Vector2(sc, sc)
+			v.no_size = no_size
 			# 拡大縮小の中心はカードの中央なので、見た目の左上が揃うようにずらす
 			v.position = Vector2((i % cols) * cw, y + int(i / cols) * ch) - GuiCard.SIZE * (1.0 - sc) / 2.0
 			if badge_cb.is_valid() and not BadgeList.can_attach(badge_id, c):
 				v.playable = false  # 付けられないカードは暗く
 			_grid.add_child(v)
 			v.tapped.connect(_on_card.bind(c, v))
+			v.hold_started.connect(zoom.bind(c))  # 長押しで拡大（選ぶ画面でも）
 			i += 1
 		y += ceili(g[1].size() / float(cols)) * ch + 6
 
@@ -182,6 +214,8 @@ func _on_card(c: Dictionary, v: GuiCard) -> void:
 			_desc_text += "\n→ [i:%s]%s（%s）を付ける" % [bd.icon, bd.name, bd.desc]
 		_picked_index = int(c.get("_deck_index", -1))
 	_desc.queue_redraw()
+	if not (pick_cb.is_valid() or badge_cb.is_valid()):
+		zoom(c)  # 見るだけの一覧はタップで拡大
 	if pick_cb.is_valid() or badge_cb.is_valid():
 		for o in _grid.get_children():
 			if o is GuiCard:
@@ -228,6 +262,170 @@ func pick_index(char_id: String, index: int) -> bool:
 			_on_card(o.card, o)
 			return _pick_btn != null and not _pick_btn.disabled
 	return false
+
+
+# ------------------------------------------------------------
+# 並べ替え
+# ------------------------------------------------------------
+func _set_sort(key: String) -> void:
+	if sort_key == key:
+		return
+	sort_key = key
+	_paint_sort_btns()
+	_switch(current)
+
+
+func _paint_sort_btns() -> void:
+	for k in _sort_btns:
+		UiSystem.set_button_red(_sort_btns[k], k == sort_key)
+
+
+const RARITY_ORDER := ["normal", "rare", "super_rare"]
+const RARITY_NAME := {"normal": "通常", "rare": "レア", "super_rare": "超レア"}
+const TYPE_NAME := ["アタック", "スキル", "パワー", "その他"]
+
+
+## 種類の順（アタック 0・スキル 1・パワー 2・その他 3）
+static func type_rank(c: Dictionary) -> int:
+	if ActionList.has_keyword(c, "power") or str(c.get("type", "")) == "unselectable":
+		return 2
+	match str(c.get("type", "")):
+		"attack": return 0
+		"skill": return 1
+	return 3
+
+
+## AP の順（X は最後）
+static func ap_rank(c: Dictionary) -> int:
+	if c.get("ap_x", false):
+		return 99
+	if not c.has("ap"):
+		return 98
+	return DeckController.card_ap(c)
+
+
+## 並べ替えの主キー（数）。名前・No. は 0（後ろの比べで決まる）
+static func sort_rank(c: Dictionary, key: String) -> int:
+	match key:
+		"rarity": return RARITY_ORDER.find(str(c.get("rarity", "normal")))
+		"type": return type_rank(c)
+		"ap": return ap_rank(c)
+	return 0
+
+
+## 見出しの名前（regroup の時）
+static func group_name(c: Dictionary, key: String) -> String:
+	match key:
+		"rarity": return str(RARITY_NAME.get(str(c.get("rarity", "normal")), "通常"))
+		"type": return TYPE_NAME[type_rank(c)]
+		"ap":
+			var r := ap_rank(c)
+			return "AP X" if r == 99 else ("AP なし" if r == 98 else "AP %d" % r)
+	return ""
+
+
+## カードの並べ替え（主キー → No. → 名前 → デッキの ID）。比べる値は先に作っておく（枚数が多くても軽く）
+static func sort_cards(cards: Array, key: String) -> Array:
+	var rows: Array = []
+	for c in cards:
+		var nm := str(c.get("name", ""))
+		var no := str(c.get("no", ""))
+		rows.append([sort_rank(c, key), nm if key == "name" else no, no if key == "name" else nm, str(c.get("deck_id", c.get("id", ""))), c])
+	rows.sort_custom(func(a, b):
+		for i in 4:
+			if a[i] != b[i]:
+				return a[i] < b[i]
+		return false)
+	return rows.map(func(r): return r[4])
+
+
+## 見出しごとの並べ替え。regroup なら全部を並べ直して、レア度・種類・AP は見出しを作り直す
+func _sorted_groups(groups: Array, from_deck: bool) -> Array:
+	if not regroup:
+		return groups.map(func(g): return [g[0], sort_cards(g[1], sort_key)])
+	var all: Array = []
+	for g in groups:
+		all.append_array(g[1])
+	var sorted := sort_cards(all, sort_key)
+	if sort_key in ["no", "name"]:
+		return [["%d 枚" % sorted.size() if from_deck else "全 %d 枚" % sorted.size(), sorted]]
+	var out: Array = []
+	for c in sorted:
+		var gn := group_name(c, sort_key)
+		if out.is_empty() or out.back()[0] != gn:
+			out.append([gn, []])
+		out.back()[1].append(c)
+	return out
+
+
+# ------------------------------------------------------------
+# 拡大表示
+# ------------------------------------------------------------
+const ZOOM_SCALE := 2.3
+const ZOOM_CENTER := Vector2(360, 432)
+
+
+## カードを大きく表示（説明つき）。どこをタップしても閉じる
+func zoom(c: Dictionary) -> void:
+	close_zoom()
+	var IC = ImageController
+	var z := Control.new()
+	z.size = size
+	z.mouse_filter = Control.MOUSE_FILTER_STOP
+	z.gui_input.connect(func(e: InputEvent):
+		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
+			z.accept_event()
+			close_zoom())
+	var shade := ColorRect.new()
+	shade.color = Color(IC.GLASS.ivory_black, 0.86)
+	shade.size = size
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	z.add_child(shade)
+	var gc := GuiCard.new()
+	gc.interactive = false
+	gc.set_card(c)
+	gc.base_scale = ZOOM_SCALE
+	gc.position = ZOOM_CENTER - GuiCard.SIZE / 2
+	gc.pivot_offset = GuiCard.SIZE / 2
+	gc.scale = Vector2(ZOOM_SCALE, ZOOM_SCALE)
+	if badge_cb.is_valid() and not BadgeList.can_attach(badge_id, c):
+		gc.playable = false
+	z.add_child(gc)
+	# 説明（白いギザギザ吹き出し）
+	var owner := str(c.get("owner", current))
+	var text := DeckController.card_text(CurrentStatus.ally(owner if InitAllyStatus.DATA.has(owner) else current), c)
+	UiSystem.make_bubble(z, Rect2(40, 680, 640, 330), Vector2(360, 640), 3)
+	var d := Control.new()
+	d.position = Vector2(66, 700)
+	d.size = Vector2(588, 290)
+	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	d.draw.connect(func():
+		var fs := 26
+		while fs > 15 and IC.rich_height(text, fs, d.size.x, fs * 1.34) > d.size.y:
+			fs -= 1
+		IC.rich_text(d, text, Vector2.ZERO, fs, IC.COL.ink, d.size.x, 0, fs * 1.34))
+	z.add_child(d)
+	var hint := UiSystem.make_label(z, "タップで閉じる", Vector2(160, 1040), Vector2(400, 50), 24, IC.COL.paper, HORIZONTAL_ALIGNMENT_CENTER, 4)
+	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(z)
+	_zoom_view = z
+	if not IC.light_mode:
+		# 開く時だけ少し弾ませる（ライトモードでは省く）
+		gc.scale = Vector2.ONE * ZOOM_SCALE * 0.7
+		z.modulate.a = 0.0
+		var tw := z.create_tween()
+		tw.tween_property(z, "modulate:a", 1.0, 0.1)
+		tw.parallel().tween_property(gc, "scale", Vector2.ONE * ZOOM_SCALE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func close_zoom() -> void:
+	if _zoom_view != null and is_instance_valid(_zoom_view):
+		_zoom_view.queue_free()
+	_zoom_view = null
+
+
+func is_zoomed() -> bool:
+	return _zoom_view != null and is_instance_valid(_zoom_view)
 
 
 func _close() -> void:

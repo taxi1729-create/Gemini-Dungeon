@@ -19,8 +19,6 @@ const DATA = {
 		"desc": "受けるダメージ −数値"},
 	"def_down": {"name": "防御力低下", "short": "防↓", "timing": "all", "icon": "st_def_down", "good": false, "label": "neg",
 		"desc": "受けるダメージ +数値"},
-	"spd_buff": {"name": "素早さアップ", "short": "速↑", "timing": "all", "icon": "chevrons", "good": true, "label": "val",
-		"desc": "素早さ +数値（次のラウンドの行動順から）"},
 	"ap_plus": {"name": "APプラス", "short": "AP+", "timing": "start_turn", "icon": "st_ap_plus", "good": true, "label": "turns",
 		"desc": "自分のターン開始時に AP +数値"},
 	"ap_next": {"name": "次ターンAP", "short": "次AP", "timing": "start_turn", "icon": "st_ap_next", "good": true, "label": "val",
@@ -30,7 +28,7 @@ const DATA = {
 	"fire_guard": {"name": "ファイアガード", "short": "炎盾", "timing": "all", "icon": "st_fire_guard", "good": true, "label": "val",
 		"desc": "攻撃してきた相手に火傷を与える"},
 	"double": {"name": "連続魔法", "short": "連続", "timing": "all", "icon": "st_double", "good": true, "label": "none",
-		"desc": "次に使うカード・保留カードが2回発動する"},
+		"desc": "次に使うカードが2回発動する"},
 	"regen": {"name": "リジェネ", "short": "再生", "timing": "start_turn", "icon": "st_regen", "good": true, "label": "val",
 		"desc": "ターン開始時に残りターン分 HP 回復（最大HPを超えられる）。毎ターン1減る"},
 	"barricade": {"name": "バリケード", "short": "柵", "timing": "all", "icon": "st_barricade", "good": true, "label": "none",
@@ -51,4 +49,7 @@ const DATA = {
 		"desc": "次の自分のターン開始まで、攻撃してきた敵に追加効果"},
 	"yoyaku": {"name": "予約", "short": "予約", "timing": "start_turn", "icon": "kw_yoyaku", "good": true, "label": "none",
 		"desc": "次の自分のターン開始時に効果が発動する"},
+	# 10 回目（D）：詠唱の構え
+	"chant": {"name": "詠唱", "short": "詠唱", "timing": "all", "icon": "star", "good": true, "label": "val",
+		"desc": "次に使うアタックカードのダメージ +数値（使うと消える）"},
 }
