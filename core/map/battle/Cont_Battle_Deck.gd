@@ -290,6 +290,8 @@ static func card_from_save(o) -> Variant:
 static func card_text(user: Dictionary, action: Dictionary) -> String:
 	var lines: Array = []
 	var head: String = action.get("name", "")
+	if str(action.get("no", "")) != "":
+		head = "No.%s　%s" % [str(action.no), head]  # カードの No. を見出しの頭に
 	match action.get("rarity", ""):
 		"rare": head += "　★レア"
 		"super_rare": head += "　★★超レア"

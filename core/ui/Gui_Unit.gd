@@ -26,6 +26,9 @@ var facing := 1.0
 var active := false  # 手番中の目印
 var dead := false
 var targeted := 0  # 敵の予告で狙われている数（味方用）
+## 味方用：この味方に向かう敵の予告の攻撃の合計ダメージ（スタン中の敵は除く。全体攻撃も含む）。-1＝攻撃の予告なし。
+## Cont_Battle._update_intent_values が入れる。HP で受ける分は描く時に今のブロック（data.shield）を引いて出す
+var incoming := -1
 ## プレビュー：{"on": bool, "damage": n, "kill": bool, "label": 文字}
 var preview := {}
 var kick := Vector2.ZERO  # 被弾で体だけ押し返されるずれ（演出用）
@@ -297,6 +300,38 @@ func _draw_ally_badges(IC) -> void:
 	draw_circle(p, 3, PAPER)
 	if targeted > 1:
 		IC.text(self, "×%d" % targeted, p + Vector2(0, r + 14), 16, PAPER, true, 4, -1.0, INK)
+	if incoming >= 0:
+		_draw_incoming(IC, p, r)
+
+
+## HP で受けるダメージ（今のブロックを引いた残り）
+func incoming_hp() -> int:
+	return maxi(0, incoming - int(data.get("shield", 0)))
+
+
+## 合計ダメージの札：照準の横（体の内側＝画面の中央寄り）に「⚔合計 → ♥HP で受ける分」。
+## ブロックで全部防げる時は ♥ を灰色に、HP が尽きる時は赤く点滅（ライトモードでは点滅しない）
+func _draw_incoming(IC, p: Vector2, r: float) -> void:
+	var hp_dmg := incoming_hp()
+	var side := 1.0 if int(data.get("lane", 0)) == 0 else -1.0
+	var w := 128.0
+	var h := 30.0
+	var x0 := p.x + side * (r + 8.0) - (0.0 if side > 0 else w)
+	var y0 := p.y - h / 2.0
+	var lethal := hp_dmg > 0 and hp_dmg >= int(data.get("hp", 0))
+	draw_colored_polygon(_para(x0 - 3, y0 - 3, w + 6, h + 6, 6), INK)
+	draw_colored_polygon(_para(x0, y0, w, h, 5), PAPER)
+	# 左半分：合計（剣）
+	IC.icon(self, "sword", Vector2(x0 + 16, p.y), 20, INK)
+	IC.text(self, str(incoming), Vector2(x0 + 41, p.y + 1), 19, INK, true, 0, 34)
+	# 矢印
+	IC.text(self, "→", Vector2(x0 + 69, p.y), 16, Color(INK, 0.7), true)
+	# 右半分：HP で受ける分（ハート）
+	var hcol := RED if hp_dmg > 0 else Color("8a8a94")
+	if lethal and not ImageController.light_mode:
+		hcol = hcol.lerp(PAPER, 0.35 + 0.35 * sin(_t * 10.0))
+	IC.icon(self, "heart", Vector2(x0 + 91, p.y), 20, hcol)
+	IC.text(self, str(hp_dmg), Vector2(x0 + 113, p.y + 1), 19, RED if hp_dmg > 0 else Color("6a6a74"), true, 0, 26)
 
 
 func _bubble_shape() -> PackedVector2Array:

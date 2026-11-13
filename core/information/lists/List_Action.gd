@@ -55,6 +55,15 @@ class_name ActionList
 ##   power_effect の "all": true は status の効果を味方全体に（鋼鉄化・フォース。もう 1 人の分は aid_atk / aid_def）
 ##   kind on_kw_card : "kws" の札が付いたカードが発動するたび敵全体に dmg（即応で +sokuou_add。連撃の気迫）
 ##   kind on_gekiha_card の "kws" : この札のどれかが付いたカードを使うたび（狩人の本能＝陣形・予約。無ければ撃破）
+##
+## 10 回目に追加した項目（D：新カード 20 枚）
+##   if_self_status   : {"status", "power"}。自分にその状態があれば power を足す（炎刃）
+##   vs_status        : {"status", "power"}。その状態が付いた敵へのダメージに power を足す（侵食の針。敵ごとに判定）
+##   power_half_block : true なら power ＝ 自分のブロックの半分（切り捨て。盾打ち）
+##   per_exhaust      : 自分の廃棄札 1 枚につき power を足す（灰燼斬。ctx.exhausted）
+##   効果 shield_per_status : 対象の状態 status の値 1 につきブロック +eff_val（熱き鼓動。状態は減らさない）
+##   効果 dmg_half_block    : 自分（使った側）のブロックの半分のダメージを対象に（盾の返しの反撃）
+##   状態 chant（詠唱の構え）: 次に使うアタックカードのダメージ +val（使うと消える）
 ## art は ImageController.icon の種類名（画像ファイルは使わない）
 
 const ALLY_CARDS = {
@@ -148,6 +157,55 @@ const ALLY_CARDS = {
 		"w_light_lance": {"no": "W019", "owner": "witch", "name": "光の槍", "type": "attack", "target": "front_pair", "art": "target_one", "power": 28, "ap": 4},
 		"w_flame_ward": {"no": "W020", "owner": "witch", "name": "炎の盾", "type": "skill", "target": "other_ally", "art": "c_fire_guard", "ap": 1,
 			"effects": [{"effect": "add_shield", "eff_val": 11}, {"effect": "add_status", "status": "fire", "eff_val": 1}]},
+		# --- 10 回目の新カード（D）：ナイト K051〜K060。数値は仮 ---
+		"k_self_burn": {"no": "K051", "owner": "knight", "name": "焼身の構え", "type": "skill", "target": "self", "art": "flame", "ap": 1,
+			"effects": [{"effect": "add_status", "status": "fire", "eff_val": 2, "to": "self"}, {"effect": "add_status", "status": "atk_buff", "eff_val": 2, "turns": 1, "to": "self"}]},
+		"k_flame_blade": {"no": "K052", "owner": "knight", "name": "炎刃", "type": "attack", "target": "front_pair", "art": "sword", "power": 6, "ap": 1,
+			"if_self_status": {"status": "fire", "power": 6}},
+		"k_hot_pulse": {"no": "K053", "owner": "knight", "name": "熱き鼓動", "type": "skill", "target": "self", "art": "heart", "ap": 0,
+			"effects": [{"effect": "shield_per_status", "status": "fire", "eff_val": 3}]},
+		"k_shield_bash": {"no": "K054", "owner": "knight", "name": "盾打ち", "type": "attack", "target": "front_pair", "art": "shield_sword", "power": 0, "ap": 1,
+			"power_half_block": true},
+		"k_lure": {"no": "K055", "owner": "knight", "name": "引きつけ", "type": "skill", "target": "front_row", "art": "c_taunt", "ap": 1,
+			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}, {"effect": "add_shield", "eff_val": 6, "to": "self"}]},
+		"k_shield_return": {"no": "K056", "owner": "knight", "name": "盾の返し", "type": "skill", "target": "self", "art": "shield", "ap": 1, "keywords": ["hangeki"],
+			"effects": [{"effect": "add_shield", "eff_val": 5}],
+			"bonus_hangeki": {"effects": [{"effect": "dmg_half_block"}]}},
+		"k_immovable": {"no": "K057", "owner": "knight", "name": "不動", "type": "skill", "target": "self", "art": "c_big_shield", "ap": 2, "keywords": ["saigo"],
+			"effects": [{"effect": "add_shield", "eff_val": 12}],
+			"bonus_saigo": {"effects": [{"effect": "add_shield", "eff_val": 8}]}},
+		"k_pawn": {"no": "K058", "owner": "knight", "name": "捨て石", "type": "skill", "target": "self", "art": "c_rampart", "ap": 0, "keywords": ["consume"],
+			"effects": [{"effect": "add_shield", "eff_val": 8}]},
+		"k_ash_slash": {"no": "K059", "owner": "knight", "name": "灰燼斬", "type": "attack", "target": "front_enemy_group", "art": "sweep", "power": 6, "ap": 1,
+			"per_exhaust": 2},
+		"k_charge_aura": {"no": "K060", "owner": "knight", "name": "闘気溜め", "type": "skill", "target": "self", "art": "chevrons", "ap": 1, "keywords": ["yoyaku"],
+			"bonus_yoyaku": {"target": "self", "effects": [{"effect": "add_gauge", "eff_val": 15, "to": "self"}]}},
+		# --- 10 回目の新カード（D）：ウィッチ W051〜W060。数値は仮 ---
+		"w_venom_mist": {"no": "W051", "owner": "witch", "name": "毒霧", "type": "skill", "target": "front_row", "art": "c_poison_gas", "ap": 1,
+			"effects": [{"effect": "add_status", "status": "poison", "eff_val": 2, "turns": 2}]},
+		"w_erode_needle": {"no": "W052", "owner": "witch", "name": "侵食の針", "type": "attack", "target": "front_pair", "art": "dagger", "power": 4, "ap": 1,
+			"vs_status": {"status": "poison", "power": 4}},
+		"w_bind": {"no": "W053", "owner": "witch", "name": "呪縛", "type": "skill", "target": "random_enemy", "art": "c_atk_down", "ap": 1,
+			"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 2, "turns": 1}, {"effect": "add_status", "status": "def_down", "eff_val": 2, "turns": 1}]},
+		"w_mana_store": {"no": "W054", "owner": "witch", "name": "魔力の蓄え", "type": "skill", "target": "self", "art": "st_ap_next", "ap": 1, "keywords": ["yoyaku"],
+			"bonus_yoyaku": {"effects": [{"effect": "add_ap", "eff_val": 2, "to": "self"}]}},
+		"w_chant_stance": {"no": "W055", "owner": "witch", "name": "詠唱の構え", "type": "skill", "target": "self", "art": "star", "ap": 0, "keywords": ["yoyaku"],
+			"bonus_yoyaku": {"effects": [{"effect": "add_status", "status": "chant", "eff_val": 6, "to": "self"}]}},
+		"w_meditate": {"no": "W056", "owner": "witch", "name": "瞑想", "type": "skill", "target": "self", "art": "c_meditate", "ap": 0,
+			"keywords": ["saigo"], "saigo_only": true,
+			"bonus_saigo": {"effects": [{"effect": "add_ap", "eff_val": 2, "to": "self"}]}},
+		"w_wind_dance": {"no": "W057", "owner": "witch", "name": "風の舞", "type": "skill", "target": "self", "art": "formation", "ap": 1, "keywords": ["sokuou"],
+			"effects": [{"effect": "rank_swap"}],
+			"bonus_sokuou": {"effects": [{"effect": "add_shield", "eff_val": 6, "to": "self"}]}},
+		"w_formation_fire": {"no": "W058", "owner": "witch", "name": "陣の火球", "type": "attack", "target": "front_enemy_group", "art": "flame", "power": 5, "ap": 1, "keywords": ["jinkei"],
+			"bonus_left": {"text": "目の前の敵グループに5ダメージ"},
+			"bonus_right": {"power": 2, "target": "back_row", "text": "後衛全体に7ダメージ"}},
+		"w_turn_arrow": {"no": "W059", "owner": "witch", "name": "転身の矢", "type": "attack", "target": "random_enemy", "art": "target_one", "power": 6, "ap": 1, "reroll": true,
+			"keywords": ["tenshin"],
+			"bonus_tenshin": {"hits": 2, "text": "もう1回（ランダムな敵を選び直す）"}},
+		"w_signal": {"no": "W060", "owner": "witch", "name": "合図", "type": "skill", "target": "other_ally", "art": "c_ap_pass", "ap": 0, "keywords": ["sokuou"],
+			"effects": [{"effect": "add_shield", "eff_val": 3}],
+			"bonus_sokuou": {"effects": [{"effect": "add_ap", "eff_val": 1}]}},
 	},
 	"rare": {
 		# --- ナイト ---

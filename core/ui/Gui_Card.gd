@@ -149,12 +149,26 @@ func _draw() -> void:
 	elif card.get("type") == "unselectable":
 		IC.text(self, "常時", Vector2(size.x - 22, 16), 14, IC.COL.good, true, 4)
 	# 持ち主のタグ（ナイト／ウィッチ）は出さない（持ち主は枠の色と説明で分かる）
+	_draw_no()
 	_draw_keywords(art)
 	_draw_badge(art)
 	if not playable and not unsel:
 		draw_colored_polygon(IC.cut_pts(r, 14), Color(0, 0, 0, 0.55))
 	if charge > 0:
 		_draw_charge(r)
+
+
+## カードの No.（K001／W001…）：上の黒い縁の中央（威力の星と AP の間）に小さく薄く。
+## no_size は文字の大きさ（一覧で小さく並べる時は GuiDeckView が大きめにする）
+var no_size := 12
+
+
+func _draw_no() -> void:
+	var no := str(card.get("no", ""))
+	if no == "":
+		return
+	var IC = ImageController
+	IC.text(self, no, Vector2(size.x / 2 + 1, 16), no_size, Color(IC.COL.paper, 0.78), true, 0, 50)
 
 
 ## 多段攻撃の回数の表示（"×2" / "×X"。多段でなければ ""）

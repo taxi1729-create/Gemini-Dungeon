@@ -19,7 +19,29 @@ static func get_atk(u: Dictionary) -> int:
 
 
 static func get_def(u: Dictionary) -> int:
-	return int(u.get("def", 0)) + StatusController.val(u, "def_buff") - StatusController.val(u, "def_down") + int(u.get("power_def", 0)) + formation_def(u) + aid_def(u)
+	return int(u.get("def", 0)) + StatusController.val(u, "def_buff") - StatusController.val(u, "def_down") + int(u.get("power_def", 0)) + formation_def(u) + aid_def(u) + power_dyn(u, "def")
+
+
+# ------------------------------------------------------------
+# 必殺技のゲージ（10 回目）：味方の辞書 u.sp_gauge（0〜GAUGE_MAX）。満タンで必殺技が使え、使うと 0 に戻る。
+#   ウィッチ＝与えたダメージ（HP とブロックへの合計）、ナイト＝得たブロックで貯まる（Cont_Battle が数える）。
+#   カードの効果で増やす時は {"effect": "add_gauge", "eff_val": n, "to": "self"}（イベント {"target", "gauge": 増えた量}）
+# ------------------------------------------------------------
+const GAUGE_MAX := 50
+
+
+## u の必殺技ゲージを n 増やす（味方だけ。GAUGE_MAX で頭打ち）。実際に増えた量を返す
+static func add_gauge(u: Dictionary, n: int) -> int:
+	if str(u.get("side", "")) != "ally" or n <= 0:
+		return 0
+	var before := clampi(int(u.get("sp_gauge", 0)), 0, GAUGE_MAX)
+	u["sp_gauge"] = mini(GAUGE_MAX, before + n)
+	return int(u.sp_gauge) - before
+
+
+## 必殺技ゲージが満タンか
+static func gauge_full(u: Dictionary) -> bool:
+	return int(u.get("sp_gauge", 0)) >= GAUGE_MAX
 
 
 ## もう 1 人の味方のパワーで上がった防御力（鋼鉄化：味方全体）。u.aid_def = {渡した味方の id: n}

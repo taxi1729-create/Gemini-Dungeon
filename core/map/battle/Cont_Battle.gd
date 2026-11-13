@@ -85,6 +85,11 @@ var overlay: Control
 var info_panel: Control  # キャラをタップした時の情報
 var desc_bubble: GuiDescBubble  # 長押し・フリック中の説明（アイコン入り）
 var _desc_key = null  # 今吹き出しに出している操作
+var relic_bar: Control  # 所持レリックのアイコンの列（画面の左上、ログの帯の左。タップで効果の吹き出し）
+const RELIC_X := 30.0  # レリックのアイコンの中心 x
+const RELIC_Y0 := 30.0  # 1 つ目の中心 y
+const RELIC_STEP := 38.0  # 縦の間隔
+const RELIC_R := 17.0  # アイコンの半径（タップの判定は少し広め）
 var power_seen := {}  # char_id -> このターン手札に入ったパワーカード（効果は次の自分のターンまで）
 var _cur_action: Dictionary = {}  # 今 _perform している行動（撃破の repeat 用）
 var _cur_x := 1
@@ -467,8 +472,17 @@ func _update_intent_values() -> void:
 			tg = tg.filter(func(a): return a.get("side", "") == "ally")
 			tg.sort_custom(func(a, b): return int(a.get("lane", 0)) < int(b.get("lane", 0)))
 			for a in tg:
-				out.append({"lane": int(a.get("lane", 0)), "dmg": ActionController.calc_damage(e, act, a)})
+				out.append({"lane": int(a.get("lane", 0)), "dmg": ActionController.calc_damage(e, act, a), "uid": int(a.get("uid", -1))})
 		e["intent_dmg"] = out
+	# 味方の頭上：その味方に向かう予告の合計ダメージ（スタン中の敵は上で除いてある）。HP で受ける分は GuiUnit がブロックを引いて描く
+	var tot := {}
+	for e in CurrentStatus.enemies:
+		for d in e.get("intent_dmg", []):
+			var k := int((d as Dictionary).get("uid", -1))
+			tot[k] = int(tot.get(k, 0)) + int((d as Dictionary).get("dmg", 0))
+	for a in CurrentStatus.allies:
+		if views.has(a.uid):
+			(views[a.uid] as GuiUnit).incoming = int(tot.get(int(a.uid), -1)) if int(a.hp) > 0 else -1
 
 
 func _cell_rect(c: Vector2i) -> Rect2:
@@ -596,6 +610,7 @@ func _build_ui() -> void:
 
 	desc_bubble = GuiDescBubble.new()
 	ui.add_child(desc_bubble)
+	_build_relic_bar()
 	turn_done.connect(func(): boots_used.clear())  # 軽い靴の AP0 はターンごと
 	_refresh_all()
 

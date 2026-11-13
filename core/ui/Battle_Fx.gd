@@ -98,12 +98,41 @@ func _draw() -> void:
 	for it in intents:
 		if it.get("move_to") != null:
 			_draw_move_hint(it)
-	# 奥（画面上）の敵の矢印から描き、手前の矢印が上に重なるようにする
+	# 奥（画面上）の敵の矢印から描き、手前の矢印が上に重なるようにする。
+	# 矢印は常には出さず、敵ごとに少しずつずらして「点滅しながら敵から味方へ伸びる」を繰り返す（arrow_phase）
 	var order: Array = intents.duplicate()
 	order.sort_custom(func(a, b): return Vector2(a.from).y < Vector2(b.from).y)
+	var idx := 0
 	for it in order:
+		var ph := arrow_phase(_t, idx, ImageController.light_mode)
+		idx += 1
+		if float(ph.alpha) <= 0.01:
+			continue
 		for lane in it.lanes:
-			_draw_arrow(Vector2(it.from), int(lane))
+			_draw_arrow(Vector2(it.from), int(lane), float(ph.grow), float(ph.alpha))
+
+
+const ARROW_PERIOD := 2.0  # 矢印の 1 回の長さ（秒）：伸びる → 点滅 → 消える → 間
+const ARROW_STAGGER := 0.16  # 敵ごとの出だしのずれ（秒）。奥の敵から順に流れて見える
+
+
+## 予告矢印の今の様子：{"grow": 伸びた割合 0〜1, "alpha": 濃さ 0〜1}。idx は描く順（奥から）。
+## 通常：0〜0.4 で敵の足元から味方へ伸び（先頭が明るい）、0.4〜0.75 は伸びきって点滅、0.75〜0.9 で消え、残りは休み。
+## ライトモード：伸びる動きは省き、伸びきった矢印の点滅だけ（0.8 秒ごとに明暗。消えはしない）
+static func arrow_phase(t: float, idx: int, light: bool) -> Dictionary:
+	if light:
+		var on := fmod(t, 1.6) < 1.0
+		return {"grow": 1.0, "alpha": 1.0 if on else 0.35}
+	var p := fmod(t + ARROW_PERIOD * 8.0 - idx * ARROW_STAGGER, ARROW_PERIOD) / ARROW_PERIOD
+	if p < 0.4:
+		var g := p / 0.4
+		return {"grow": 1.0 - pow(1.0 - g, 2.0), "alpha": 1.0}
+	if p < 0.75:
+		var k := (p - 0.4) / 0.35
+		return {"grow": 1.0, "alpha": 0.55 + 0.45 * absf(cos(k * PI * 3.0))}  # 3 回点滅
+	if p < 0.9:
+		return {"grow": 1.0, "alpha": 1.0 - (p - 0.75) / 0.15}
+	return {"grow": 0.0, "alpha": 0.0}
 
 
 func _ring_pts(c: Vector2, rx: float, ry: float, n: int = 32) -> PackedVector2Array:
@@ -132,8 +161,8 @@ func _draw_target(p: Vector2, col: Color, n: int, depth: float = 1.0) -> void:
 		draw_polyline(_ring_pts(p, rx * (1.0 + 0.45 * k2), ry * (1.0 + 0.45 * k2)), Color(col, 0.7 * (1.0 - k2)), 3.0, true)
 
 
-## 地面の上を曲線で進む矢印（敵の足元 → 狙う側のターゲット）
-func _draw_arrow(from: Vector2, lane: int) -> void:
+## 地面の上を曲線で進む矢印（敵の足元 → 狙う側のターゲット）。grow＝伸びた割合（先は矢じり）、fa＝全体の濃さ
+func _draw_arrow(from: Vector2, lane: int, grow: float = 1.0, fa: float = 1.0) -> void:
 	var to: Vector2 = lanes[lane]
 	var col: Color = LANE_COL[lane]
 	var d := to - from
@@ -155,18 +184,38 @@ func _draw_arrow(from: Vector2, lane: int) -> void:
 		var b := (q - to) / (TARGET_R + Vector2(4, 2))
 		if a.length() > 1.0 and b.length() > 1.0:
 			path.append(q)
+	# 伸びている途中：道のりの grow の所までで切る（先端は線の途中を補間）
+	if grow < 0.999 and path.size() >= 2:
+		var full := 0.0
+		for i in range(1, path.size()):
+			full += path[i].distance_to(path[i - 1])
+		var want := full * clampf(grow, 0.0, 1.0)
+		var cut := PackedVector2Array([path[0]])
+		var acc := 0.0
+		for i in range(1, path.size()):
+			var sl := path[i].distance_to(path[i - 1])
+			if acc + sl >= want:
+				cut.append(path[i - 1].lerp(path[i], clampf((want - acc) / maxf(sl, 0.001), 0.0, 1.0)))
+				break
+			acc += sl
+			cut.append(path[i])
+		path = cut
 	if path.size() < 3:
+		# 伸び始め：足元の印だけ
+		draw_polyline(_ring_pts(from, 26, 9, 20), Color(col, 0.75 * fa), 2.5, true)
 		return
 	var n := path.size()
-	var pulse := 0.8 + 0.2 * sin(_t * 6.0)
 	var cols := PackedColorArray()
 	var outs := PackedColorArray()
 	for i in n:
 		var k := float(i) / (n - 1)
-		cols.append(Color(col, (0.25 + 0.6 * k) * pulse))
-		outs.append(Color(0, 0, 0, 0.15 + 0.35 * k))
+		cols.append(Color(col, (0.25 + 0.65 * k) * fa))
+		outs.append(Color(0, 0, 0, (0.15 + 0.35 * k) * fa))
 	draw_polyline_colors(path, outs, 11.0, true)
 	draw_polyline_colors(path, cols, 6.0, true)
+	if grow < 0.999:
+		# 伸びている先端の光
+		draw_circle(path[n - 1], 7.0, Color(PAPER, 0.8 * fa))
 	# 先へ流れる白い山形（進む向きを示す）
 	var lens := PackedFloat32Array([0.0])
 	for i in range(1, n):
@@ -186,7 +235,7 @@ func _draw_arrow(from: Vector2, lane: int) -> void:
 		var nn := Vector2(-tg.y, tg.x)
 		var fade := clampf(sd / 50.0, 0.0, 1.0) * clampf((total - 30.0 - sd) / 30.0, 0.0, 1.0)
 		var w := 5.0
-		draw_polyline(PackedVector2Array([pt - tg * 4 + nn * w, pt + tg * 3, pt - tg * 4 - nn * w]), Color(PAPER, 0.85 * fade), 2.5, true)
+		draw_polyline(PackedVector2Array([pt - tg * 4 + nn * w, pt + tg * 3, pt - tg * 4 - nn * w]), Color(PAPER, 0.85 * fade * fa), 2.5, true)
 		sd += gap
 	# 矢じり（ターゲットの縁に刺さる）
 	var tip := path[n - 1]
@@ -194,11 +243,11 @@ func _draw_arrow(from: Vector2, lane: int) -> void:
 	var nn2 := Vector2(-tg2.y, tg2.x)
 	var head := PackedVector2Array([tip + tg2 * 6, tip - tg2 * 22 + nn2 * 14, tip - tg2 * 15, tip - tg2 * 22 - nn2 * 14])
 	var outline := PackedVector2Array([tip + tg2 * 10, tip - tg2 * 25 + nn2 * 18, tip - tg2 * 17, tip - tg2 * 25 - nn2 * 18])
-	draw_colored_polygon(outline, Color(0, 0, 0, 0.55))
-	draw_colored_polygon(head, Color(col, 0.95))
-	draw_polyline(PackedVector2Array([tip + tg2 * 6, tip - tg2 * 22 + nn2 * 14]), Color(PAPER, 0.9), 2.0, true)
+	draw_colored_polygon(outline, Color(0, 0, 0, 0.55 * fa))
+	draw_colored_polygon(head, Color(col, 0.95 * fa))
+	draw_polyline(PackedVector2Array([tip + tg2 * 6, tip - tg2 * 22 + nn2 * 14]), Color(PAPER, 0.9 * fa), 2.0, true)
 	# 足元の印
-	draw_polyline(_ring_pts(from, 26, 9, 20), Color(col, 0.75), 2.5, true)
+	draw_polyline(_ring_pts(from, 26, 9, 20), Color(col, 0.75 * fa), 2.5, true)
 
 
 ## 回り込む敵：今の位置から移動先への点線
