@@ -191,7 +191,7 @@ const ALLY_CARDS = {
 			"bonus_yoyaku": {"effects": [{"effect": "add_ap", "eff_val": 2, "to": "self"}]}},
 		"w_chant_stance": {"no": "W055", "owner": "witch", "name": "詠唱の構え", "type": "skill", "target": "self", "art": "star", "ap": 0, "keywords": ["yoyaku"],
 			"bonus_yoyaku": {"effects": [{"effect": "add_status", "status": "chant", "eff_val": 6, "to": "self"}]}},
-		"w_meditate": {"no": "W056", "owner": "witch", "name": "瞑想", "type": "skill", "target": "self", "art": "c_meditate", "ap": 0,
+		"w_meditate": {"no": "W056", "owner": "witch", "name": "黙想", "type": "skill", "target": "self", "art": "c_meditate", "ap": 0,
 			"keywords": ["saigo"], "saigo_only": true,
 			"bonus_saigo": {"effects": [{"effect": "add_ap", "eff_val": 2, "to": "self"}]}},
 		"w_wind_dance": {"no": "W057", "owner": "witch", "name": "風の舞", "type": "skill", "target": "self", "art": "formation", "ap": 1, "keywords": ["sokuou"],
