@@ -3,6 +3,10 @@ extends Node2D
 ## 9 回目（D）：選択肢をフリック入力（GuiFlickPad）に。選択肢 3 つ＝8・4・6、2 つ＝4・6、1 つ＝8。
 ## 右の列：デッキ一覧／ステータス。結果が出たら確定＝先へ進む（マップへ）。
 ## 「1 人の最大HP+5」はナイト／ウィッチを 4・6 で選び直す（確定＝戻る）。
+## 10 回目（D）：イベントを 30 個に増やし、今の階（CurrentStatus.stage）のイベントだけ出す（EventList.ids_for_floor）。
+##   「戦闘。勝てば〜」は CurrentStatus.event_reward に報酬を入れて戦闘へ（結果画面のその他の報酬に出る）。
+##   カードを 2・3 枚から選ぶ選択肢は _ask_pick（4・6 ／ 8・4・6 にカード。確定＝戻る）。
+##   ゴールドを払う選択肢は、足りなければ選べない（暗くする）。
 
 const CHOICE_KEYS := {1: [8], 2: [4, 6], 3: [8, 4, 6]}
 
@@ -14,6 +18,9 @@ var icon_w: GuiWidget
 var choices: Array = []  # [[id, 文], ...]
 var finished := false  # 結果が出た
 var _owner_cb := Callable()  # 「どちらの最大HPを上げますか」の選択中
+var _pick_cb := Callable()  # カードを選ぶ画面（_ask_pick）の選択中
+var _pick_keys: Array = []
+var _meta := {}  # 選択肢 id → {"short", "icon"}（EventList の 3・4 番目の要素）
 
 
 func _ready() -> void:
@@ -24,7 +31,10 @@ func _ready() -> void:
 	# 再読み込みで同じイベントに戻れるよう、選んだイベントをセーブに残す
 	ev_id = str(SaveData.screen.get("event_id", ""))
 	if not EventList.DATA.has(ev_id):
-		ev_id = EventList.DATA.keys().pick_random()
+		var pool := EventList.ids_for_floor(CurrentStatus.stage)
+		if pool.is_empty():
+			pool = EventList.DATA.keys()
+		ev_id = str(pool.pick_random())
 		SaveData.screen["event_id"] = ev_id
 		SaveData.save("event")
 	var ev: Dictionary = EventList.DATA[ev_id]
@@ -69,6 +79,8 @@ func _ready() -> void:
 		if c[0] == "badge":
 			label = label % BadgeList.DATA[_event_badge()].name
 		choices.append([str(c[0]), label])
+		if c.size() >= 4:
+			_meta[str(c[0])] = {"short": str(c[2]), "icon": str(c[3])}
 	_show_choices()
 
 
@@ -80,8 +92,13 @@ func _show_choices() -> void:
 	var keys: Array = CHOICE_KEYS.get(clampi(choices.size(), 1, 3), [8])
 	for i in mini(choices.size(), keys.size()):
 		var id: String = choices[i][0]
-		pad.set_cell(keys[i], {"title": _short_title(id, choices[i][1]), "icon": _choice_icon(id), "accent": _choice_col(id),
-				"desc": str(choices[i][1])})
+		var info := {"title": _short_title(id, choices[i][1]), "icon": _choice_icon(id), "accent": _choice_col(id),
+				"desc": str(choices[i][1])}
+		var why := choice_block(id)
+		if why != "":
+			info["enabled"] = false
+			info["block_msg"] = why
+		pad.set_cell(keys[i], info)
 	pad.queue_redraw()
 
 
@@ -94,8 +111,21 @@ func key_of(choice_id: String):
 	return null
 
 
+## 選択肢を今選べないわけ（"" ＝選べる）。ゴールドが足りない・レリックが残っていない
+func choice_block(id: String) -> String:
+	var cost := int(GOLD_COST.get(id, 0))
+	if cost > 0 and Inventory.gold < cost:
+		return "ゴールドが足りない（%dゴールド必要）" % cost
+	return ""
+
+
+const GOLD_COST := {"shield_polish": 30, "star_map": 80}
+
+
 ## 丸いボタンに入る短い名前
 func _short_title(id: String, label: String) -> String:
+	if _meta.has(id):
+		return str(_meta[id].short)
 	match id:
 		"gold40": return "ゴールド40"
 		"item": return "道具"
@@ -112,6 +142,8 @@ func _short_title(id: String, label: String) -> String:
 
 
 func _choice_icon(id: String) -> String:
+	if _meta.has(id):
+		return str(_meta[id].icon)
 	match id:
 		"gold40": return "coin"
 		"item": return "potion"
@@ -128,7 +160,7 @@ func _choice_icon(id: String) -> String:
 func _choice_col(id: String) -> Color:
 	match id:
 		"leave": return ImageController.GLASS.stone_gray
-		"fight", "altar": return ImageController.COL.red
+		"fight", "altar", "ascetic_fight", "mirror_fight", "prisoner_help", "bell_check", "door_force": return ImageController.COL.red
 	return ImageController.COL.gold
 
 
@@ -143,11 +175,21 @@ func _on_chosen(key) -> void:
 		"ok":
 			if finished:
 				UiSystem.goto("map")
+			elif _pick_cb.is_valid():
+				_pick_cb = Callable()
+				_show_choices()  # 戻る
 			elif _owner_cb.is_valid():
 				_owner_cb = Callable()
 				_show_choices()  # 戻る
 			return
 	if finished:
+		return
+	if _pick_cb.is_valid():
+		var pi := _pick_keys.find(key)
+		if pi >= 0:
+			var pcb := _pick_cb
+			_pick_cb = Callable()
+			pcb.call(pi)
 		return
 	if _owner_cb.is_valid():
 		if key == 4 or key == 6:
@@ -157,7 +199,7 @@ func _on_chosen(key) -> void:
 		return
 	var keys: Array = CHOICE_KEYS.get(clampi(choices.size(), 1, 3), [8])
 	var i := keys.find(key)
-	if i >= 0 and i < choices.size():
+	if i >= 0 and i < choices.size() and choice_block(str(choices[i][0])) == "":
 		_choose(str(choices[i][0]))
 
 
@@ -230,6 +272,8 @@ func _choose(id: String) -> void:
 					_done("バッジを受け取らずに立ち去った"))
 		"leave":
 			_done("その場を後にした")
+		_:
+			_choose_new(id)
 
 
 ## イベント「旅の細工師」のバッジ（再読み込みで変わらないようセーブに残す）
@@ -262,4 +306,314 @@ func _done(msg: String) -> void:
 		pad.clear_cell(k)
 	pad.set_cell("ok", {"title": "先へ進む", "icon": "enter", "accent": ImageController.COL.red, "desc": "マップに戻って先へ進む"})
 	pad.hint = "確定で先へ進む"
+	pad.queue_redraw()
+
+
+# ============================================================
+# 10 回目（D）：新しいイベントの選択肢（数値は仮）
+# ============================================================
+func _choose_new(id: String) -> void:
+	var CS = CurrentStatus
+	var kn: Dictionary = CS.ally("knight")
+	var wt: Dictionary = CS.ally("witch")
+	match id:
+		# ----- 1 階 -----
+		"cart_item":
+			_give_items(1, "荷車から")
+		"cart_carry", "lr_hurry":
+			Inventory.gold += 50
+			_done("ゴールドを50手に入れた")
+		"water_drink":
+			CS.heal_pct_all(20)
+			_done("冷たい水で元気が出た（全員HP20%回復）")
+		"water_draw":
+			if Inventory.add_item("herb"):
+				_done("薬草を手に入れた")
+			else:
+				_done("薬草を作ったが、アイテムがいっぱい（%dつまで）" % Inventory.ITEM_MAX)
+		"shield_pick":
+			_give_card(_card_of("common", "knight", "skill"), "")
+		"shield_polish":
+			Inventory.gold -= 30
+			_give_badge("guard")
+		"book_read":
+			CS.change_max_hp(wt, -3)
+			_give_card(_card_of("rare", "witch"), "ウィッチの最大HP-3。")
+		"book_burn":
+			Inventory.gold += 30
+			_done("燃え残りの金具を売って30ゴールド")
+		"ascetic_fight":
+			_fight("battle", {"kind": "ev_card", "id": _card_of("rare", "")})
+		"ascetic_learn", "choir_listen", "ghost_listen", "font_dip":
+			_give_badge(_event_badge())
+		"trap_run":
+			CS.damage_all(6)
+			Inventory.gold += 40
+			_done("罠をかわしきれず全員HP-6。40ゴールドを拾った")
+		"trap_disarm", "lib_copy":
+			_remove_cards(1)
+		"fire_rest":
+			CS.heal_pct_all(10)
+			_done("少し休んだ（全員HP10%回復）")
+		"fire_ash":
+			var f1: String = ["meat", "mush", "fish"].pick_random()
+			Inventory.add_food(f1, 2)
+			_done("%s（G2）を見つけた" % FoodList.DATA[f1].name)
+		# ----- 2 階 -----
+		"choir_sing":
+			for a in CS.allies:
+				CS.change_max_hp(a, 4)
+			_done("声の無い歌に心が満ちた（全員の最大HP+4）")
+		"mirror_fight":
+			_fight("battle", {"kind": "dup", "id": ""})
+		"mirror_break":
+			CS.damage_all(8)
+			_give_relic("鏡の破片で全員HP-8。")
+		"prisoner_help":
+			_fight("battle", {"kind": "relic", "id": RelicList.random_id(Inventory.relics)})
+		"prisoner_key":
+			Inventory.gold += 50
+			_give_items(2, "50ゴールドと、")
+		"lib_search":
+			var a1 := _card_of("rare", "")
+			var a2 := _card_of("rare", "", "", [a1])
+			_ask_pick([a1, a2], func(i: int):
+				var cid: String = [a1, a2][i]
+				_give_card(cid, ""))
+		"statue_sword":
+			CS.add_floor_fx("knight_atk", 1)
+			_done("剣に力が宿った（この階の間、ナイトの攻撃力+1）")
+		"statue_staff":
+			CS.add_floor_fx("witch_ap", 1)
+			_done("杖に魔力が宿った（この階の間、ウィッチの毎ターンAP+1）")
+		"ghost_pray":
+			CS.heal_all(15)
+			_done("亡霊は安らかに消えた（全員HP+15）")
+		"font_drink":
+			for a in CS.allies:
+				CS.change_max_hp(a, -5)
+				a["hp"] = int(a.max_hp)
+			_done("聖水で傷が消えた（全員HP全回復・最大HP-5）")
+		"gamble_bet":
+			if randf() < 0.5:
+				Inventory.gold *= 2
+				_done("当たり！ 所持金が2倍（%dゴールド）" % Inventory.gold)
+			else:
+				Inventory.gold = int(Inventory.gold / 2.0)
+				_done("外れ… 所持金が半分（%dゴールド）" % Inventory.gold)
+		"gamble_watch":
+			Inventory.gold += 10
+			_done("見物料のおこぼれで10ゴールド")
+		"col_jump":
+			kn["hp"] = maxi(1, int(kn.hp) - 10)
+			_give_treasure("ナイトHP-10。")
+		"col_around":
+			_done("遠回りして先へ進んだ")
+		"col_dig":
+			var got: Array = []
+			for i in 2:
+				var f2: String = ["meat", "mush", "fish"].pick_random()
+				Inventory.add_food(f2, 2)
+				got.append("%s（G2）" % FoodList.DATA[f2].name)
+			_done("%sを見つけた" % "・".join(got))
+		"portrait_blue":
+			CS.add_floor_fx("left_block", 2)
+			_done("青い光に包まれた（この階の間、左のキャラはターン開始時ブロック+2）")
+		"portrait_red":
+			CS.add_floor_fx("right_atk", 1)
+			_done("赤い光に包まれた（この階の間、右のキャラの攻撃力+1）")
+		# ----- 3 階 -----
+		"glass_blue":
+			for a in CS.allies:
+				CS.change_max_hp(a, 5)
+			_done("青の光を浴びた（全員の最大HP+5）")
+		"glass_red":
+			for a in CS.allies:
+				a["atk"] = int(a.get("atk", 0)) + 1
+			CS.damage_all(10)
+			_done("赤の光を浴びた（全員の攻撃力+1・全員HP-10）")
+		"conf_tell":
+			_remove_cards(2)
+		"conf_pray":
+			CS.heal_pct_all(30)
+			_done("静かに祈った（全員HP30%回復）")
+		"bell_ring":
+			CS.next_battle["ap"] = int(CS.next_battle.get("ap", 0)) + 3
+			_done("鐘の音が響いた（次の戦闘で最初のAP+3）")
+		"bell_check":
+			_fight("elite", {"kind": "relic", "id": RelicList.random_id(Inventory.relics)})
+		"rel_open":
+			_give_relic("")
+		"rel_bless":
+			_give_card(_card_of("super_rare", ""), "")
+		"feather_pick":
+			var ids: Array = []
+			for i in 3:
+				ids.append(_card_of("super_rare", "", "", ids))
+			_ask_pick(ids, func(i: int):
+				for a in CS.allies:
+					CS.change_max_hp(a, -8)
+				_give_card(str(ids[i]), "全員の最大HP-8。"))
+		"feather_burn":
+			for a in CS.allies:
+				a["hp"] = int(a.max_hp)
+			_done("羽の炎が傷を癒やした（全員HP全回復）")
+		"star_read":
+			CS.next_battle["block"] = int(CS.next_battle.get("block", 0)) + 15
+			_done("星が守りを告げた（次の戦闘の最初のラウンドに全員ブロック+15）")
+		"star_map":
+			Inventory.gold -= 80
+			_give_relic("80ゴールドで星図を買った。")
+		"door_force":
+			_fight("battle", {"kind": "ev_card", "id": _card_of("super_rare", "")})
+		"door_key":
+			Inventory.gold += 100
+			_done("鍵は見つからなかったが、100ゴールドを見つけた")
+		"hymn_sing":
+			CS.next_battle["sokuou_all"] = 1
+			_done("聖歌が満ちた（次の戦闘の間、即応が常に成立）")
+		"hymn_take":
+			if Inventory.add_item("holy_water"):
+				_done("%sを手に入れた" % Item_List.DATA["holy_water"].name)
+			else:
+				_done("%sを見つけたが、アイテムがいっぱい（%dつまで）" % [Item_List.DATA["holy_water"].name, Inventory.ITEM_MAX])
+		"twin_knight":
+			kn["hp"] = maxi(1, int(kn.hp) - 20)
+			_give_relic("ナイトHP-20。")
+		"twin_witch":
+			wt["hp"] = maxi(1, int(wt.hp) - 15)
+			_give_relic("ウィッチHP-15。")
+		"lr_cook":
+			finished = true
+			SaveData.save("rest")  # 再読み込みしたら休憩所から
+			UiSystem.goto("rest")
+		"lr_sleep":
+			CS.heal_pct_all(40)
+			_done("ぐっすり眠った（全員HP40%回復）")
+
+
+## ランダムなカード ID（tier＝common/rare/super_rare。owner・type を指定するとそれだけ。except は出さない）
+func _card_of(tier: String, owner: String, type: String = "", except: Array = []) -> String:
+	var src: Dictionary = ActionList.ALLY_CARDS[tier]
+	var keys: Array = src.keys().filter(func(k): return (owner == "" or str(src[k].owner) == owner) \
+			and (type == "" or str(src[k].type) == type) and not except.has(k))
+	if keys.is_empty():
+		keys = src.keys().filter(func(k): return owner == "" or str(src[k].owner) == owner)
+	return str(keys.pick_random())
+
+
+func _give_card(card_id: String, pre: String) -> void:
+	pad.locked = true
+	var c := ActionList.make_card(card_id)
+	GuiAcquire.card(ui, card_id, func(_ok: bool):
+		pad.locked = false
+		_done("%s%s を手に入れた（%sのデッキに追加）" % [pre, c.get("name", ""), InitAllyStatus.DATA[str(c.owner)].name]))
+
+
+func _give_badge(bid: String) -> void:
+	pad.locked = true
+	GuiAcquire.badge(ui, bid, func(ok: bool):
+		pad.locked = false
+		if ok:
+			_done("%sを付けた" % BadgeList.DATA[bid].name)
+		else:
+			_done("バッジを付けずに立ち去った"))
+
+
+## レリック（持っていないものから。全部持っていれば 50 ゴールド）
+func _give_relic(pre: String) -> void:
+	var rid := RelicList.random_id(Inventory.relics)
+	if rid == "":
+		Inventory.gold += 50
+		_done("%sレリックは見つからず、50ゴールドを手に入れた" % pre)
+		return
+	pad.locked = true
+	GuiAcquire.relic(ui, rid, func(got: bool):
+		pad.locked = false
+		_done("%s%s" % [pre, ("%sを手に入れた" % RelicList.DATA[rid].name) if got else "レリックを諦めた"]))
+
+
+func _give_items(n: int, pre: String) -> void:
+	var names: Array = []
+	var lost: Array = []
+	for i in n:
+		var it: String = Item_List.random_id()
+		if Inventory.add_item(it):
+			names.append(str(Item_List.DATA[it].name))
+		else:
+			lost.append(str(Item_List.DATA[it].name))
+	var msg := pre
+	if not names.is_empty():
+		msg += "%sを手に入れた" % "・".join(names)
+	if not lost.is_empty():
+		msg += ("　" if not names.is_empty() else "") + "%sはアイテムがいっぱいで持てない" % "・".join(lost)
+	_done(msg)
+
+
+## 宝箱の中身 1 つ（宝箱のマスと同じ確率）
+func _give_treasure(pre: String) -> void:
+	var ct: Dictionary = TREASURE.roll()
+	match str(ct.kind):
+		"relic":
+			pad.locked = true
+			GuiAcquire.relic(ui, str(ct.id), func(got: bool):
+				pad.locked = false
+				_done("%s%s" % [pre, ("%sを手に入れた" % RelicList.DATA[ct.id].name) if got else "レリックを諦めた"]))
+		"badge":
+			_give_badge(str(ct.id))
+		"gold":
+			Inventory.gold += int(ct.gold)
+			_done("%s%dゴールドを手に入れた" % [pre, int(ct.gold)])
+		_:
+			_give_card(str(ct.id), pre)
+
+
+const TREASURE = preload("res://index/core/map/treasure/Cont_Treasure.gd")
+
+
+## カードを n 枚削除する（1 枚ずつデッキ一覧で選ぶ。やめたらそこまで）
+func _remove_cards(n: int, removed: Array = []) -> void:
+	pad.locked = true
+	var v := GuiDeckView.open(ui, "削除するカードを選ぶ（あと%d枚）" % (n - removed.size()), func(char_id, card_id):
+		CurrentDeck.remove_card(char_id, card_id)
+		removed.append(ActionList.make_card(card_id).name))
+	# 選んだ時は closed の後に選んだ処理が呼ばれるので、判定は次のフレームで
+	v.closed.connect(func(): _after_remove.call_deferred(n, removed))
+
+
+func _after_remove(n: int, removed: Array) -> void:
+	if not is_inside_tree():
+		return
+	pad.locked = false
+	if removed.size() < n and removed.size() > 0:
+		_remove_cards(n, removed)
+	elif removed.is_empty():
+		_done("カードを削除せずに立ち去った")
+	else:
+		_done("%s を削除した" % "・".join(removed))
+
+
+## 戦闘へ。勝ったら reward（{"kind": "ev_card"/"relic"/"dup", "id"}）が結果画面のその他の報酬に出る
+func _fight(kind: String, reward: Dictionary) -> void:
+	finished = true
+	CurrentStatus.battle_kind = kind
+	CurrentStatus.gold_multiplier = 1
+	CurrentStatus.event_reward = reward if not (str(reward.kind) == "relic" and str(reward.id) == "") else {}
+	SaveData.screen = {}
+	SaveData.save("battle")  # 再読み込みしたらこの戦闘から
+	UiSystem.goto("battle")
+
+
+## カードを 2〜3 枚から 1 枚選ぶ画面（2 枚＝4・6、3 枚＝8・4・6）。確定＝戻る。cb(i)
+func _ask_pick(ids: Array, cb: Callable) -> void:
+	_pick_cb = cb
+	_pick_keys = CHOICE_KEYS.get(clampi(ids.size(), 1, 3), [8])
+	for k in [8, 4, 6]:
+		pad.clear_cell(k)
+	for i in mini(ids.size(), _pick_keys.size()):
+		var c := ActionList.make_card(str(ids[i]))
+		pad.set_cell(_pick_keys[i], {"card": c, "title": str(c.get("name", "")),
+				"desc": DeckController.card_text(CurrentStatus.ally(str(c.owner)), c)})
+	pad.set_cell("ok", {"title": "戻る", "icon": "enter", "accent": ImageController.GLASS.stone_gray, "desc": "選択肢に戻る"})
+	pad.flash("カードを選ぶ", "%d枚から1枚を選ぶ" % ids.size())
 	pad.queue_redraw()

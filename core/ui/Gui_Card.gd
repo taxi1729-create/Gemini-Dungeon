@@ -321,6 +321,15 @@ static func summary(c: Dictionary) -> String:
 		parts.append("毒の分")
 	elif hl != "" and int(c.get("power", 0)) > 0:
 		parts.append("%d%s" % [int(c.get("power_eff", c.power)), hl])
+	# D（10 回目の新カード）：盾打ち・炎刃・侵食の針・灰燼斬
+	if c.get("power_half_block", false):
+		parts.append("盾の半分")
+	if c.get("if_self_status") is Dictionary:
+		parts.append("自%s+%d" % [str(StatusEffectList.DATA.get(str(c.if_self_status.get("status", "")), {}).get("short", "")), int(c.if_self_status.get("power", 0))])
+	if c.get("vs_status") is Dictionary:
+		parts.append("%s敵+%d" % [str(StatusEffectList.DATA.get(str(c.vs_status.get("status", "")), {}).get("short", "")), int(c.vs_status.get("power", 0))])
+	if int(c.get("per_exhaust", 0)) > 0:
+		parts.append("廃棄1枚+%d" % int(c.per_exhaust))
 	var aph = c.get("ap_hits")
 	if aph is Dictionary:
 		parts.append("AP%d+で×%d" % [int(aph.get("min", 0)), int(aph.get("hits", 1))])
@@ -368,6 +377,9 @@ static func _eff_summary(effs: Array) -> Array:
 			"rank_to": parts.append("前衛へ" if int(e.get("eff_val", 1)) == 0 else "後衛へ")
 			"cleanse": parts.append("デバフ解除")
 			"repeat": parts.append("再発動")
+			"shield_per_status": parts.append("火傷1で盾%d" % int(e.eff_val))  # D：熱き鼓動
+			"dmg_half_block": parts.append("盾半分返し")  # D：盾の返し
+			"add_gauge": parts.append("ゲージ+%d" % int(e.eff_val))  # D：闘気溜め
 			"add_status":
 				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
 				var only_name: bool = e.status in ["taunt", "fire_guard", "stun", "no_heal"] or st.get("label", "") == "none"
@@ -389,7 +401,7 @@ static func _power_summary(c: Dictionary) -> String:
 		return "味方攻+%d" % int(pe.aid_atk)
 	match str(pe.get("kind", "")):
 		"burn_atk": return "攻+火傷"
-		"last_stand": return "HP減で攻速+"
+		"last_stand": return "HP減で攻防+"
 		"on_plain_card": return "札無しで全%d" % int(pe.get("dmg", 0))
 		"on_burn": return "消費廃棄で全%d" % int(pe.get("dmg", 0))
 		"on_attack_poison": return "攻撃で毒%d" % int(pe.get("eff_val", 1))

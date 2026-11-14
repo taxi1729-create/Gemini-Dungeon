@@ -49,7 +49,7 @@ const GRID_COLS := 5
 const COL_X := [0.0, 104.0, 272.0, 440.0, 608.0, 720.0]  # 列の左端（最後は右端）
 const GRID_TOP := 764.0
 const ROW_H := 172.0
-const SLOT_NUM := [8, 4, 2, 6]  # 手札の枠 → テンキー（手札は 4 枚。1 は陣形変更、7 は入替）
+const SLOT_NUM := [8, 4, 2, 6, 9, 3]  # 手札の欄 → テンキー（4 枠＋空き欄 9・3。1 は陣形変更、7 は入替）
 const DIR8 := [Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1)]
 const DEADZONE := 48.0
 const CHARGE_DELAY := 0.12
@@ -75,10 +75,9 @@ var first_turn := {}
 var boots_used := {}  # char_id -> このターン「軽い靴」の AP0 を使ったか（ターン終了で空にする）
 var last_swap_round := -1  # 最後に左右の入替（7・スワップ等）をしたラウンド（即応の判定用）
 
-var hand_cards: Array = []  # GuiCard ×5
-var hold_card: GuiCard
+var hand_cards: Array = []  # GuiCard ×6（SLOT_NUM の順）
 var item_slots: Array = []  # GuiItemSlot ×3
-var btn := {}  # swap hold unique special deck status end -> GuiSysButton
+var btn := {}  # swap formation free9 free3 special deck status end -> GuiSysButton（free9・free3 は空き欄の下地）
 var order_bar: GuiWidget
 var log_label: Label
 var overlay: Control
@@ -90,7 +89,6 @@ const RELIC_X := 30.0  # レリックのアイコンの中心 x
 const RELIC_Y0 := 30.0  # 1 つ目の中心 y
 const RELIC_STEP := 38.0  # 縦の間隔
 const RELIC_R := 17.0  # アイコンの半径（タップの判定は少し広め）
-var power_seen := {}  # char_id -> このターン手札に入ったパワーカード（効果は次の自分のターンまで）
 var _cur_action: Dictionary = {}  # 今 _perform している行動（撃破の repeat 用）
 var _cur_x := 1
 var whet_used := {}  # char_id -> このターン「砥石」を使ったか（各ターン最初のアタックカードだけ）
@@ -110,7 +108,6 @@ var g_start := Vector2.ZERO
 var g_origin := Vector2i(1, 1)  # 指を置いたマス（列, 行）
 var g_time := 0.0
 var g_cur = null  # 今の指先が指すマスの中身（番号 / キー名 / null）
-var g_first_card := 0  # 最初に弾いたカードの番号（保留の対象）。0 = まだ
 var g_moved := false
 var g_cut_in := false
 var g_charge_target = null  # 溜めている操作（マスの中身）。変わったら溜め直し
@@ -175,11 +172,11 @@ func _process(delta: float) -> void:
 	if c > 0 and target is int and target == 5 and not g_moved and g_cur == null:
 		g_cur = 5
 		_preview_action(5)
-	# カットインは必殺技だけ。AP が足りない時は出さない
+	# カットインは必殺技だけ。ゲージが満タンでない時は出さない
 	if c >= 1.0 and target is int and target == 5 and not g_cut_in:
 		g_cut_in = true
 		var sp: Dictionary = specials[current.id]
-		if int(current.ap) >= _special_cost(sp) and _special_block(sp) == "":
+		if _special_block(sp) == "":
 			fx.cut_in(current.id, sp.name)
 
 
@@ -202,9 +199,9 @@ func _widget_of(target):
 		5: return btn.special
 		7: return btn.swap
 		1: return btn.formation
-		3: return btn.unique
-		9: return hold_card if hold_card.visible else btn.hold
 	var slot := SLOT_NUM.find(target)
+	if slot >= 0 and not hand_cards[slot].visible and btn.has("free%d" % target):
+		return btn["free%d" % target]  # 空き欄（9・3）にカードが無い時は下地
 	return hand_cards[slot] if slot >= 0 else null
 
 
@@ -247,6 +244,8 @@ func _setup_units() -> void:
 		deck_controllers[a.id] = dc
 		first_turn[a.id] = true
 		specials[a.id] = ActionList.special(a.id, CurrentStatus.special_choice.get(a.id, ""))
+		a["sp_gauge"] = 0  # 必殺技ゲージ（10 回目。途中のセーブがあれば _restore_battle で戻る）
+		a["powers"] = []  # 使ったパワー（戦闘終了まで）
 
 	var floor_no := maxi(0, CurrentStatus.current_floor)
 	var area := CurrentStatus.current_area_id
@@ -563,6 +562,11 @@ func _build_ui() -> void:
 	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(pad)
 
+	# 空き欄（9・3）の下地：カードが無い時に「空き」と出す（カードはこの上に重なる）
+	for n in [9, 3]:
+		_add_btn("free%d" % n, "空き欄", "cards", Color("8f9bb0"), n, Vector2(104, 104))
+		btn["free%d" % n].subtitle = "ドローで入る"
+		btn["free%d" % n].dimmed = true
 	for i in SLOT_NUM.size():
 		var c := GuiCard.new()
 		c.interactive = false
@@ -575,19 +579,9 @@ func _build_ui() -> void:
 	_add_btn("swap", "入替", "swap", Color("8fc0ea"), 7)
 	_add_btn("formation", "陣形変更", "formation", Color("8fe0b0"), 1)
 	btn.formation.ap_cost = 1
-	_add_btn("hold", "保留", "pin", Color("e8c26a"), 9)
-	_add_btn("unique", "固有", "star", Color("b88cff"), 3)
 	_add_btn("special", "必殺", "burst", Color("ffb03a"), 5, Vector2(132, 132))
+	btn.special.gauge_max = ActionController.GAUGE_MAX  # AP の代わりにゲージを描く
 	btn.swap.ap_cost = 1
-	btn.hold.subtitle = "AP 0"
-	hold_card = GuiCard.new()
-	hold_card.interactive = false
-	hold_card.base_scale = 0.86
-	hold_card.scale = Vector2(0.86, 0.86)
-	hold_card.position = _cell_center(_cell_of(9)) - GuiCard.SIZE / 2
-	hold_card.label_hint = "9"
-	hold_card.visible = false
-	pad.add_child(hold_card)
 
 	# アイテム欄（テンキー 7・4・1 の左。上から 1 つ目・2 つ目・3 つ目）
 	for i in Inventory.ITEM_MAX:
@@ -738,13 +732,7 @@ func _battle_loop() -> void:
 			resume_at = -1
 		else:
 			round_no += 1
-			action_order = (CurrentStatus.allies + CurrentStatus.enemies).filter(func(u): return u.hp > 0)
-			action_order.sort_custom(func(a, b):
-				var sa := ActionController.get_spd(a)
-				var sb := ActionController.get_spd(b)
-				if sa == sb:
-					return a.side == "ally" and b.side != "ally"
-				return sa > sb)
+			action_order = round_order(CurrentStatus.allies, CurrentStatus.enemies)
 			_boss_round_start()  # ボスレリック（星詠みの砂時計・騎士王の角笛）：追加ターンを行動順の末尾へ
 		order_bar.units = action_order
 		for idx in range(start, action_order.size()):
@@ -758,6 +746,35 @@ func _battle_loop() -> void:
 				return
 		StatusController.decrease_all_durations(CurrentStatus.allies + CurrentStatus.enemies)
 		_refresh_all()
+
+
+## ラウンドの行動順（10 回目。素早さは無い）：味方（ウィッチ → ナイト。倒れていれば飛ばす）のあと、
+## 敵を味方に近い順（前衛の段 → 後衛の段）、同じ段は画面の左から（A-2→A-3→B-3→B-2→A-1→C→B-1）
+static func round_order(allies: Array, enemies: Array) -> Array:
+	var out: Array = []
+	for id in ["witch", "knight"]:
+		for a in allies:
+			if str(a.get("id", "")) == id and int(a.hp) > 0:
+				out.append(a)
+	for a in allies:
+		if not out.has(a) and int(a.hp) > 0 and not str(a.get("id", "")) in ["witch", "knight"]:
+			out.append(a)
+	var es: Array = enemies.filter(func(e): return int(e.hp) > 0)
+	es.sort_custom(func(a, b):
+		var ra := int(a.get("row", 0))
+		var rb := int(b.get("row", 0))
+		if ra != rb:
+			return ra < rb  # row 0 ＝ 前衛が先
+		return _enemy_x(a) < _enemy_x(b))
+	return out + es
+
+
+## 敵の左右の並び（位置名の列。無ければ画面の x）
+static func _enemy_x(e: Dictionary) -> float:
+	var slot := str(e.get("slot", ""))
+	if ENEMY_SLOTS.has(slot):
+		return float(ENEMY_SLOTS[slot].col)
+	return Vector2(e.get("pos", Vector2.ZERO)).x / 100.0
 
 
 # ------------------------------------------------------------
@@ -867,6 +884,14 @@ func _restore_battle(st: Dictionary, enemies: Array) -> void:
 			set(k, vars[k])
 	_turn_idx = turn
 	_resume_at = turn
+	# 10 回目より前のセーブ：素早さアップを外し、ゲージ・パワーの項目を足す（古い保留カードは DeckController.from_save が空き欄へ）
+	for a in allies:
+		(a.get("status_effects", {}) as Dictionary).erase("spd_buff")
+		a.erase("spd")
+		if not a.has("sp_gauge"):
+			a["sp_gauge"] = 0
+		if not (a.get("powers") is Array):
+			a["powers"] = []
 	# st.ext の項目はここで戻す（battle_snapshot() の d["ext"] と対に）
 
 
@@ -888,6 +913,8 @@ func _battle_start_effects() -> void:
 		a.status_effects.erase("atk_buff")
 		a["shield"] = 0
 		a.erase("rosary")
+		a["sp_gauge"] = 0
+		a["powers"] = []
 		if int(a.hp) <= 0:
 			continue
 		if int(nb.get("atk", 0)) > 0:
@@ -902,8 +929,10 @@ func _battle_start_effects() -> void:
 	_refresh_all()
 
 
-## 戦闘の集計：倒した時の余り（overkill）と、味方が減らされた HP（lost。回復で相殺しない）
-func _tally(events: Array) -> void:
+## 戦闘の集計：倒した時の余り（overkill）と、味方が減らされた HP（lost。回復で相殺しない）。
+## 必殺技ゲージもここで数える：src（行動した味方）がウィッチなら敵に与えたダメージ（HP とブロックへの合計）、
+## ナイトが得たブロックはだれの行動でも（src に関係なく）
+func _tally(events: Array, src: Dictionary = {}) -> void:
 	for ev in events:
 		var t: Dictionary = ev.get("target", {})
 		if t.is_empty():
@@ -912,6 +941,24 @@ func _tally(events: Array) -> void:
 			stats["hp_lost"] = int(stats.hp_lost) + int(ev.get("lost", 0))
 		else:
 			stats["overkill"] = int(stats.overkill) + int(ev.get("overkill", 0))
+		if ev.has("shield") and str(t.get("id", "")) == "knight" and str(t.get("side", "")) == "ally":
+			_gauge_gain(t, int(ev.shield))
+		if ev.has("damage") and str(src.get("id", "")) == "witch" and str(src.get("side", "")) == "ally" and str(t.get("side", "")) == "enemy":
+			_gauge_gain(src, int(ev.damage) + int(ev.get("blocked", 0)))
+
+
+## 必殺技ゲージを増やす（満タンになった時だけ知らせる）
+func _gauge_gain(u: Dictionary, n: int) -> void:
+	var was := ActionController.gauge_full(u)
+	if ActionController.add_gauge(u, n) > 0 and not was and ActionController.gauge_full(u) and views.has(u.get("uid", -1)):
+		fx.popup(views[u.uid], "必殺技ゲージ満タン！", ImageController.COL.accent, 26)
+
+
+## イベントを通らないブロックの加算（レリック・パワー）。ナイトならゲージにも数える
+func _gain_shield(u: Dictionary, n: int) -> void:
+	u["shield"] = int(u.get("shield", 0)) + n
+	if str(u.get("id", "")) == "knight":
+		_gauge_gain(u, n)
 
 
 func _run_turn(u: Dictionary) -> void:
@@ -928,14 +975,14 @@ func _run_turn(u: Dictionary) -> void:
 			u["shield"] = 0
 		# 蒼の盾章：左（青）に立つ味方はターン開始時にブロック+4
 		if u.side == "ally" and int(u.get("lane", 0)) == 0 and Inventory.has_relic("blue_crest"):
-			u["shield"] = int(u.get("shield", 0)) + 4
+			_gain_shield(u, 4)
 			fx.popup(views[u.uid], "蒼の盾章 盾+4", ImageController.COL.shield, 26)
 		# D（イベント「双子の肖像画」の青い絵）：この階の間、左に立つ味方はターン開始時にブロック+n
 		if u.side == "ally" and int(u.get("lane", 0)) == 0 and CurrentStatus.floor_fx_val("left_block") > 0:
 			u["shield"] = int(u.get("shield", 0)) + CurrentStatus.floor_fx_val("left_block")
 			fx.popup(views[u.uid], "青い絵 盾+%d" % CurrentStatus.floor_fx_val("left_block"), ImageController.COL.shield, 26)
 		var ticks := StatusController.trigger_start_of_turn(u)
-		_tally(ticks)
+		_tally(ticks, u)
 		var hurt := false
 		for t in ticks:
 			if t.has("declare"):
@@ -957,7 +1004,7 @@ func _run_turn(u: Dictionary) -> void:
 					var ed: Dictionary = entry
 					var yev := ActionController.execute_action(u, {"target": str(ed.get("target", "self")), "effects": ed.get("effects", [])},
 							CurrentStatus.allies, CurrentStatus.enemies)
-					_tally(yev)
+					_tally(yev, u)
 					_handle_specials(u, yev)
 					_show_events(yev, {})
 			elif t.has("ap_gain"):
@@ -1010,19 +1057,16 @@ func _ally_turn(u: Dictionary) -> void:
 	u["ap"] = mini(int(u.get("max_ap", InitAllyStatus.AP_MAX)), int(u.ap) + gain)
 	whet_used[u.id] = false
 	var dc: DeckController = deck_controllers[u.id]
-	# パワーカードの効果は前の自分のターンから今まで。ここで切り替える
-	u["power_atk"] = 0
-	u["power_def"] = 0
-	power_seen[u.id] = []
-	_power_reset(u)
-	dc.draw_cards(DeckController.HAND_SIZE)
+	u["cards_used"] = 0  # 怒涛の締めの X（このターンに使ったカードの枚数）
+	# ターン開始の補充は 4 枠（8・4・2・6）だけ。空き欄（9・3）は「カードを引く」効果で入る
+	dc.draw_cards(DeckController.HAND_SIZE, DeckController.BASE_SLOTS)
 	_log("%sの手番" % u.name)
 	phase = "player"
 	_refresh_all()
 	for i in hand_cards.size():
 		if dc.hand[i] != null:
 			_pop_in(hand_cards[i], i * 0.04)
-	_boss_hold_auto(u, dc)  # ボスレリック「封印の聖櫃」：保留カードを AP0 で自動発動
+	_boss_hold_auto(u, dc)  # ボスレリック「封印の聖櫃」：手札のランダムな 1 枚を AP0 で自動発動
 	if autoplay and phase == "player":
 		_autoplay_turn.call_deferred()
 	await turn_done
@@ -1031,20 +1075,10 @@ func _ally_turn(u: Dictionary) -> void:
 	_close_panels()
 	# 残った AP は捨てる（持ち越さない。9 回目）。この後に入る AP（魔力の転換・他の味方からの AP+）は次の自分のターンに足される
 	u["ap"] = 0
-	# パワーの「ターン終了時」（薬師の加護・魔力の転換）：手札にあれば発動（自動保留より先）
+	# パワーの「ターン終了時」（薬師の加護・魔力の転換）：使ったパワーが効いていれば発動
 	if u.hp > 0 and not _all_dead(CurrentStatus.enemies):
 		await _power_turn_end(u, dc)
-	# 保留枠が空で手札が残っていれば、ランダムに 1 枚を自動で保留（演出つき）
-	if u.hp > 0:
-		var slot := -1
-		var before: Array = dc.hand.duplicate()
-		var held = dc.auto_hold()
-		if held != null:
-			for i in before.size():
-				if before[i] != null and is_same(before[i], held):
-					slot = i
-			_log("%sを自動で保留した" % held.name)
-			await _anim_hold(held, hand_cards[slot] if slot >= 0 else hold_card, true)
+	# 使わなかった手札（空き欄を含む 6 欄）は捨札へ
 	dc.turn_end_and_discard()
 	_refresh_all()
 	await _wait(0.3)
@@ -1098,7 +1132,7 @@ func _perform(user: Dictionary, action: Dictionary, x: int = 1) -> Array:
 	var v: GuiUnit = views[user.uid]
 	var single_target := ActionController.resolve_targets(user, action.get("target", "self"), CurrentStatus.allies, CurrentStatus.enemies)
 	var events := ActionController.execute_action(user, action, CurrentStatus.allies, CurrentStatus.enemies, x)
-	_tally(events)
+	_tally(events, user)
 	_cur_action = action  # 撃破の「もう一度この攻撃」（repeat）で使う
 	_cur_x = x
 	_handle_specials(user, events)
@@ -1122,7 +1156,7 @@ func _perform(user: Dictionary, action: Dictionary, x: int = 1) -> Array:
 	return events
 
 
-## 表示側で処理する効果（ドロー・入替・連続魔法・一転攻勢・ターンスキップ）
+## 表示側で処理する効果（ドロー・入替・連続魔法・ターンスキップ）
 func _handle_specials(user: Dictionary, events: Array) -> void:
 	if user.get("side", "") != "ally":
 		return
@@ -1138,11 +1172,6 @@ func _handle_specials(user: Dictionary, events: Array) -> void:
 			"double":
 				StatusController.apply_status(user, "double", 1, -1)
 				fx.popup(views[user.uid], "連続魔法", ImageController.COL.accent, 28)
-			"turnabout":
-				# 空いている手札の枠を補充する。攻撃力 +1
-				_draw_more(dc, DeckController.HAND_SIZE)
-				StatusController.apply_status(user, "atk_buff", maxi(1, int(ev.val)))
-				fx.popup(views[user.uid], "攻↑ 1", ImageController.COL.good, 28)
 			"extra_turn":
 				extra_turn = true
 				fx.popup(views[user.uid], "もう一度！", ImageController.COL.accent, 32)
@@ -1208,6 +1237,8 @@ func _show_events(events: Array, action: Dictionary) -> void:
 			fx.popup(tv, "力を溜めている…", col.accent, 24)
 		if ev.has("cleanse"):
 			fx.popup(tv, "デバフ解除" if not (ev.cleanse as Array).is_empty() else "解除なし", col.good, 26)  # 闘志
+		if ev.has("gauge"):
+			fx.popup(tv, "ゲージ+%d" % int(ev.gauge), col.accent, 26)  # 必殺技ゲージ（add_gauge）
 
 
 func _update_deaths(attacker: Dictionary) -> void:
@@ -1264,7 +1295,8 @@ func _finish(result: String) -> void:
 		a["status_effects"] = {}
 		a["power_atk"] = 0
 		a["power_def"] = 0
-		a.erase("powers")  # 8 回目のパワー（効いているもの・鼓舞・使った枚数）
+		a.erase("powers")  # パワー（効いているもの・鼓舞・使った枚数）
+		a.erase("sp_gauge")  # 必殺技ゲージは戦闘ごと
 		a.erase("aid_atk")
 		a.erase("aid_def")  # 鋼鉄化（味方全体）
 		a.erase("cards_used")
@@ -1320,7 +1352,6 @@ func _on_press(p: Vector2) -> void:
 	g_origin = _cell_at(p)
 	g_time = 0.0
 	g_cur = null
-	g_first_card = 0
 	g_moved = false
 	g_cut_in = false
 	g_charge_target = null
@@ -1352,15 +1383,11 @@ func _on_drag(p: Vector2) -> void:
 	if target == null:
 		_clear_preview()
 		return
-	if target is int and target in SLOT_NUM and g_first_card == 0:
-		g_first_card = target
 	_preview_action(_intent())
 
 
-## 今のジェスチャーが指す操作：テンキー番号・キー名、または "hold:<枠>"
+## 今のジェスチャーが指す操作：テンキー番号・キー名
 func _intent():
-	if g_cur is int and g_cur == 9 and g_first_card != 0:
-		return "hold:%d" % SLOT_NUM.find(g_first_card)
 	return g_cur
 
 
@@ -1398,7 +1425,6 @@ func _end_gesture() -> void:
 	g_active = false
 	g_moved = false
 	g_cur = null
-	g_first_card = 0
 	g_cut_in = false
 	g_charge_target = null
 	for k in ["deck", "status", "end"]:
@@ -1425,83 +1451,69 @@ func _action_for(num) -> Dictionary:
 	var dc: DeckController = deck_controllers[current.id]
 	if num is String:
 		match num:
-			"deck": return {"title": "デッキ・捨札", "desc": "山札・捨札・廃棄札・保留を確認する", "kind": "deck"}
+			"deck": return {"title": "デッキ・捨札", "desc": "山札・捨札・廃棄札を確認する", "kind": "deck"}
 			"status": return {"title": "ステータス", "desc": "全員のステータスを確認する", "kind": "status"}
-			"end": return {"title": "ターン終了", "desc": "手番を終える（残りAPは捨てる。保留が空なら手札から1枚自動で保留）", "kind": "end"}
+			"end": return {"title": "ターン終了", "desc": "手番を終える（残りAPは捨てる。手札は空き欄のカードも捨札へ）", "kind": "end"}
 		if num.begins_with("item"):
 			var i := int(num.substr(4))
 			if i >= Inventory.items.size():
 				return {"title": "アイテム", "desc": "空き（アイテムは3つまで）", "kind": "none"}
 			var it: Dictionary = Item_List.DATA[Inventory.items[i]]
 			return {"title": it.name, "desc": it.desc + "（AP0）", "action": it, "kind": "item", "index": i, "ap": 0, "block_msg": _item_block(it)}
-		if num.begins_with("hold:"):
-			var slot := int(num.substr(5))
-			var c = dc.hand[slot]
-			if c == null:
-				return {}
-			var t := "%s を保留" % c.name
-			if ActionList.has_keyword(c, "power"):
-				t += "（パワーカードは捨札へ行く）"
-			elif dc.hold != null:
-				t += "（%s と入れ替え）" % dc.hold.name
-			return {"title": "保留", "desc": t, "kind": "hold", "slot": slot, "ap": 0}
 		return {}
 	match num:
-		8, 4, 2, 6:
+		8, 4, 2, 6, 9, 3:
 			var slot := SLOT_NUM.find(num)
 			var c = dc.hand[slot]
 			if c == null:
+				if slot in DeckController.FREE_SLOTS:
+					return {"title": "空き欄", "desc": "「カードを引く」効果で手札4枠が埋まっている時に入る欄（9→3の順）。ターン終了で捨札へ", "kind": "none"}
 				return {}
 			if c.get("type", "") == "unselectable":
 				return {"title": c.name, "desc": DeckController.effect_text(current, c), "kind": "none"}
 			return _card_info(c, slot, "card", _short(c))
-		9:
-			if dc.hold == null:
-				return {"title": "保留", "desc": "カードへ弾き、離さず9へ滑らせると保留（AP0）", "kind": "none"}
-			return _card_info(dc.hold, -1, "hold_play", "保留カードを使う　" + _short(dc.hold))
 		7:
 			var c7 := _move_cost()
 			return {"title": "入替", "desc": "左右の位置を入れ替える（前衛・後衛はそのまま）（AP%d）。敵の矢印の色で狙われる側がわかる" % c7, "action": ActionList.SWAP, "kind": "swap", "ap": c7}
 		1:
 			var c1 := _move_cost()
 			return {"title": "陣形変更", "desc": "味方全員の前衛・後衛を入れ替える（AP%d）。前衛は攻撃力+2、後衛は防御力+2" % c1, "action": FORMATION, "kind": "formation", "ap": c1}
-		3:
-			var s: Dictionary = ActionList.UNIQUE_SKILLS[current.id]
-			return {"title": s.name, "desc": _short(s), "action": s, "kind": "unique", "ap": int(s.ap), "block_msg": _unique_block(s)}
 		5:
 			var s: Dictionary = specials[current.id]
-			var sd := str(s.get("desc", "")) + "（AP%d）" % _special_cost(s) if s.has("desc") else _short(s)
-			return {"title": "必殺", "desc": "%s　%s（長押し）" % [s.name, sd], "action": _boss_mod(current, _special_play(s), true), "kind": "special", "ap": _special_cost(s),
+			var gtxt := "（ゲージ%d/%d）" % [int(current.get("sp_gauge", 0)), ActionController.GAUGE_MAX]
+			var sd := str(s.get("desc", "")) + gtxt if s.has("desc") else _short(s) + gtxt
+			return {"title": "必殺", "desc": "%s　%s（長押し）" % [s.name, sd], "action": _boss_mod(current, _special_play(s), true), "kind": "special", "ap": 0,
 					"block_msg": _special_block(s)}
 	return {}
 
 
-## カード（手札・保留）の操作情報。ap = 払う AP、need = 使うのに必要な AP、no_consume = 消費するカードが無い
+## カード（手札 6 欄）の操作情報。ap = 払う AP、need = 使うのに必要な AP、no_consume = 消費するカードが無い
 func _card_info(c: Dictionary, slot: int, kind: String, desc: String) -> Dictionary:
 	var dc: DeckController = deck_controllers[current.id]
 	var cost := _card_cost(c)
 	var need := cost
 	if c.get("ap_x", false) and not c.get("free", false):
 		need = maxi(1, int(c.get("ap", 1)))
-	var no_consume: bool = DeckController.burns(c, "consume") and not dc.has_consume_target(slot)
+	# 消費：パワー（魔力の転換）の消費はターン終了時の効果なので、使う時には見ない
+	var no_consume: bool = DeckController.burns(c, "consume") and not ActionList.has_keyword(c, "power") and not dc.has_consume_target(slot)
 	# 自分以外の味方が対象（APパサー）：その味方が倒れていれば使えない
 	var msg := ""
 	if c.get("target", "") == "other_ally" and ActionController.resolve_targets(current, "other_ally", CurrentStatus.allies, CurrentStatus.enemies).is_empty():
 		msg = "渡す相手が倒れている"
 	# 「最後」の効果しか無いカード（saigo_only）は、最後の条件を満たした時だけ使える
 	if c.get("saigo_only", false) and not bool(_play_ctx(c, slot).get("alone", false)):
-		msg = "最後の時だけ使える（他の手札・保留が無い時）"
+		msg = "最後の時だけ使える（他の手札が無い時）"
 	# play = 実際に発動する行動（キーワード・バッジ・レリックの強化込み。プレビューに使う）
 	return {"title": c.name, "desc": desc, "action": c, "play": ActionController.play_action(current, c, _play_ctx(c, slot)),
 			"kind": kind, "slot": slot, "ap": cost, "need": need, "no_consume": no_consume, "block_msg": msg}
 
 
-## カードを使う時の条件（ActionController.play_action の ctx）。slot = -1 は保留枠
+## カードを使う時の条件（ActionController.play_action の ctx）。slot = 手札の欄（-1 は手札に無いカード）
 ## use = true なら実際に使う時：砥石・十連の数珠の回数を進める
 func _play_ctx(c: Dictionary, slot: int, use: bool = false) -> Dictionary:
 	var dc: DeckController = deck_controllers[current.id]
-	# 最後：このカード以外に手札・保留枠のカードが無い
-	var alone: bool = slot == -1 or dc.hold == null
+	# 最後：このカード以外に手札（空き欄を含む 6 欄）のカードが無い
+	var alone := true
 	for i in dc.hand.size():
 		if i != slot and dc.hand[i] != null:
 			alone = false
@@ -1525,15 +1537,6 @@ func _play_ctx(c: Dictionary, slot: int, use: bool = false) -> Dictionary:
 	return {"swapped": last_swap_round == round_no, "alone": alone, "whet": whet, "rosary": ros, "exhausted": dc.exhaust_pile.size()}
 
 
-## 固有スキルを今使えないわけ（"" = 使える）。一転攻勢は手札に空きが無いと使えない
-func _unique_block(s: Dictionary) -> String:
-	if ActionList.effects_of(s).any(func(e): return e.get("effect", "") == "turnabout"):
-		var dc: DeckController = deck_controllers[current.id]
-		if not dc.hand.any(func(x): return x == null):
-			return "手札に空きがない"
-	return ""
-
-
 ## カードを使う時に払う AP（free は 0、APX は今の AP 全部）
 func _card_cost(c: Dictionary) -> int:
 	if c.get("free", false):
@@ -1543,9 +1546,6 @@ func _card_cost(c: Dictionary) -> int:
 	return DeckController.card_ap(c)  # 軽のバッジは -1
 
 
-## 必殺技の AP（精神統一中は減る。0 未満にしない）
-func _special_cost(sp: Dictionary) -> int:
-	return maxi(0, int(sp.get("ap", 0)) - StatusController.focus_cut(current))
 
 
 # ------------------------------------------------------------
@@ -1562,7 +1562,7 @@ func _special_play(sp: Dictionary, consumed: bool = false) -> Dictionary:
 		a.erase("power")
 		a.erase("effects")
 		a.merge(side.duplicate(true), true)
-	# 虚空連斬：カードアクション（手札 4 枠＋保留枠）の空き数 × n
+	# 虚空連斬：手札 6 欄（4 枠＋空き欄 2）の空き数 × n
 	if sp.get("void_hits") is Dictionary:
 		var vh: Dictionary = sp.void_hits
 		var n := _card_empties()
@@ -1578,7 +1578,7 @@ func _special_play(sp: Dictionary, consumed: bool = false) -> Dictionary:
 	return a
 
 
-## カードアクションの空き数（手札 4 枠の空き＋保留枠が空なら 1）
+## 手札 6 欄（4 枠＋空き欄 2）の空き数
 func _card_empties() -> int:
 	var dc: DeckController = deck_controllers.get(current.get("id", ""), null)
 	if dc == null:
@@ -1587,13 +1587,13 @@ func _card_empties() -> int:
 	for c in dc.hand:
 		if c == null:
 			n += 1
-	if dc.hold == null:
-		n += 1
 	return n
 
 
-## 必殺技を今使えないわけ（"" = 使える）。即応の条件・消費する手札
+## 必殺技を今使えないわけ（"" = 使える）。ゲージ・即応の条件・消費する手札
 func _special_block(sp: Dictionary) -> String:
+	if not ActionController.gauge_full(current):
+		return "必殺技ゲージが満タン（%d）の時に使える（今 %d）" % [ActionController.GAUGE_MAX, int(current.get("sp_gauge", 0))]
 	if sp.get("sokuou_only", false) and not ActionController.keyword_on(current, "sokuou", {"swapped": last_swap_round == round_no}):
 		return "即応の時だけ使える（このラウンドに入替をした時）"
 	if DeckController.burns(sp, "consume"):
@@ -1603,10 +1603,16 @@ func _special_block(sp: Dictionary) -> String:
 	return ""
 
 
-## 必殺技を使う（AP は払った後）。消費の札は先に手札から 1 枚捨ててから、空き数を数え直して発動
+## 必殺技を使う（ゲージを 0 に戻した後）。消費の札は先に手札から 1 枚捨ててから、空き数を数え直して発動
 func _use_special(dc: DeckController) -> void:
 	var sp: Dictionary = specials[current.id]
 	var consumed := false
+	# 誓いの紋章（10 回目）：必殺技を使うと、味方全体にブロック+10
+	if Inventory.has_relic("oath"):
+		for a in CurrentStatus.allies:
+			if int(a.hp) > 0:
+				_gain_shield(a, 10)
+				fx.popup(views[a.uid], "誓い 盾+10", ImageController.COL.shield, 26)
 	if DeckController.burns(sp, "consume"):
 		var cs := dc.consume_random(-1)
 		if cs >= 0:
@@ -1637,8 +1643,8 @@ var last_fate := {}  # 運命のダイスの直前の出目（Item_List.FATE の
 func _item_block(it: Dictionary) -> String:
 	if str(it.get("need", "")) == "prophecy":
 		var dc: DeckController = deck_controllers.get(current.get("id", ""), null)
-		if dc == null or dc.hold != null:
-			return "保留枠が空の時だけ使える"
+		if dc == null or _free_slot(dc) < 0:
+			return "空き欄（9・3）が無い"
 		if dc.draw_pile.is_empty():
 			return "山札が無い"
 	return ""
@@ -1648,15 +1654,15 @@ func _item_block(it: Dictionary) -> String:
 func _use_item(it: Dictionary, dc: DeckController) -> void:
 	match str(it.get("item_only", "")):
 		"prophecy":
-			# 予言の栞：山札のランダムなカードを保留枠へ
-			if dc.hold == null and not dc.draw_pile.is_empty():
+			# 予言の栞（10 回目）：山札のランダムなカード 1 枚を空き欄（9→3）へ
+			var fs := _free_slot(dc)
+			if fs >= 0 and not dc.draw_pile.is_empty():
 				var i := randi() % dc.draw_pile.size()
-				dc.hold = dc.draw_pile[i]
+				dc.hand[fs] = dc.draw_pile[i]
 				dc.draw_pile.remove_at(i)
-				_log("予言：%sを保留枠へ" % str(dc.hold.get("name", "")))
+				_log("予言：%sを空き欄へ" % str(dc.hand[fs].get("name", "")))
 				_refresh_all()
-				if hold_card:
-					_pop_in(hold_card, 0.0)
+				_pop_in(hand_cards[fs], 0.0)
 		"fate_dice":
 			# 運命のダイス：出目を 1 つ引いて味方全体に
 			var f: Dictionary = Item_List.FATE.pick_random()
@@ -1664,7 +1670,7 @@ func _use_item(it: Dictionary, dc: DeckController) -> void:
 			fx.popup(views[current.uid], "ダイス：%s" % str(f.text), ImageController.COL.accent, 30)
 			_log("運命のダイス…%s！" % str(f.text))
 			if f.get("fill", false):
-				_draw_more(dc, DeckController.HAND_SIZE)
+				_draw_more(dc, DeckController.HAND_SIZE, DeckController.BASE_SLOTS)  # 手札 4 枠の空きを補充
 			elif f.has("power"):
 				_play({"name": it.name, "type": "attack", "target": "ally_all", "power": int(f.power), "fixed": true})
 			else:
@@ -1673,7 +1679,15 @@ func _use_item(it: Dictionary, dc: DeckController) -> void:
 			_play(it)
 
 
-## カードを今使えないわけ（"" = 使える / "ap" = AP不足 / "consume" = 消費するカードがない）。slot = -1 は保留枠
+## 空いている空き欄（9→3 の順。hand の添字）。無ければ -1
+func _free_slot(dc: DeckController) -> int:
+	for i in DeckController.FREE_SLOTS:
+		if dc.hand[i] == null:
+			return i
+	return -1
+
+
+## カードを今使えないわけ（"" = 使える / "ap" = AP不足 / "consume" = 消費するカードがない）
 func _card_block(c: Dictionary, slot: int) -> String:
 	if c.get("type", "") == "unselectable":
 		return "unselectable"
@@ -1700,8 +1714,7 @@ func _short(a: Dictionary) -> String:
 	var tgt := DeckController.target_text(a.get("target", ""))
 	var s := "%s：%s" % [tgt, DeckController.effect_text(current, a)] if tgt != "" else DeckController.effect_text(current, a)
 	if a.has("ap"):
-		var is_sp: bool = current.get("side", "") == "ally" and specials.get(current.get("id", ""), {}).get("id", "-") == a.get("id", "")
-		s += "（AP%s）" % (str(_special_cost(a)) if is_sp else _ap_label(a))
+		s += "（AP%s）" % _ap_label(a)
 	return s
 
 
@@ -1720,14 +1733,17 @@ func _preview_action(num) -> void:
 	strip_text = info.desc + ("　AP不足" if lack_ap else ("　消費するカードがない" if lack_cons else ("　" + lack_msg if lack_msg != "" else "")))
 	strip_col = ImageController.COL.bad if lack else ImageController.COL.accent
 	strip.queue_redraw()
-	var w = _widget_of(num if not (num is String and num.begins_with("hold:")) else 9)
+	var w = _widget_of(num)
 	if w != null:
 		w.highlighted = true
-	if info.kind == "hold":
-		hand_cards[info.slot].highlighted = true
 	if info.has("action") and not lack:
 		var act: Dictionary = info.get("play", info.action)  # カードは強化込みの行動で予想する
-		if info.kind in ["card", "hold_play", "unique", "special"]:
+		if ActionList.has_keyword(info.action, "power") and info.kind == "card":
+			for a in CurrentStatus.allies:
+				if a == current:
+					views[a.uid].preview = {"on": true, "label": "パワー"}
+			return
+		if info.kind in ["card", "special"]:
 			act = _boss_mod(current, act, info.kind == "special")  # ボスレリックの対象の差し替え・必殺技の倍率
 		if info.kind == "swap":
 			for a in CurrentStatus.allies:
@@ -1770,8 +1786,8 @@ func _effect_label(a: Dictionary, x: int = 1) -> String:
 		"add_status":
 			var st: Dictionary = StatusEffectList.DATA[e.status]
 			return st.short if (e.status in ["taunt"] or st.get("label", "") == "none") else "%s%d" % [st.short, v]
-		"turnabout": return "補充"
 		"extra_turn": return "再行動"
+		"add_gauge": return "ゲージ+%d" % int(e.eff_val)
 	return ""
 
 
@@ -1780,11 +1796,9 @@ func _clear_preview() -> void:
 		v.preview = {}
 	for c in hand_cards:
 		c.highlighted = false
-	if hold_card:
-		hold_card.highlighted = false
 	for s2 in item_slots:
 		s2.highlighted = false
-	for k in ["swap", "formation", "hold", "unique", "special", "deck", "status", "end"]:
+	for k in ["swap", "formation", "free9", "free3", "special", "deck", "status", "end"]:
 		if btn.has(k) and not (g_active and not g_moved and _cell_value(g_origin) is String and _cell_value(g_origin) == k):
 			btn[k].highlighted = false
 	strip_text = ""
@@ -1818,18 +1832,8 @@ func _execute(num) -> void:
 	var dc: DeckController = deck_controllers[current.id]
 	var dir := _flick_dir(num)
 	match info.kind:
-		"card", "hold_play":
+		"card":
 			_use_card(info, dc, dir)
-		"hold":
-			var src: GuiCard = hand_cards[info.slot]
-			var moving: Dictionary = dc.hand[info.slot]
-			var to_discard := dc.put_on_hold(info.slot)
-			if to_discard:
-				_log("パワーカードは保留できず、捨札へ")
-				_fly_card(src, Vector2(1, -1))
-			else:
-				_log("%sを保留した" % dc.hold.name)
-				_anim_hold(moving, src, false)  # 入れ替えで戻ったカードは、保留したカードが着いてから出す
 		"swap", "formation":
 			current["ap"] = int(current.ap) - ap
 			if ap == 0 and Inventory.has_relic("light_boots"):
@@ -1842,18 +1846,8 @@ func _execute(num) -> void:
 			Inventory.remove_item_at(int(info.index))
 			_log("%sを使った！" % info.action.name)
 			_use_item(info.action, dc)
-		"unique":
-			current["ap"] = int(current.ap) - ap
-			_log("%s！" % info.action.name)
-			_play(_boss_mod(current, info.action))
-			# 誓いの紋章：キャラ固有スキルを使うと、味方全体にブロック+4
-			if Inventory.has_relic("oath"):
-				for a in CurrentStatus.allies:
-					if int(a.hp) > 0:
-						a["shield"] = int(a.get("shield", 0)) + 4
-						fx.popup(views[a.uid], "誓い 盾+4", ImageController.COL.shield, 26)
 		"special":
-			current["ap"] = maxi(0, int(current.ap) - ap)
+			current["sp_gauge"] = 0  # 必殺技ゲージは使うと 0 に戻る（何度でも）
 			_log("必殺！ %s！" % info.action.name)
 			fx.shake(10.0)
 			_use_special(dc)
@@ -1868,17 +1862,27 @@ func _execute(num) -> void:
 
 ## カードが飛んでいく向き（押した位置から操作したマスへの向き）
 func _flick_dir(num) -> Vector2:
-	var c := _cell_of(num) if not (num is String and num.begins_with("hold:")) else _cell_of(9)
+	var c := _cell_of(num)
 	if c.x < 0:
 		return Vector2.UP
 	var d := _cell_center(c) - _cell_center(g_origin)
 	return d.normalized() if d.length() > 1 else Vector2.UP
 
 
-## 手札・保留のカードを使う：AP（APX は全部）を払い、消費、発動、倒したらもう一度使える
+## 手札（6 欄）のカードを使う：AP（APX は全部）を払い、消費、発動、倒したらもう一度使える。パワーは _power_use
 func _use_card(info: Dictionary, dc: DeckController, dir: Vector2) -> void:
 	var c: Dictionary = info.action
-	var slot := int(info.slot)  # -1 = 保留枠
+	var slot := int(info.slot)
+	if ActionList.has_keyword(c, "power"):
+		current["ap"] = maxi(0, int(current.ap) - int(info.ap))
+		_fly_card(hand_cards[slot], dir)
+		dc.play_and_discard(slot)  # 廃棄の札（天啓・薬師の加護）は廃棄札へ
+		if DeckController.burns(c, "exhaust"):
+			_ash_altar()
+		_power_use(current, c)
+		current["cards_used"] = int(current.get("cards_used", 0)) + 1
+		_power_card_triggers(c, [])
+		return
 	var x := 1
 	if c.get("ap_x", false) and not c.get("free", false):
 		x = int(current.ap)
@@ -1903,12 +1907,8 @@ func _use_card(info: Dictionary, dc: DeckController, dir: Vector2) -> void:
 			var gone_card: Dictionary = dc.discard_pile.back()
 			_log("消費：%sを捨てた" % gone_card.get("name", ""))
 			_ash_altar()
-	if slot >= 0:
-		_fly_card(hand_cards[slot], dir)
-		dc.play_and_discard(slot)
-	else:
-		_fly_card(hold_card, dir)
-		dc.play_hold()
+	_fly_card(hand_cards[slot], dir)
+	dc.play_and_discard(slot)
 	if DeckController.burns(c, "exhaust"):
 		_ash_altar()
 	var kills := _play_card(act, x)
@@ -1922,7 +1922,7 @@ func _use_card(info: Dictionary, dc: DeckController, dir: Vector2) -> void:
 				c["free"] = true
 			fx.popup(views[current.uid], "もう一度！" if ok_kind == "reuse" else "もう一度！ AP0", ImageController.COL.accent, 30)
 			_refresh_all()
-			_pop_in(hand_cards[back] if back >= 0 else hold_card, 0.25)
+			_pop_in(hand_cards[back], 0.25)
 
 
 ## 灰の祭壇：消費・廃棄が発動した時、その味方にブロック+3
@@ -1930,11 +1930,11 @@ func _ash_altar() -> void:
 	_power_burn_trigger()  # 焦土の誓い：消費・廃棄が発動するたび（灰の祭壇と同じ所で数える）
 	if not Inventory.has_relic("ash_altar"):
 		return
-	current["shield"] = int(current.get("shield", 0)) + 3
+	_gain_shield(current, 3)
 	fx.popup(views[current.uid], "灰の祭壇 盾+3", ImageController.COL.shield, 26)
 
 
-## カード（手札・保留）を使う。連続魔法がかかっていれば 2 回発動する（X は 2 回とも同じ）。倒した敵の数を返す
+## カード（手札）を使う。連続魔法がかかっていれば 2 回発動する（X は 2 回とも同じ）。倒した敵の数を返す
 func _play_card(card: Dictionary, x: int = 1) -> int:
 	var times := 1
 	if StatusController.has(current, "double") and not ActionList.effects_of(card).any(func(e): return e.get("effect", "") == "double"):
@@ -1964,73 +1964,74 @@ func _play(act: Dictionary, x: int = 1) -> Array:
 
 
 # ------------------------------------------------------------
-# パワー（8 回目の新カード）。power_effect の形は ActionList の説明を参照
-#   手札に入った時に _power_enter が効果を出し、トリガー型・計算型は持ち主の powers に入れる（次の自分のターン開始で空にする）
+# パワー（10 回目）。power_effect の形は ActionList の説明を参照
+#   AP2 で使うと、持ち主の powers に power_effect を足す（戦闘終了まで。同じカード 2 枚なら 2 つ入って重なる）
+#   陣形のパワー（left / right）は効果を出すたびに持ち主の今の位置で判定する（ActionController.power_side）
+#   攻撃力・防御力のパワーは _power_recalc が powers から power_atk / power_def / aid_atk / aid_def を計算し直す
+#   once（守りの陣 A のブロック+5・天啓の AP 等）は使った時に 1 回（陣形なら使った時の位置）
 #   「〜するたび」は味方のどちらで起きても、効いている全員のパワーが発動する（炎の守りだけは持ち主のカード）
 # ------------------------------------------------------------
 
-## 自分のターン開始：前のターンのパワーを外す（鼓舞でもう 1 人に渡した攻撃力も）。使ったカードの枚数を 0 に
-func _power_reset(u: Dictionary) -> void:
-	u["powers"] = []
-	u["cards_used"] = 0
-	for a in CurrentStatus.allies:
-		var aid: Dictionary = a.get("aid_atk", {})
-		aid.erase(u.id)
-		var aid_d: Dictionary = a.get("aid_def", {})
-		aid_d.erase(u.id)  # 鋼鉄化（味方全体）でもう 1 人に渡した防御力
-
-
-## パワーカードが手札に入った時（そのターンに 1 回）
-func _power_enter(u: Dictionary, dc: DeckController, c: Dictionary) -> void:
-	var pe: Dictionary = (c.get("power_effect", {}) as Dictionary).duplicate(true)
-	if ActionList.has_keyword(c, "jinkei"):
-		pe = (pe.get("left" if int(u.get("lane", 0)) == 0 else "right", {}) as Dictionary).duplicate(true)
+## パワーカードを使った時（AP は払った後）
+func _power_use(u: Dictionary, c: Dictionary) -> void:
+	var raw: Dictionary = (c.get("power_effect", {}) as Dictionary).duplicate(true)
+	var pe := ActionController.power_side(u, raw)  # 使った時の位置の側
 	var col: Color = ImageController.COL.good
-	match str(pe.get("status", "")):
-		"atk_buff":
-			u["power_atk"] = int(u.get("power_atk", 0)) + int(pe.eff_val)
-			fx.popup(views[u.uid], "攻 +%d" % int(pe.eff_val), col, 26)
-		"def_buff":
-			u["power_def"] = int(u.get("power_def", 0)) + int(pe.eff_val)
-			fx.popup(views[u.uid], "防 +%d" % int(pe.eff_val), col, 26)
-	# 鋼鉄化・フォース（9 回目）："all" なら、もう 1 人の味方にも同じ分（次の持ち主のターンまで）
-	if pe.get("all", false) and str(pe.get("status", "")) in ["atk_buff", "def_buff"]:
-		var key := "aid_atk" if str(pe.status) == "atk_buff" else "aid_def"
-		for a in CurrentStatus.allies:
-			if a != u and int(a.hp) > 0:
-				var ad: Dictionary = a.get(key, {})
-				ad[u.id] = int(ad.get(u.id, 0)) + int(pe.eff_val)
-				a[key] = ad
-				fx.popup(views[a.uid], "%s +%d" % ["攻" if key == "aid_atk" else "防", int(pe.eff_val)], col, 26)
-	# 鼓舞（右）：もう 1 人の攻撃力 +n（次の自分のターンまで）
-	if int(pe.get("aid_atk", 0)) > 0:
-		for a in CurrentStatus.allies:
-			if a != u and int(a.hp) > 0:
-				var aid: Dictionary = a.get("aid_atk", {})
-				aid[u.id] = int(aid.get(u.id, 0)) + int(pe.aid_atk)
-				a["aid_atk"] = aid
-				fx.popup(views[a.uid], "攻 +%d" % int(pe.aid_atk), col, 26)
-	# 手札に入った時に 1 回だけの効果
+	_log("%s（パワー）！ 戦闘終了まで効く" % c.get("name", ""))
+	fx.popup(views[u.uid], c.get("name", ""), col, 26)
+	# 使った時に 1 回だけの効果
 	var once: Array = pe.get("once", [])
 	if not once.is_empty():
 		var evs := ActionController.execute_action(u, {"target": "self", "effects": once}, CurrentStatus.allies, CurrentStatus.enemies)
-		_tally(evs)
+		_tally(evs, u)
 		_show_events(evs, {})
-	if pe.has("kind"):
+	# 天啓（exhaust_now）は使った時の効果だけ。それ以外は戦闘終了まで残す
+	if not raw.get("exhaust_now", false):
 		var list: Array = u.get("powers", [])
-		list.append(pe)
+		var keep := raw.duplicate(true)
+		# 陣形のパワーの once は使った時だけなので、残す方からは外す
+		for side in ["left", "right"]:
+			if keep.get(side) is Dictionary:
+				(keep[side] as Dictionary).erase("once")
+		keep.erase("once")
+		keep["name"] = str(c.get("name", ""))
+		list.append(keep)
 		u["powers"] = list
-		fx.popup(views[u.uid], c.get("name", ""), col, 24)
-	# 天啓：効果の後すぐ廃棄札へ（残のバッジなら手札に残る）
-	if pe.get("exhaust_now", false) and DeckController.burns(c, "exhaust"):
-		for i in dc.hand.size():
-			if dc.hand[i] != null and is_same(dc.hand[i], c):
-				dc.hand[i] = null
-				dc.exhaust_pile.append(c)
-				_fly_card(hand_cards[i], Vector2.UP)
-				_log("%sを発動して廃棄した" % c.get("name", ""))
-				_ash_altar()
-				break
+	_power_recalc()
+	_update_targets()
+	_refresh_all()
+
+
+## パワーの攻撃力・防御力（鋼鉄化・フォース・鼓舞の B・守りの陣の B）を、今の位置で計算し直す
+func _power_recalc() -> void:
+	for a in CurrentStatus.allies:
+		a["power_atk"] = 0
+		a["power_def"] = 0
+		a["aid_atk"] = {}
+		a["aid_def"] = {}
+	for a in CurrentStatus.allies:
+		if int(a.hp) <= 0:
+			continue
+		for pe0 in a.get("powers", []):
+			var pe := ActionController.power_side(a, pe0)
+			var st := str(pe.get("status", ""))
+			var v := int(pe.get("eff_val", 0))
+			if st == "atk_buff":
+				a["power_atk"] = int(a.power_atk) + v
+			elif st == "def_buff":
+				a["power_def"] = int(a.power_def) + v
+			for o in CurrentStatus.allies:
+				if o == a or int(o.hp) <= 0:
+					continue
+				# 鋼鉄化・フォース（"all"）：もう 1 人の味方にも同じ分
+				if pe.get("all", false) and st in ["atk_buff", "def_buff"]:
+					var key := "aid_atk" if st == "atk_buff" else "aid_def"
+					var ad: Dictionary = o[key]
+					ad[a.id] = int(ad.get(a.id, 0)) + v
+				# 鼓舞（右）：もう 1 人の攻撃力 +n
+				if int(pe.get("aid_atk", 0)) > 0:
+					var aid: Dictionary = o.aid_atk
+					aid[a.id] = int(aid.get(a.id, 0)) + int(pe.aid_atk)
 
 
 ## 今効いているパワー（倒れた持ち主のものは除く）：[[持ち主, power_effect], ...]
@@ -2039,8 +2040,9 @@ func _powers_of(kind: String) -> Array:
 	for a in CurrentStatus.allies:
 		if int(a.hp) <= 0:
 			continue
-		for pe in a.get("powers", []):
-			if str((pe as Dictionary).get("kind", "")) == kind:
+		for pe0 in a.get("powers", []):
+			var pe := ActionController.power_side(a, pe0)  # 陣形のパワーは今の位置の側
+			if str(pe.get("kind", "")) == kind:
 				out.append([a, pe])
 	return out
 
@@ -2051,7 +2053,7 @@ func _power_hit(owner: Dictionary, act: Dictionary) -> void:
 		return
 	owner["rand_seq"] = randi()
 	var evs := ActionController.execute_action(owner, act, CurrentStatus.allies, CurrentStatus.enemies)
-	_tally(evs)
+	_tally(evs, owner)
 	_show_events(evs, act)
 	_update_deaths(owner)
 
@@ -2101,7 +2103,7 @@ func _power_card_triggers(card: Dictionary, evs: Array) -> void:
 	if debuff:
 		for p in _powers_of("on_debuff_card"):
 			var o: Dictionary = p[0]
-			o["shield"] = int(o.get("shield", 0)) + int(p[1].get("shield", 0))
+			_gain_shield(o, int(p[1].get("shield", 0)))
 			fx.popup(views[o.uid], "呪術の加護 盾+%d" % int(p[1].get("shield", 0)), ImageController.COL.shield, 24)
 	for p in _powers_of("on_own_card"):
 		if p[0] != current:
@@ -2112,7 +2114,7 @@ func _power_card_triggers(card: Dictionary, evs: Array) -> void:
 				var ev3 := {"target": a}
 				ActionController._apply_effect(current, a, {"effect": "add_status", "status": "fire", "eff_val": int(p[1].get("fire", 1))}, ev3)
 				fevs.append(ev3)
-				a["shield"] = int(a.get("shield", 0)) + int(p[1].get("shield", 0))
+				_gain_shield(a, int(p[1].get("shield", 0)))
 				fevs.append({"target": a, "shield": int(p[1].get("shield", 0))})
 		_show_events(fevs, {})
 	# 狩人の本能：kws（9 回目は陣形・予約。無ければ撃破）の札が付いたカードを使うたび
@@ -2150,28 +2152,20 @@ func _power_marks(evs: Array) -> void:
 	_end_if_won()
 
 
-## ターン終了時に手札にあるパワー：薬師の加護（薬草を得て廃棄）・魔力の転換（他の手札 1 枚を消費し、その AP 分 AP+）
+## ターン終了時のパワー（10 回目：使った後から戦闘終了まで、持ち主のターン終了ごと）：
+## 薬師の加護（薬草を得る）・魔力の転換（手札 1 枚を消費し、その AP 分 AP+）
 func _power_turn_end(u: Dictionary, dc: DeckController) -> void:
-	for i in dc.hand.size():
-		var c = dc.hand[i]
-		if c == null or not ActionList.has_keyword(c, "power"):
-			continue
-		match str((c.get("power_effect", {}) as Dictionary).get("kind", "")):
+	for pe0 in u.get("powers", []):
+		var pe := ActionController.power_side(u, pe0)
+		match str(pe.get("kind", "")):
 			"end_herb":
 				var got: bool = Inventory.add_item("herb")
 				fx.popup(views[u.uid], "薬草を得た" if got else "アイテムがいっぱい", ImageController.COL.good if got else ImageController.COL.bad, 26)
 				_log("薬師の加護：%s" % ("薬草を得た" if got else "アイテムがいっぱいで得られない"))
-				if DeckController.burns(c, "exhaust"):
-					dc.hand[i] = null
-					dc.exhaust_pile.append(c)
-					_fly_card(hand_cards[i], Vector2.UP)
-					_ash_altar()
 				_refresh_all()
 				await _wait(0.3)
 			"end_convert":
-				if not DeckController.burns(c, "consume"):
-					continue
-				var cs := dc.consume_random(i)
+				var cs := dc.consume_random(-1)
 				if cs < 0:
 					continue
 				var gone: Dictionary = dc.discard_pile.back()
@@ -2196,6 +2190,7 @@ func _do_swap() -> void:
 		a["lane"] = 1 - int(a.lane)
 		_move_ally(a)
 	last_swap_round = round_no
+	_power_recalc()  # 陣形のパワーは位置で切り替わる
 	_sync_lanes()
 	_update_targets()
 	_log("左右を入れ替えた！")
@@ -2206,6 +2201,7 @@ func _do_formation() -> void:
 	for a in CurrentStatus.allies:
 		a["rank"] = 1 - int(a.get("rank", 0))
 		_move_ally(a)
+	_power_recalc()
 	_sync_lanes()
 	_update_targets()
 	_log("陣形を変えた！")
@@ -2304,7 +2300,7 @@ func _open_deck() -> void:
 	for a in CurrentStatus.allies:
 		var dc: DeckController = deck_controllers[a.id]
 		var hand: Array = dc.hand.filter(func(c): return c != null)
-		secs[a.id] = [["手札", hand], ["保留", [dc.hold] if dc.hold != null else []],
+		secs[a.id] = [["手札", hand],
 				["山札（順不同）", _sorted(dc.draw_pile)], ["捨札", dc.discard_pile.duplicate()], ["廃棄札", dc.exhaust_pile.duplicate()]]
 	overlay = GuiDeckView.open(ui, "デッキ・捨札・廃棄札", Callable(), secs, current.get("id", "knight"))
 	overlay.closed.connect(func(): overlay = null)
@@ -2338,54 +2334,6 @@ func _fly_card(src: GuiCard, dir: Vector2) -> void:
 	tw.chain().tween_callback(c.queue_free)
 
 
-## 保留の演出：カードを大きく見せてから保留枠へ飛ばし、「保留」の札を出す
-func _anim_hold(card: Dictionary, src: Control, auto: bool) -> void:
-	var c := GuiCard.new()
-	c.interactive = false
-	c.set_card(card)
-	c.position = src.position
-	c.scale = src.scale
-	c.z_index = 40
-	pad.add_child(c)
-	c.pivot_offset = c.size / 2
-	hold_card.modulate.a = 0.0
-	# 元の枠のカードは隠し、飛んでいくカード 1 枚だけを見せる（入れ替えで戻るカードは着いてから出す）
-	var hide_src: bool = src != hold_card and src is GuiCard
-	if hide_src:
-		src.modulate.a = 0.0
-	var dest: Vector2 = _cell_center(_cell_of(9)) - GuiCard.SIZE / 2
-	var center := Vector2(360, 960) - GuiCard.SIZE / 2
-	var tw := c.create_tween()
-	if auto:
-		# 自動保留：中央で大きく見せてから飛ばす
-		tw.tween_property(c, "position", center, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		tw.parallel().tween_property(c, "scale", Vector2(1.6, 1.6), 0.18)
-		tw.tween_interval(0.35)
-	else:
-		tw.tween_property(c, "scale", Vector2(1.3, 1.3), 0.08)
-	tw.tween_property(c, "position", dest, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.parallel().tween_property(c, "scale", Vector2(0.86, 0.86), 0.22)
-	tw.parallel().tween_property(c, "rotation", 0.25, 0.11)
-	tw.tween_property(c, "rotation", 0.0, 0.08)
-	tw.tween_callback(func():
-		c.queue_free()
-		hold_card.modulate.a = 1.0
-		_pop_in(hold_card, 0.0)
-		if hide_src:
-			src.modulate.a = 1.0
-			if auto:
-				src.visible = false  # 自動保留：元の枠は空になる
-			elif src.visible:
-				_pop_in(src, 0.0)
-		if not auto:  # 自動保留は吹き出しで知らせるので、札は出さない
-			AnimationController.popup_text(ui, _cell_center(_cell_of(9)) + Vector2(0, -96), "保留！", ImageController.COL.accent, 30))
-	if auto:
-		desc_bubble.show_text(("自動保留：" + card.name), DeckController.card_text(current, card), _cell_center(_cell_of(9)))
-		await tw.finished
-		await _wait(0.35)
-		desc_bubble.hide_bubble()
-
-
 ## 長押し・フリック中に説明の吹き出しを出す
 func _show_desc_for(key) -> void:
 	if typeof(key) == typeof(_desc_key) and key == _desc_key:
@@ -2396,9 +2344,9 @@ func _show_desc_for(key) -> void:
 		desc_bubble.hide_bubble()
 		return
 	var body: String = info.desc
-	if info.has("action") and info.kind in ["card", "hold_play"]:
+	if info.has("action") and info.kind == "card":
 		body = DeckController.card_text(current, info.action)
-	var cell := _cell_of(9) if (key is String and key.begins_with("hold:")) else _cell_of(key)
+	var cell := _cell_of(key)
 	desc_bubble.show_text(info.title, body, _cell_center(cell) if cell.x >= 0 else Vector2(360, 960))
 
 
@@ -2417,14 +2365,7 @@ func _pop_in(c: GuiCard, delay: float) -> void:
 func _refresh_all() -> void:
 	var is_player: bool = phase == "player" and current.get("side", "") == "ally"
 	var dc: DeckController = deck_controllers.get(current.get("id", ""), null) if is_player else null
-	if dc != null:
-		# パワーカード：手札にある間だけ効果
-		var seen: Array = power_seen.get(current.id, [])
-		for c in dc.hand:
-			if c != null and ActionList.has_keyword(c, "power") and not seen.any(func(x): return is_same(x, c)):
-				seen.append(c)
-				_power_enter(current, dc, c)
-		power_seen[current.id] = seen
+	_power_recalc()  # パワーの攻撃力・防御力（位置・倒れた味方で変わる）
 	_update_intent_values()  # パワー・状態の変化を敵の予告の数字に反映
 	for i in hand_cards.size():
 		var cv: GuiCard = hand_cards[i]
@@ -2435,25 +2376,18 @@ func _refresh_all() -> void:
 			cv.set_card(c)
 			cv.playable = _card_block(c, i) == ""
 			cv.queue_redraw()
-	hold_card.visible = dc != null and dc.hold != null
-	if hold_card.visible:
-		_set_eff(dc.hold, -1)
-		hold_card.set_card(dc.hold)
-		hold_card.playable = _card_block(dc.hold, -1) == ""
+	for n in [9, 3]:
+		btn["free%d" % n].visible = not hand_cards[SLOT_NUM.find(n)].visible
 	for i in item_slots.size():
 		item_slots[i].set_item(Inventory.items[i] if i < Inventory.items.size() else "")
 	if is_player:
-		var u: Dictionary = ActionList.UNIQUE_SKILLS[current.id]
-		btn.unique.title = u.name
-		btn.unique.icon_kind = u.art
-		btn.unique.ap_cost = int(u.ap)
-		btn.unique.dimmed = int(current.ap) < int(u.ap) or _unique_block(u) != ""
 		var sp: Dictionary = specials[current.id]
 		btn.special.title = sp.name
 		btn.special.icon_kind = sp.art
-		btn.special.ap_cost = _special_cost(sp)  # 精神統一中は減った値
+		btn.special.ap_cost = -1  # 必殺技は AP を使わない（10 回目）
+		btn.special.gauge = int(current.get("sp_gauge", 0))  # AP の代わりにゲージ
 		btn.special.subtitle = "長押し"
-		btn.special.dimmed = int(current.ap) < _special_cost(sp) or _special_block(sp) != ""
+		btn.special.dimmed = _special_block(sp) != ""
 		btn.special.badge = _special_badge(_boss_mod(current, _special_play(sp), true))
 		var mc := _move_cost()
 		btn.swap.ap_cost = mc
@@ -2470,7 +2404,7 @@ func _refresh_all() -> void:
 
 
 ## カードに「実際のダメージ」を書き込む（自分の攻撃力と、主な対象の防御力を反映）
-## キーワード（即応・最後・陣形・転身）の条件を満たしていれば kw_on に入れ、札を光らせる。slot = -1 は保留枠
+## キーワード（即応・最後・陣形・転身）の条件を満たしていれば kw_on に入れ、札を光らせる。slot = 手札の欄
 func _set_eff(c: Dictionary, slot: int = -1) -> void:
 	# 右上の AP の表示（通常は数字、APX は "X"、このターン AP 0 なら "0"）
 	if c.has("ap") or c.get("free", false):
@@ -2521,14 +2455,11 @@ func _autoplay_turn() -> void:
 		var dc: DeckController = deck_controllers[current.id]
 		var done := false
 		var sp: Dictionary = specials[current.id]
-		if int(current.ap) >= _special_cost(sp) and _special_block(sp) == "" and sp.id != "w_sp_turnskip" and guard == 1 and randf() < 0.5:
+		if _special_block(sp) == "" and sp.id != "w_sp_turnskip" and guard == 1 and randf() < 0.5:
 			_execute(5)
 			continue
-		if guard == 2 and dc.hand[0] != null and randf() < 0.3:
-			_execute("hold:0")
-			continue
-		if guard == 3 and int(current.ap) >= 2 and randf() < 0.25:
-			_execute(3 if randf() < 0.5 else 7)
+		if guard == 3 and int(current.ap) >= 2 and randf() < 0.15:
+			_execute(7)
 			continue
 		if guard == 4 and not Inventory.items.is_empty() and randf() < 0.3:
 			_execute("item0")
@@ -2539,9 +2470,6 @@ func _autoplay_turn() -> void:
 				_execute(SLOT_NUM[i])
 				done = true
 				break
-		if not done and dc.hold != null and _card_block(dc.hold, -1) == "":
-			_execute(9)
-			done = true
 		if not done:
 			break
 	if phase == "player":
@@ -2554,7 +2482,7 @@ func _autoplay_turn() -> void:
 const BOSS_EXTRA_RATE := 0.25  # 星詠みの砂時計・騎士王の角笛の確率
 const ENEMY_TARGETS := ["front_pair", "front_enemy_single", "front_enemy_group", "random_enemy", "back_row", "front_row"]
 const ALLY_TARGETS := ["self", "other_ally"]
-const SELF_ONLY_EFFECTS := ["draw", "swap", "double", "turnabout", "extra_turn", "rank_swap", "rank_to", "repeat", "add_ap"]  # 味方全体にしても持ち主だけに効く効果
+const SELF_ONLY_EFFECTS := ["draw", "swap", "double", "add_gauge", "extra_turn", "rank_swap", "rank_to", "repeat", "add_ap"]  # 味方全体にしても持ち主だけに効く効果
 
 
 ## 暁の聖杯：ターン開始時 AP+1
@@ -2576,19 +2504,27 @@ func _boss_round_start() -> void:
 		_log("%s：%sの追加ターン！" % [RelicList.DATA[pair[0]].name, a.name])
 
 
-## 封印の聖櫃：ターン開始時、保留カードがあれば AP を使わずに自動で発動する（使えない条件のカードはそのまま）
+## 封印の聖櫃（10 回目）：ターン開始時、手札のランダムなカード 1 枚が AP を使わずに自動で発動する
+## （使えない条件のカード・APX のカードは選ばない。AP が足りないだけのカードは選ぶ）
 func _boss_hold_auto(u: Dictionary, dc: DeckController) -> void:
-	if not Inventory.has_relic("boss_hold") or dc.hold == null or phase != "player":
+	if not Inventory.has_relic("boss_hold") or phase != "player":
 		return
-	var c: Dictionary = dc.hold
-	if c.get("type", "") == "unselectable" or ActionList.has_keyword(c, "power"):
+	var cand: Array = []
+	for i in dc.hand.size():
+		var c = dc.hand[i]
+		if c == null or c.get("type", "") == "unselectable" or c.get("ap_x", false):
+			continue
+		var info0 := _card_info(c, i, "card", "")
+		if info0.no_consume or str(info0.block_msg) != "":
+			continue
+		cand.append(i)
+	if cand.is_empty():
 		return
-	var info := _card_info(c, -1, "hold_play", "")
-	if info.no_consume or str(info.block_msg) != "":
-		return
+	var slot: int = cand.pick_random()
+	var info := _card_info(dc.hand[slot], slot, "card", "")
 	info["ap"] = 0
 	fx.popup(views[u.uid], "封印の聖櫃！", ImageController.COL.accent, 28)
-	_log("封印の聖櫃：%sが自動で発動" % c.get("name", ""))
+	_log("封印の聖櫃：%sが自動で発動" % dc.hand[slot].get("name", ""))
 	_use_card(info, dc, Vector2.UP)
 	_refresh_all()
 

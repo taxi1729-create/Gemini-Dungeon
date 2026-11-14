@@ -24,6 +24,12 @@ var dimmed := false:
 	set(v):
 		dimmed = v
 		queue_redraw()
+## 必殺技のゲージ（10 回目）：gauge_max > 0 なら、丸の外側にゲージの輪と、右上（AP の数字の代わり）に「今/最大」を描く
+var gauge_max := 0
+var gauge := 0:
+	set(v):
+		gauge = v
+		queue_redraw()
 
 
 func setup(t: String, ik: String, acc: Color, desc: String, hint: String, sz: Vector2 = Vector2(116, 116), shp: String = "circle") -> void:
@@ -82,6 +88,8 @@ func _draw() -> void:
 	if sub_on:
 		IC.text(self, subtitle, c + Vector2(0, 39), 14, Color(fg, 0.85), true, 4, size.x - 30, IC.COL.ink)
 	_draw_badge()
+	if gauge_max > 0:
+		_draw_gauge(c, rad)
 	if ap_cost >= 0:
 		var p := Vector2(size.x - 18, 18)
 		IC.icon(self, "ap", p, 34, IC.COL.ap if not dimmed else IC.GLASS.deep_rose.darkened(0.55))
@@ -118,6 +126,24 @@ func _draw_badge() -> void:
 				else PackedVector2Array([ac + Vector2(-5, -3), ac + Vector2(5, -3), ac + Vector2(0, 5)])
 		var tc: Color = IC.COL.good if up else IC.COL.red
 		IC.poly_box(self, tri, tc.darkened(dark), 2.0, IC.COL.ink)
+
+
+## 必殺技のゲージ：丸の外側の輪（黒い下地に、貯まった分を金色。満タンは赤と白で点滅。ライトモードは点滅しない）と、
+## 右上の札「今/最大」（満タンなら「MAX」）
+func _draw_gauge(c: Vector2, rad: float) -> void:
+	var IC = ImageController
+	var r := rad + 3.0
+	var f := clampf(float(gauge) / float(gauge_max), 0.0, 1.0)
+	var full := gauge >= gauge_max
+	draw_arc(c, r, 0, TAU, 48, Color(IC.COL.ink, 0.9), 9, true)
+	if f > 0.0:
+		var col: Color = Color("f2c94c")
+		if full:
+			col = IC.COL.red if (IC.light_mode or int(_t * 4) % 2 == 0) else IC.COL.paper
+		draw_arc(c, r, -PI / 2, -PI / 2 + TAU * f, 48, col, 6, true)
+	var tag := Rect2(size.x - 50, -2, 52, 24)
+	IC.slant(self, tag, IC.COL.red if full else IC.COL.ink, 6, 2.0, IC.COL.paper)
+	IC.text(self, "MAX" if full else "%d/%d" % [gauge, gauge_max], tag.get_center(), 14, IC.COL.paper, true, 0, tag.size.x - 6)
 
 
 ## 右列のキー：斜めの黒いパネル。選択中は赤く塗りつぶす

@@ -408,6 +408,18 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 			parts.append("[i:stat_atk]%dダメージ%s（攻撃力%+d）" % [action.power, times, atk])
 		else:
 			parts.append("[i:stat_atk]%dダメージ%s" % [action.power, times])
+	# D（10 回目の新カード）：盾打ち・炎刃・侵食の針・灰燼斬
+	if action.get("power_half_block", false) and action.has("power"):
+		var hb := int(floor(int(user.get("shield", 0)) / 2.0)) if not user.is_empty() else 0
+		parts[parts.size() - 1] = "[i:shield]自分のブロックの半分のダメージ（今のブロックなら%d）" % hb
+	var iss = action.get("if_self_status")
+	if iss is Dictionary:
+		parts.append("[i:flame]自分に%sがあればさらに+%d" % [str(StatusEffectList.DATA.get(str(iss.get("status", "")), {}).get("name", "")), int(iss.get("power", 0))])
+	var vss = action.get("vs_status")
+	if vss is Dictionary:
+		parts.append("[i:st_poison]%sが付いた敵にはさらに+%d" % [str(StatusEffectList.DATA.get(str(vss.get("status", "")), {}).get("name", "")), int(vss.get("power", 0))])
+	if int(action.get("per_exhaust", 0)) > 0:
+		parts.append("[i:kw_exhaust]自分の廃棄札1枚につきさらに+%d" % int(action.per_exhaust))
 	var aph = action.get("ap_hits")
 	if aph is Dictionary:
 		parts.append("[i:ap]使う前のAPが%d以上なら、さらに%d回" % [int(aph.get("min", 0)), int(aph.get("hits", 1)) - maxi(1, int(action.get("hits", 1)))])
@@ -453,6 +465,10 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 			"rank_to": parts.append("[i:formation]自分を%sに移動" % ("前衛" if int(e.get("eff_val", 1)) == 0 else "後衛"))
 			"cleanse": parts.append("[i:heart]%sデバフ（火傷・毒・攻撃力低下・防御力低下・回復不可・スタン）を解除" % who)
 			"repeat": parts.append("[i:skull]もう一度この攻撃が発動")
+			"shield_per_status": parts.append("[i:shield]自分の%s1につきブロック+%d（%sは減らない）" % [
+					str(StatusEffectList.DATA.get(str(e.get("status", "fire")), {}).get("name", "")), int(e.eff_val),
+					str(StatusEffectList.DATA.get(str(e.get("status", "fire")), {}).get("name", ""))])
+			"dmg_half_block": parts.append("[i:shield]自分のブロックの半分のダメージ")
 			"add_status":
 				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
 				var ic := "[i:%s]" % str(st.get("icon", "star"))
@@ -471,7 +487,8 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 					"focus": parts.append("%s次の自分のターン、必殺技のAP-%d" % [ic, int(e.eff_val)])
 					"declare": parts.append("%s宣言：次の自分のターン開始時までにHPが減らなければ、%dターン APプラス（ターン開始時AP+1）" % [ic, int(e.eff_val)])
 					"reblock": parts.append("%s次の自分のターン開始時にブロック+%d" % [ic, int(e.eff_val)])
-					_: parts.append("%s%s%s+%d" % [ic, who, str(st.get("name", "")).replace("アップ", ""), int(e.eff_val)])
+					"chant": parts.append("%s次に使うアタックカードのダメージ+%d" % [ic, int(e.eff_val)])  # D：詠唱の構え
+					_: parts.append("%s%s%s%s+%d" % [ic, who, dur, str(st.get("name", "")).replace("アップ", ""), int(e.eff_val)])
 	if burns(action, "exhaust") and not is_power:
 		parts.append("[i:kw_exhaust]使うと廃棄")
 	if str(action.get("badge", "")) == "keep" and (ActionList.has_keyword(action, "exhaust") or ActionList.has_keyword(action, "consume")):

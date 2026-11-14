@@ -159,7 +159,7 @@ func _switch(id: String) -> void:
 		var total := 0.0
 		for g in groups:
 			total += 34 + ceili(g[1].size() / float(cols)) * ch + 6
-		if total <= _grid.size.y or sc <= 0.36:
+		if total <= _grid.size.y or sc <= 0.32:  # 見出しが多い並べ替え（AP・種類）でも入るように 0.33 まで
 			break
 		sc -= 0.03
 	no_size = clampi(int(8.0 / sc), 12, 20)  # 小さく並べた時も No. が読めるように
@@ -320,7 +320,8 @@ static func group_name(c: Dictionary, key: String) -> String:
 		"type": return TYPE_NAME[type_rank(c)]
 		"ap":
 			var r := ap_rank(c)
-			return "AP X" if r == 99 else ("AP なし" if r == 98 else "AP %d" % r)
+			# AP3 以上はまとめる（見出しが増えすぎると一覧に入らない）
+			return "AP X" if r == 99 else ("AP なし" if r == 98 else ("AP 3 以上" if r >= 3 else "AP %d" % r))
 	return ""
 
 

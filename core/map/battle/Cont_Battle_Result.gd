@@ -159,6 +159,8 @@ func _valid_other(o: Dictionary) -> bool:
 			return o.get("ids") is Array and (o.ids as Array).all(func(r): return RelicList.DATA.has(str(r)))
 		"sr_cards":
 			return o.get("ids") is Array and (o.ids as Array).all(func(c): return not ActionList.make_card(str(c)).is_empty())
+		"ev_card": return not ActionList.make_card(id).is_empty()  # D：イベントの戦闘の報酬
+		"dup": return true  # D：鏡の間（カード 1 枚を複製）
 	return false
 
 
@@ -263,6 +265,16 @@ func _other_info(o: Dictionary) -> Dictionary:
 			var names2: Array = (o.ids as Array).map(func(c): return str(ActionList.make_card(str(c)).get("name", "")))
 			info = {"title": "超レア報酬", "icon": "cards", "accent": Color("ffb03a"), "sub": "3枚から1枚",
 					"desc": "[i:cards]超レア確定のカードを 3 枚から 1 枚選ぶ：%s" % "／".join(names2)}
+		"ev_card":
+			# D：イベントの戦闘の報酬（カード 1 枚）
+			var ec := ActionList.make_card(str(o.id))
+			var eo := str(ec.get("owner", "knight"))
+			info = {"card": ec, "title": str(ec.get("name", "")), "sub": "イベント報酬",
+					"desc": "イベントの報酬：%sのカード\n%s" % [InitAllyStatus.DATA[eo].name, DeckController.card_text(CurrentStatus.ally(eo), ec)]}
+		"dup":
+			# D：鏡の間（デッキのカード 1 枚を複製）
+			info = {"title": "カード複製", "icon": "cards", "accent": gold, "sub": "イベント報酬",
+					"desc": "[i:cards]デッキのカードを 1 枚選んで複製する（同じカードがもう 1 枚デッキに入る）"}
 	if o.done:
 		info["enabled"] = false
 		info["price"] = "獲得"
@@ -380,6 +392,22 @@ func _take_other(i: int) -> void:
 				o["done"] = true
 				UiSystem.toast(ui, "%sを手に入れた" % Item_List.DATA[o.id].name, 560, ImageController.COL.good)
 			_after_take()
+		"ev_card":
+			# D：イベントの戦闘の報酬
+			_busy = true
+			pad.locked = true
+			o["done"] = true
+			GuiAcquire.card(ui, str(o.id), func(_ok: bool): _after_take())
+		"dup":
+			# D：鏡の間。デッキ一覧で選んだカードをもう 1 枚加える（選ばずに閉じたら受け取っていない）
+			_busy = true
+			pad.locked = true
+			var v := GuiDeckView.open(ui, "複製するカードを選ぶ", func(char_id, card_id):
+				CurrentDeck.add_card(str(char_id), str(card_id))
+				o["done"] = true
+				o["id"] = str(card_id)
+				UiSystem.toast(ui, "%sを複製した" % ActionList.make_card(str(card_id)).get("name", ""), 560, ImageController.COL.good))
+			v.closed.connect(func(): _after_take.call_deferred())  # 選んだ処理は closed の後に呼ばれるので次のフレームで
 		"boss_relic", "sr_cards":
 			sub_mode = str(o.kind)
 			sub_index = i
@@ -496,6 +524,20 @@ func _process_drops() -> Array:
 		others.append({"kind": "badge", "id": BadgeList.random_id(), "ids": [], "done": false})
 	if randf() < (0.6 if elite else 0.25):
 		others.append({"kind": "item", "id": Item_List.random_id(), "ids": [], "done": false})
+	# D（10 回目）：イベントの戦闘の追加報酬（ev_card＝カード 1 枚／relic＝レリック／dup＝カード 1 枚を複製）。先頭に置く
+	var er: Dictionary = CurrentStatus.take_event_reward()
+	match str(er.get("kind", "")):
+		"ev_card":
+			if not ActionList.make_card(str(er.get("id", ""))).is_empty():
+				others.insert(0, {"kind": "ev_card", "id": str(er.id), "ids": [], "done": false})
+		"relic":
+			var erid := str(er.get("id", ""))
+			if others.any(func(o): return str(o.kind) == "relic" and str(o.id) == erid) or Inventory.has_relic(erid):
+				erid = RelicList.random_id(Inventory.relics + others.map(func(o): return str(o.id)))
+			if RelicList.DATA.has(erid):
+				others.insert(0, {"kind": "relic", "id": erid, "ids": [], "done": false})
+		"dup":
+			others.insert(0, {"kind": "dup", "id": "", "ids": [], "done": false})
 	SaveData.screen["drops"] = got
 	return got
 
@@ -661,7 +703,7 @@ func _animate_pending() -> void:
 		if w is Control:
 			var wc: Control = w
 			var base := pad.cell_center_global(pend[i]) - pad.global_position - wc.size / 2
-			wc.position = base + Vector2(0, -absf(sin(_t * 3.2 + i * 0.9)) * 9.0)
+			wc.position = base + Vector2(0, -absf(sin(_t * 3.2 + i * 0.9)) * 6.0)
 	_fx_back.queue_redraw()
 	_fx_front.queue_redraw()
 
@@ -691,8 +733,8 @@ func _draw_fx_front() -> void:
 			i += 1
 			continue  # 選んでいる（拡大中の）マスには出さない
 		var c := pad.cell_center_global(k) - pad.global_position
-		var dy := 0.0 if light else -absf(sin(_t * 3.2 + i * 0.9)) * 9.0
-		var tag := Rect2(c.x - 64, c.y - 84 + dy, 128, 28)
+		var dy := 0.0 if light else -absf(sin(_t * 3.2 + i * 0.9)) * 6.0
+		var tag := Rect2(c.x - 64, c.y - 80 + dy, 128, 28)
 		IC.slant(_fx_front, tag, IC.COL.red, 9, 2.0, IC.COL.paper, IC.COL.ink, Vector2(3, 3))
 		IC.head(_fx_front, "受け取れる！", tag.get_center(), 18, IC.COL.paper, 112)
 		i += 1
