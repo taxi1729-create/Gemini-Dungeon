@@ -1561,17 +1561,22 @@ func _special_play(sp: Dictionary, consumed: bool = false) -> Dictionary:
 	if sp.get("left") is Dictionary and sp.get("right") is Dictionary:
 		var side: Dictionary = (sp.left if int(current.get("lane", 0)) == 0 else sp.right)
 		a.erase("power")
+		a.erase("pow_pct")
 		a.erase("effects")
 		a.merge(side.duplicate(true), true)
-	# 虚空連斬：手札 6 欄（4 枠＋空き欄 2）の空き数 × n
+	# 虚空連斬：手札 6 欄（4 枠＋空き欄 2）の空き数 × n（11 回目：空き数 × POW% のダメージ、空き数 × SLD% のブロック）
 	if sp.get("void_hits") is Dictionary:
 		var vh: Dictionary = sp.void_hits
 		var n := _card_empties()
 		if not consumed and deck_controllers.has(current.get("id", "")) and (deck_controllers[current.id] as DeckController).has_consume_target(-1):
 			n += 1
-		a["power"] = n * int(vh.get("power_per", 0))
-		a["effects"] = [{"effect": "add_shield", "eff_val": n * int(vh.get("shield_per", 0)), "to": "self"}]
+		a["power"] = 0
+		a["pow_pct"] = n * int(vh.get("pow_pct_per", 0))
+		a["effects"] = [{"effect": "add_shield", "sld_pct": n * int(vh.get("sld_pct_per", 0)), "to": "self"}]
 		a["void_n"] = n
+	# 11 回目：POW% の攻撃（"pow_pct"）にも "power"（固定の上乗せ 0）を入れて、アタックとして扱う
+	if a.has("pow_pct") and not a.has("power"):
+		a["power"] = 0
 	# 毒蛇の舞：毒が付いた敵が 1 体でもいれば poison_hits 回攻撃
 	if int(sp.get("poison_hits", 0)) > 0:
 		if CurrentStatus.enemies.any(func(e): return int(e.hp) > 0 and StatusController.val(e, "poison") > 0):
@@ -1772,7 +1777,7 @@ func _effect_label(a: Dictionary, x: int = 1) -> String:
 	var e: Dictionary = effs[0]
 	var v := int(e.get("eff_val", 0)) * (x if e.get("x", false) else 1)
 	match e.get("effect", ""):
-		"add_shield": return "盾+%d" % v
+		"add_shield": return "盾+%d" % (ActionController.shield_amount(current, e) * (x if e.get("x", false) else 1))  # 11 回目：SLD × %
 		"absorb_block":
 			var total := 0
 			for t in ActionController.resolve_targets(current, a.get("target", "self"), CurrentStatus.allies, CurrentStatus.enemies):
