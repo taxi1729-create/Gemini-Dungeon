@@ -40,7 +40,9 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	view.queue_redraw()
+	# 11回目（軽くする）：毎フレームではなく、そろえた時計で 1 秒に ANIM_HZ 回だけ描き直す
+	if ImageController.anim_tick(ImageController.ANIM_HZ):
+		view.queue_redraw()
 
 
 # ============================================================

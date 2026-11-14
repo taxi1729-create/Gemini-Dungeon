@@ -73,6 +73,11 @@ const DATA = {
 }
 
 
+## 11 回目：敵の HP は表の値の 1.2 倍（ウィッチの攻撃が 1.5 倍になる分の見込み。リーダー決定）。make_enemy で掛けて四捨五入
+## （攻撃の約 1.6 倍は ActionList.ENEMY_ACTIONS の power に書き込み済み）
+const HP_MULT := 1.2
+
+
 ## 敵を作る。floor_no は階の中の段（0〜7）
 static func make_enemy(enemy_id: String, floor_no: int) -> Dictionary:
 	var base: Dictionary = DATA[enemy_id]
@@ -88,6 +93,7 @@ static func make_enemy(enemy_id: String, floor_no: int) -> Dictionary:
 		else:
 			hp = int(base.hp)
 			atk = 0
+	hp = int(round(hp * HP_MULT))
 	var e := {
 		"base_id": enemy_id, "name": base.name, "art": base.art,
 		"art_scale": base.get("art_scale", 1.0),

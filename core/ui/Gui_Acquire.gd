@@ -98,7 +98,8 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	_deco.queue_redraw()
+	if ImageController.anim_tick(ImageController.ANIM_HZ):  # 11回目：1 秒に ANIM_HZ 回だけ描き直す
+		_deco.queue_redraw()
 
 
 func _draw_deco() -> void:

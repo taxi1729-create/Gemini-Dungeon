@@ -46,7 +46,8 @@ func setup(t: String, ik: String, acc: Color, desc: String, hint: String, sz: Ve
 
 func _process(delta: float) -> void:
 	super(delta)
-	if (icon_kind == "burst" and not dimmed) or charge > 0:
+	# 11回目（軽くする）：溜めの輪は charge を変えた時に描き直すので、ここは動く飾り（必殺の光・満タンの点滅）を 1 秒に ANIM_HZ 回だけ
+	if ((icon_kind == "burst" and not dimmed) or charge > 0) and ImageController.anim_tick(ImageController.ANIM_HZ):
 		queue_redraw()
 
 

@@ -1,7 +1,7 @@
 extends Node2D
 ## タイトル画面
 
-const VERSION := "0.05"  # 公開するたびに上げる（右下に表示）
+const VERSION := "0.06"  # 公開するたびに上げる（右下に表示）
 
 var deco: Control
 var _t := 0.0
@@ -20,6 +20,12 @@ func _ready() -> void:
 	deco.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	deco.draw.connect(_draw_deco)
 	ui.add_child(deco)
+	# 11回目：動かないロゴとカナのタグは別のキャンバスに一度だけ描く（後光・キャラだけを描き直す）
+	var logo := Control.new()
+	logo.size = Vector2(720, 1280)
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	logo.draw.connect(_draw_logo.bind(logo))
+	ui.add_child(logo)
 	var col: Dictionary = ImageController.COL
 	if SaveData.has_save():
 		# セーブがある時は「続きから」を大きく、「冒険をはじめる」（セーブを消して新規）をその下に
@@ -54,7 +60,8 @@ func _process(delta: float) -> void:
 	if covered or light:
 		return  # ライトモードでは後光を回さない（止まった 1 枚の絵）
 	_t += delta
-	deco.queue_redraw()
+	if ImageController.anim_tick(ImageController.ANIM_HZ):  # 11回目：毎フレームではなく 1 秒に 20 回
+		deco.queue_redraw()
 
 
 ## 一覧・設定のオーバーレイが開いているか
@@ -79,25 +86,34 @@ func _draw_deco() -> void:
 	deco.draw_colored_polygon(IC.slant_pts(Rect2(160, ground.y - 10, 400, 3), 2), col.paper)
 	IC.character(deco, "knight", ground + Vector2(-80, 0), 1.6, 1.0, _t)
 	IC.character(deco, "witch", ground + Vector2(80, 0), 1.6, -1.0, _t)
-	# タイトル：少し傾けた赤い帯に白抜きの「GEMINI」、白い帯に黒の「DUNGEON」
+	# 双子座の二つ星（白い十字星を赤い線で結ぶ）。ロゴの帯とは重ならないので、ロゴ（別のキャンバス）より先に描いてよい
 	var c := Vector2(360, 250)
 	deco.draw_set_transform(c, -0.07, Vector2.ONE)
-	IC.slant(deco, Rect2(-430, -92, 860, 158), col.red, 44, 4.0, col.ink, col.ink, Vector2(12, 12))
-	IC.stripes(deco, Rect2(150, -88, 270, 150), Color(col.ink, 0.25), 16, 5, 0.3)
-	IC.head(deco, "GEMINI", Vector2(-8, -12), 134, col.paper, 660, col.ink, Vector2(7, 7))
-	IC.slant(deco, Rect2(-250, 82, 540, 92), col.paper, 30, 4.0, col.ink, col.red, Vector2(9, 9))
-	IC.head(deco, "DUNGEON", Vector2(22, 126), 78, col.ink, 480, Color(col.red, 0.85), Vector2(4, 3))
-	# 双子座の二つ星（白い十字星を赤い線で結ぶ）
 	var s1 := Vector2(-330, -124)
 	var s2 := Vector2(-250, -150 + sin(_t * 2.0) * 3)
 	deco.draw_line(s1, s2, col.paper, 3, true)
 	deco.draw_colored_polygon(IC.star_pts(s1, 26, 7, 4, 0), col.paper)
 	deco.draw_colored_polygon(IC.star_pts(s2, 20, 6, 4, 0), col.paper)
 	deco.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
+
+
+## 動かないロゴとカナのタグ（一度だけ描く）
+func _draw_logo(ci: Control) -> void:
+	var IC = ImageController
+	var col: Dictionary = IC.COL
+	# タイトル：少し傾けた赤い帯に白抜きの「GEMINI」、白い帯に黒の「DUNGEON」
+	var c := Vector2(360, 250)
+	ci.draw_set_transform(c, -0.07, Vector2.ONE)
+	IC.slant(ci, Rect2(-430, -92, 860, 158), col.red, 44, 4.0, col.ink, col.ink, Vector2(12, 12))
+	IC.stripes(ci, Rect2(150, -88, 270, 150), Color(col.ink, 0.25), 16, 5, 0.3)
+	IC.head(ci, "GEMINI", Vector2(-8, -12), 134, col.paper, 660, col.ink, Vector2(7, 7))
+	IC.slant(ci, Rect2(-250, 82, 540, 92), col.paper, 30, 4.0, col.ink, col.red, Vector2(9, 9))
+	IC.head(ci, "DUNGEON", Vector2(22, 126), 78, col.ink, 480, Color(col.red, 0.85), Vector2(4, 3))
+	ci.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
 	# カナ表記のタグ
 	var tag := Rect2(206, 444, 308, 50)
-	IC.slant(deco, tag, col.ink, 16, 3.0, col.paper, col.red, Vector2(6, 6))
-	IC.head(deco, "ジェミニ・ダンジョン", tag.get_center(), 26, col.paper, 270)
+	IC.slant(ci, tag, col.ink, 16, 3.0, col.paper, col.red, Vector2(6, 6))
+	IC.head(ci, "ジェミニ・ダンジョン", tag.get_center(), 26, col.paper, 270)
 
 
 func _start() -> void:

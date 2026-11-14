@@ -77,7 +77,9 @@ func _show_stage_intro(ui: CanvasLayer) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	view.queue_redraw()
+	# 11回目（軽くする）：毎フレームではなく、そろえた時計で 1 秒に ANIM_HZ 回だけ描き直す（次のマスの光・二人の揺れ）
+	if ImageController.anim_tick(ImageController.ANIM_HZ):
+		view.queue_redraw()
 
 
 func _node_pos(f: int, i: int) -> Vector2:

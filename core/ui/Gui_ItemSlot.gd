@@ -27,7 +27,8 @@ func set_item(id: String) -> void:
 
 func _process(delta: float) -> void:
 	super(delta)
-	if charge >= 1.0 or highlighted:
+	# 11回目（軽くする）：毎フレームではなく、そろえた時計で 1 秒に ANIM_HZ 回だけ描き直す
+	if (charge >= 1.0 or highlighted) and ImageController.anim_tick(ImageController.ANIM_HZ):
 		queue_redraw()
 
 

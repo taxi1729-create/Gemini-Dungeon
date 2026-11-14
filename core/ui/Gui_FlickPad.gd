@@ -69,6 +69,11 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	# 11回目（軽くする）：水玉・斜線・網点の多い下地は一度だけ絵に焼いて、親（このパッド）の絵より奥に貼る
+	var pad_bg := GuiBaked.new(Rect2(0, 10, size.x, size.y - 10), func(ci: CanvasItem, sz: Vector2):
+		ImageController.pad_bg(ci, Rect2(Vector2.ZERO, sz)))
+	pad_bg.show_behind_parent = true
+	add_child(pad_bg)
 	_tags = Control.new()
 	_tags.size = size
 	_tags.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -463,8 +468,7 @@ func _set_charge(key, c: float) -> void:
 func _draw() -> void:
 	var IC = ImageController
 	var col: Dictionary = IC.COL
-	var bg := Rect2(0, 10, size.x, size.y - 10)
-	IC.pad_bg(self, bg)
+	# 下地（IC.pad_bg）は _ready で作った焼き付けの子（_pad_bg、親より奥に描く）が描く（11回目：軽くする）
 	draw_rect(Rect2(0, 7, 720, 4), col.red)
 	draw_rect(Rect2(0, 12, 720, 1), Color(1, 1, 1, 0.5))
 	draw_colored_polygon(IC.slant_pts(Rect2(470, 0, 260, 11), 10), col.red)
@@ -539,7 +543,8 @@ class SideTile extends GuiPad:
 
 	func _process(delta: float) -> void:
 		super(delta)
-		if charge >= 1.0 or highlighted:
+		# 11回目（軽くする）：毎フレームではなく、そろえた時計で 1 秒に ANIM_HZ 回だけ描き直す
+		if (charge >= 1.0 or highlighted) and ImageController.anim_tick(ImageController.ANIM_HZ):
 			queue_redraw()
 
 	func _draw() -> void:

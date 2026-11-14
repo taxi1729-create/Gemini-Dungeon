@@ -7,6 +7,9 @@ run/main_scene="res://index/core/title/Title.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/bg_color=Color(0.054902, 0.0705882, 0.133333, 1)
 boot_splash/show_image=false
+; 11回目（スマホの発熱対策）：画面に変化が無いフレームは描かない（low processor mode）・フレーム上限 30fps
+run/low_processor_mode=true
+run/max_fps=30
 
 [autoload]
 Inventory="*res://index/core/map/status/Current_Inventory.gd"

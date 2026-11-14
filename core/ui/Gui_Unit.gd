@@ -76,9 +76,12 @@ func body_height() -> float:
 
 func _process(delta: float) -> void:
 	_t += delta
-	queue_redraw()
-	_under.queue_redraw()
-	_body.queue_redraw()
+	# 11回目（軽くする）：毎フレームではなく、そろえた時計で 1 秒に ANIM_HZ 回だけ描き直す（呼吸・吹き出しの揺れは十分なめらか）。
+	# 被弾の押し返し（kick）・吹き飛び中は動きが速いので毎フレーム描く
+	if kick != Vector2.ZERO or flying or ImageController.anim_tick(ImageController.ANIM_HZ):
+		queue_redraw()
+		_under.queue_redraw()
+		_body.queue_redraw()
 
 
 ## 足元：影と手番・プレビューの輪（_under に描く）

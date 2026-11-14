@@ -53,6 +53,64 @@ var font_head: Font  # 見出し用（極太＋斜体）
 ## true の時は背景の動き・光の帯・粒・カードの光・カットイン・画面の揺れ・ワイプなどを省く。全員がこの値を見る
 var light_mode := false
 var _glass_cache := {}  # ステンドグラスの窓の切り抜き済みガラス片（毎フレームの多角形演算を省く）
+## 11回目（軽くする）：動く絵の描き直しの間隔をそろえる時計（実時間・秒）。
+## 各部品は毎フレーム queue_redraw せず、anim_tick(回数/秒) が true の時だけ描き直す（ゆっくりの動きは少ない回数で足りる）
+var anim_clock := 0.0
+var _anim_prev := 0.0
+## キャラの呼吸・予告の矢印など、ずっと動く絵の描き直しの回数/秒。フレーム上限 30fps でも 60fps でも等間隔になる 15 にする
+## （ゆっくりの物は半分の 7.5 を使う。全部品が同じ時計なので、描き直すフレームが重なり、画面を描く回数は最大 15 回/秒）
+const ANIM_HZ := 15.0
+var _dot_cache := {}  # 網点・水玉の三角形（同じ範囲・色なら作り直さない）
+var _unit_circle := {}  # 角数 → 単位円の頂点
+
+
+func _process(delta: float) -> void:
+	# Autoload は画面のノードより先に動くので、このフレームの各部品は同じ時計を見る
+	_anim_prev = anim_clock
+	anim_clock += delta / maxf(Engine.time_scale, 0.01)  # ヒットストップ中も実時間で進める
+
+
+## このフレームで「1 秒に hz 回」の描き直しの番が来たか。ライトモードでは回数を半分にする
+func anim_tick(hz: float) -> bool:
+	var h := hz * (0.5 if light_mode else 1.0)
+	return int(anim_clock * h) != int(_anim_prev * h)
+
+
+## 小さな丸をまとめて 1 つの描画命令で描く（網点・水玉用）。円は半径に応じた少ない角数の多角形（draw_circle は 1 個 64 三角形）。
+## key が同じなら三角形を作り直さない（毎フレーム描き直す画面でも計算は最初の 1 回だけ）
+func dot_batch(ci: CanvasItem, key: String, centers: PackedVector2Array, radii: PackedFloat32Array, col: Color) -> void:
+	var d: Array = _dot_cache.get(key, [])
+	if d.is_empty():
+		var pts := PackedVector2Array()
+		var idx := PackedInt32Array()
+		for i in centers.size():
+			var r: float = radii[i]
+			var n := 8 if r <= 3.0 else (12 if r <= 7.0 else 20)
+			if not _unit_circle.has(n):
+				var u := PackedVector2Array()
+				for k in n:
+					u.append(Vector2.from_angle(TAU * k / n))
+				_unit_circle[n] = u
+			var unit: PackedVector2Array = _unit_circle[n]
+			var base := pts.size()
+			pts.append(centers[i])
+			for k in n:
+				pts.append(centers[i] + unit[k] * r)
+			for k in n:
+				idx.append(base)
+				idx.append(base + 1 + k)
+				idx.append(base + 1 + (k + 1) % n)
+		var cols := PackedColorArray()
+		cols.resize(pts.size())
+		cols.fill(col)
+		d = [idx, pts, cols]
+		if _dot_cache.size() > 256:
+			_dot_cache.clear()
+		_dot_cache[key] = d
+	var ix: PackedInt32Array = d[0]
+	if ix.is_empty():
+		return
+	RenderingServer.canvas_item_add_triangle_array(ci.get_canvas_item(), ix, d[1], d[2])
 
 
 func _ready() -> void:
@@ -484,17 +542,24 @@ func stripes(ci: CanvasItem, r: Rect2, col: Color, gap: float = 18.0, w: float =
 ## 網点（ハーフトーン）。from に近いほど点が大きく、reach 離れると消える
 func halftone(ci: CanvasItem, r: Rect2, col: Color, from: Vector2, reach: float, spacing: float = 16.0,
 		max_r: float = 5.0) -> void:
-	var y := r.position.y
-	var row := 0
-	while y < r.end.y:
-		var x := r.position.x + (spacing / 2.0 if row % 2 == 1 else 0.0)
-		while x < r.end.x:
-			var k := 1.0 - Vector2(x, y).distance_to(from) / reach
-			if k > 0.06:
-				ci.draw_circle(Vector2(x, y), max_r * k, col)
-			x += spacing
-		y += spacing * 0.866
-		row += 1
+	# 11回目：丸を 1 個ずつ描かず、まとめて 1 つの描画命令にする（見た目は同じ）
+	var key := "h|%s|%s|%s|%s|%s|%s" % [r, col, from, reach, spacing, max_r]
+	var centers := PackedVector2Array()
+	var radii := PackedFloat32Array()
+	if not _dot_cache.has(key):
+		var y := r.position.y
+		var row := 0
+		while y < r.end.y:
+			var x := r.position.x + (spacing / 2.0 if row % 2 == 1 else 0.0)
+			while x < r.end.x:
+				var k := 1.0 - Vector2(x, y).distance_to(from) / reach
+				if k > 0.06:
+					centers.append(Vector2(x, y))
+					radii.append(max_r * k)
+				x += spacing
+			y += spacing * 0.866
+			row += 1
+	dot_batch(ci, key, centers, radii, col)
 
 
 # ============================================================
@@ -2202,11 +2267,23 @@ func _c_necro(ci: CanvasItem, t: float) -> void:
 # ============================================================
 
 func background(ci: CanvasItem, kind: String, r: Rect2, t: float) -> void:
+	background_layer(ci, kind, r, t, BG_ALL)
+
+
+## 11回目（軽くする）：背景を「動かない部分」と「動く部分」に分けて描けるようにする。
+## GuiBackground は動かない部分を一度だけ絵（テクスチャ）に焼き、動く部分（松明・粒・窓の明るさ・暖炉の火）だけを描き直す
+const BG_ALL := 0  # 全部（今までどおり）
+const BG_STATIC := 1  # 動かない部分だけ（窓は明るさの最大で描く）
+const BG_ANIM := 2  # 動く部分だけ（窓の明るさの揺れは暗い膜を重ねて表す）
+const WIN_A_MAX := 0.86  # 窓の明るさの最大（0.80 ± 0.06）
+
+
+func background_layer(ci: CanvasItem, kind: String, r: Rect2, t: float, layer: int) -> void:
 	match kind:
-		"camp": _bg_camp(ci, r, t)
-		"title": _bg_cave(ci, r, t, true)
-		"map": _bg_map(ci, r, t)
-		_: _bg_cave(ci, r, t, false)
+		"camp": _bg_camp(ci, r, t, layer)
+		"title": _bg_cave(ci, r, t, true, layer)
+		"map": _bg_map(ci, r, t, layer)
+		_: _bg_cave(ci, r, t, false, layer)
 
 
 func _vgrad(ci: CanvasItem, r: Rect2, top: Color, bottom: Color, steps: int = 24) -> void:
@@ -2222,9 +2299,12 @@ func _slash(ci: CanvasItem, r: Rect2, y0: float, y1: float, w: float, col: Color
 	ci.draw_colored_polygon(p, col)
 
 
-func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool) -> void:
+func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool, layer: int = BG_ALL, camp: bool = false) -> void:
 	var ground_y := r.position.y + r.size.y * (0.62 if not title else 0.72)
 	var G := GLASS
+	if layer == BG_ANIM:
+		_bg_cave_anim(ci, r, t, title, ground_y, camp)
+		return
 	# 奥の壁：セイクレッドブルー寄りの明るめの紺（上ほど暗く）
 	_vgrad(ci, Rect2(r.position, Vector2(r.size.x, ground_y - r.position.y)),
 			G.blackish_blue.lerp(G.sacred_blue, 0.35), G.sacred_blue.lerp(G.blackish_blue, 0.15))
@@ -2254,7 +2334,10 @@ func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool) -> void:
 		var w := 150.0 if i == 1 else 120.0
 		var cx2 := r.position.x + r.size.x * (0.2 + 0.3 * i)
 		var top := wy + (0.0 if i == 1 else 40.0)
-		gothic_window(ci, Rect2(cx2 - w / 2, top, w, wh - (0.0 if i == 1 else 40.0)), i * 7 + 3, 0.80 + 0.06 * sin(t * 0.8 + i))
+		var wa := 0.80 + 0.06 * sin(t * 0.8 + i)
+		if layer == BG_STATIC:
+			wa = WIN_A_MAX if not camp else 0.80  # 休憩所は窓の揺れを描かない（暖炉が前にあるため）。平均の明るさ
+		gothic_window(ci, Rect2(cx2 - w / 2, top, w, wh - (0.0 if i == 1 else 40.0)), i * 7 + 3, wa)
 	# 床：ホーリーブルーとアッシュグレイの市松（遠近で奥ほど細かく）
 	_floor_checker(ci, r, ground_y)
 	# 窓から差す光（セイクレッドスカイの帯）。ライトモードでは省く
@@ -2265,6 +2348,26 @@ func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool) -> void:
 	# 壁と床の境目（ストーングレイの幅木）
 	ci.draw_rect(Rect2(r.position.x, ground_y - 6, r.size.x, 6), Color(G.stone_gray, 0.35))
 	ci.draw_line(Vector2(r.position.x, ground_y), Vector2(r.end.x, ground_y), Color(G.ivory_black, 0.6), 2)
+	if layer == BG_STATIC:
+		return
+	_bg_cave_anim(ci, r, t, title, ground_y, camp, false)
+
+
+## 洞窟の背景の動く部分：窓の明るさの揺れ（暗い膜）・松明・漂う光の粒。dim_windows = false なら窓の膜は描かない（全部を描く時）
+func _bg_cave_anim(ci: CanvasItem, r: Rect2, t: float, title: bool, ground_y: float, camp: bool, dim_windows: bool = true) -> void:
+	var G := GLASS
+	if dim_windows and not camp:
+		# 窓は明るさの最大で焼いてあるので、今の明るさとの差だけ暗い膜を重ねる（下地は暗いので見た目はほぼ同じ）
+		var wy := r.position.y + r.size.y * 0.05
+		var wh := (ground_y - wy) * 0.78
+		for i in 3:
+			var w := 150.0 if i == 1 else 120.0
+			var cx2 := r.position.x + r.size.x * (0.2 + 0.3 * i)
+			var top := wy + (0.0 if i == 1 else 40.0)
+			var wa := 0.80 + 0.06 * sin(t * 0.8 + i)
+			var dim := 1.0 - wa / WIN_A_MAX
+			if dim > 0.004:
+				ci.draw_colored_polygon(_arch_pts(Rect2(cx2 - w / 2, top, w, wh - (0.0 if i == 1 else 40.0)).grow(-7)), Color(G.ivory_black, dim))
 	var cx := r.get_center().x
 	# 松明（ローズの炎と白い芯）
 	for side in [-1, 1]:
@@ -2279,24 +2382,32 @@ func _bg_cave(ci: CanvasItem, r: Rect2, t: float, title: bool) -> void:
 	# 漂う光の粒（白とローズ）。ライトモードでは省く
 	if light_mode:
 		return
+	# 休憩所を分けて描く時は、暖炉（後から描く石のアーチ）の後ろに隠れる粒を描かない
+	var hearth := Rect2(cx - 190, r.position.y + r.size.y * 0.12, 380, ground_y - r.position.y - r.size.y * 0.12) if (camp and dim_windows) else Rect2()
 	for i in 14:
 		var px := r.position.x + fmod(i * 97.0 + t * (8 + i % 5), r.size.x)
 		var py := r.position.y + fmod(i * 61.0 - t * (5 + i % 3) * 3.0 + 2000.0, ground_y - r.position.y)
+		if hearth.has_area() and hearth.has_point(Vector2(px, py)):
+			continue
 		var pc: Color = COL.red if i % 3 == 0 else G.angel_white
 		ci.draw_rect(Rect2(Vector2(px, py), Vector2(3, 3)), Color(pc, 0.28 + 0.15 * sin(t * 2 + i)))
 
 
-func _bg_camp(ci: CanvasItem, r: Rect2, t: float) -> void:
-	_bg_cave(ci, r, t, true)
+func _bg_camp(ci: CanvasItem, r: Rect2, t: float, layer: int = BG_ALL) -> void:
+	# 動かない部分（BG_STATIC）＝洞窟の動かない部分＋暖炉の石のアーチ。動く部分（BG_ANIM）＝松明・粒＋暖炉の火
+	_bg_cave(ci, r, t, true, layer, true)
 	# 暖炉：中央の窓の前を石の尖頭アーチで覆い、中を暗くして鍋と文字を見やすくする
 	var ground_y := r.position.y + r.size.y * 0.72
 	var hearth := Rect2(r.get_center().x - 190, r.position.y + r.size.y * 0.12, 380, ground_y - r.position.y - r.size.y * 0.12)
-	var arch := _arch_pts(hearth)
-	ci.draw_colored_polygon(arch, GLASS.stone_gray.darkened(0.35))
-	ci.draw_colored_polygon(_arch_pts(hearth.grow(-14)), GLASS.ivory_black.lerp(GLASS.blackish_blue, 0.45))
-	var ol := arch.duplicate()
-	ol.append(arch[0])
-	ci.draw_polyline(ol, GLASS.ivory_black, 3.0)
+	if layer != BG_ANIM:
+		var arch := _arch_pts(hearth)
+		ci.draw_colored_polygon(arch, GLASS.stone_gray.darkened(0.35))
+		ci.draw_colored_polygon(_arch_pts(hearth.grow(-14)), GLASS.ivory_black.lerp(GLASS.blackish_blue, 0.45))
+		var ol := arch.duplicate()
+		ol.append(arch[0])
+		ci.draw_polyline(ol, GLASS.ivory_black, 3.0)
+	if layer == BG_STATIC:
+		return
 	var c := Vector2(r.get_center().x, r.position.y + r.size.y * 0.44)  # 休憩所の画面で見える高さに置く
 	var fl := 0.9 + 0.1 * sin(t * 8.0) + 0.06 * sin(t * 21.0)
 	glow(ci, c + Vector2(0, -40), 260 * fl, Color(COL.red, 0.35), 10)
@@ -2314,8 +2425,11 @@ func _bg_camp(ci: CanvasItem, r: Rect2, t: float) -> void:
 		ci.draw_rect(Rect2(c + Vector2(sin(i * 3.1 + t) * 30, -60 - k * 220), Vector2(3, 3)), Color(COL.red.lightened(0.3), 1.0 - k))
 
 
-func _bg_map(ci: CanvasItem, r: Rect2, t: float) -> void:
+func _bg_map(ci: CanvasItem, r: Rect2, t: float, layer: int = BG_ALL) -> void:
 	var G := GLASS
+	if layer == BG_ANIM:
+		_bg_map_motes(ci, r, t)
+		return
 	# 地：セイクレッドブルー → ブラッキッシュブルー（上が明るい）
 	_vgrad(ci, r, G.sacred_blue.lerp(G.blackish_blue, 0.2), G.blackish_blue.lerp(G.sacred_blue, 0.25))
 	# 地模様：七宝（重なった円の格子）。円の中はセイクレッドスカイ、線はホーリーブルーとエンジェルホワイト
@@ -2325,6 +2439,14 @@ func _bg_map(ci: CanvasItem, r: Rect2, t: float) -> void:
 			Vector2(r.position.x + 720, r.position.y), Vector2(r.position.x, r.position.y + 420)])
 	ci.draw_colored_polygon(band, Color(G.sacred_sky, 0.10))
 	_slash(ci, r, r.position.y + 470, r.position.y - 60, 4, Color(G.deep_rose, 0.45))
+	if layer == BG_STATIC:
+		return
+	_bg_map_motes(ci, r, t)
+
+
+## マップの背景の動く部分：またたく光の粒
+func _bg_map_motes(ci: CanvasItem, r: Rect2, t: float) -> void:
+	var G := GLASS
 	if light_mode:
 		return  # 粒を省く
 	for i in 30:
@@ -2404,10 +2526,17 @@ func shippo(ci: CanvasItem, r: Rect2, cell: float, fill: Color, petal: Color, li
 	var rad := cell / 2.0
 	var ny := int(r.size.y / rad) + 2
 	var nx := int(r.size.x / cell) + 2
+	# 11回目：塗りの円はまとめて 1 つの描画命令で先に描く（線の輪は塗りの上に描くので見た目は同じ）
+	var centers := PackedVector2Array()
+	var radii := PackedFloat32Array()
+	for yy in ny:
+		for xx in nx:
+			centers.append(r.position + Vector2(xx * cell + (rad if yy % 2 == 1 else 0.0), yy * rad))
+			radii.append(rad * 0.42)
+	dot_batch(ci, "s|%s|%s|%s" % [r, cell, fill], centers, radii, fill)
 	for yy in ny:
 		for xx in nx:
 			var c := r.position + Vector2(xx * cell + (rad if yy % 2 == 1 else 0.0), yy * rad)
-			ci.draw_circle(c, rad * 0.42, fill)
 			ci.draw_arc(c, rad * 1.0, 0, TAU, 28, line, 2.0)
 			ci.draw_arc(c, rad * 0.42, 0, TAU, 20, petal, 3.0)
 
@@ -2452,15 +2581,22 @@ func checker(ci: CanvasItem, r: Rect2, cell: float, c1: Color, c2: Color) -> voi
 
 ## ドット（水玉）。行ごとに半分ずらす
 func dots(ci: CanvasItem, r: Rect2, col: Color, spacing: float = 22.0, rad: float = 3.0) -> void:
-	var y := r.position.y + spacing / 2.0
-	var row := 0
-	while y < r.end.y:
-		var x := r.position.x + (spacing / 2.0 if row % 2 == 1 else spacing / 4.0)
-		while x < r.end.x:
-			ci.draw_circle(Vector2(x, y), rad, col)
-			x += spacing
-		y += spacing * 0.866
-		row += 1
+	# 11回目：丸をまとめて 1 つの描画命令にする（見た目は同じ）
+	var key := "d|%s|%s|%s|%s" % [r, col, spacing, rad]
+	var centers := PackedVector2Array()
+	var radii := PackedFloat32Array()
+	if not _dot_cache.has(key):
+		var y := r.position.y + spacing / 2.0
+		var row := 0
+		while y < r.end.y:
+			var x := r.position.x + (spacing / 2.0 if row % 2 == 1 else spacing / 4.0)
+			while x < r.end.x:
+				centers.append(Vector2(x, y))
+				radii.append(rad)
+				x += spacing
+			y += spacing * 0.866
+			row += 1
+	dot_batch(ci, key, centers, radii, col)
 
 
 ## ステンドグラス（鉛の線で区切った色ガラス片）で poly の中を埋める。a = ガラスの濃さ

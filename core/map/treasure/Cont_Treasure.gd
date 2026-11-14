@@ -47,7 +47,13 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	view.queue_redraw()
+	# 11回目（軽くする）：開く演出の間（_open が 1 に近づくまで）は毎フレーム、それ以外は 1 秒に ANIM_HZ 回だけ描き直す
+	if absf(_open - _open_drawn) > 0.001 or ImageController.anim_tick(ImageController.ANIM_HZ):
+		_open_drawn = _open
+		view.queue_redraw()
+
+
+var _open_drawn := -1.0  # 最後に描いた時の _open
 
 
 ## 中身を決める（確率は RATE）

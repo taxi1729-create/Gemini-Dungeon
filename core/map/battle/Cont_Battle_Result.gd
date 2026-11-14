@@ -64,7 +64,8 @@ func _is_clear() -> bool:
 func _process(delta: float) -> void:
 	_t += delta
 	if not ImageController.get("light_mode"):
-		deco.queue_redraw()
+		if ImageController.anim_tick(ImageController.ANIM_HZ):  # 11回目：1 秒に ANIM_HZ 回だけ描き直す
+			deco.queue_redraw()
 		_animate_pending()
 
 

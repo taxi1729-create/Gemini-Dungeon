@@ -74,8 +74,11 @@ func _process(delta: float) -> void:
 		shake_amt = lerpf(shake_amt, 0.0, minf(1.0, delta * 15.0))
 	else:
 		shake_amt = 0.0
-		field.position = Vector2.ZERO
-	queue_redraw()
+		if field.position != Vector2.ZERO:  # 11回目：同じ値でも入れると「画面が変わった」扱いになり毎フレーム描かれるので、変わる時だけ
+			field.position = Vector2.ZERO
+	# 11回目（軽くする）：地面のターゲット（回る輪）と予告の矢印は毎フレームではなく 1 秒に ANIM_HZ 回だけ描き直す
+	if ImageController.anim_tick(ImageController.ANIM_HZ):
+		queue_redraw()
 
 
 func _exit_tree() -> void:
@@ -733,7 +736,14 @@ class FxTop extends Node2D:
 		_age(streaks, delta)
 		_age(texts, delta)
 		_age(flashes, delta)
-		queue_redraw()
+		# 11回目（軽くする）：火花・数字などが何も無い時は描き直さない（消えた直後の 1 回だけ描いて空にする）
+		var busy := not (parts.is_empty() and rings.is_empty() and booms.is_empty() and slashes.is_empty()
+				and streaks.is_empty() and texts.is_empty() and flashes.is_empty())
+		if busy or _was_busy:
+			queue_redraw()
+		_was_busy = busy
+
+	var _was_busy := true
 
 	func _draw() -> void:
 		for d in streaks:

@@ -26,7 +26,8 @@ func _init(m: String = "icon", rect: Rect2 = Rect2()) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	if mode == "order" or mode == "hub":
+	# 11回目（軽くする）：毎フレームではなく、そろえた時計で 1 秒に ANIM_HZ 回だけ描き直す
+	if (mode == "order" or mode == "hub") and ImageController.anim_tick(ImageController.ANIM_HZ):
 		queue_redraw()
 
 

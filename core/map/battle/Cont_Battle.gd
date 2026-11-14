@@ -517,13 +517,9 @@ func _cell_of(value) -> Vector2i:
 func _build_ui() -> void:
 	var col: Dictionary = ImageController.COL
 	# 下半分の操作エリア：黒地に薄い斜線、上端に赤と白の線
-	var low_bg := Control.new()
-	low_bg.position = Vector2(0, 662)
-	low_bg.size = Vector2(720, 618)
-	low_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	low_bg.draw.connect(func():
-		var IC = ImageController
-		IC.pad_bg(low_bg, Rect2(Vector2.ZERO, low_bg.size)))
+	# 11回目（軽くする）：水玉・斜線・網点の多い下地は一度だけ絵に焼いて貼る（GuiBaked）
+	var low_bg := GuiBaked.new(Rect2(0, 662, 720, 618), func(ci: CanvasItem, sz: Vector2):
+		ImageController.pad_bg(ci, Rect2(Vector2.ZERO, sz)))
 	ui.add_child(low_bg)
 	var line := Control.new()
 	line.position = Vector2(0, 652)
