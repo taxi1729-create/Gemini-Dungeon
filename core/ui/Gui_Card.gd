@@ -346,6 +346,11 @@ static func summary(c: Dictionary) -> String:
 		"reuse_free": parts.append("撃破でAP0再使用")
 	parts.append_array(_eff_summary(ActionList.effects_of(c)))
 	parts.append_array(_eff_summary(side_b.get("effects", [])))
+	# D：「最後」の時だけ使えるカードの効果（瞑想）
+	if c.get("saigo_only", false) and c.get("bonus_saigo") is Dictionary:
+		var ss := _eff_summary(c.bonus_saigo.get("effects", []))
+		if not ss.is_empty():
+			parts.append("最後" + "".join(ss))
 	# 撃破・反撃・予約の追加効果
 	for k in ActionController.KW_TIMED:
 		if ActionList.has_keyword(c, k):
