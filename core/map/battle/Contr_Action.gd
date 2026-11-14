@@ -119,10 +119,74 @@ static func calc_damage(user: Dictionary, action: Dictionary, target: Dictionary
 		return StatusController.val(target, "poison")  # 腐食：毒の残り分の固定ダメージ
 	if action.get("fixed", false):
 		return int(action.get("power", 0))
-	return maxi(0, int(action.get("power", 0)) + vs_status_add(action, target) + get_atk(user) + relic_atk(user) - get_def(target))
+	return maxi(0, pow_part(user, action, target) + int(action.get("power", 0)) + vs_status_add(action, target) + get_atk(user) + relic_atk(user) - get_def(target))
 
 
-## D（10 回目・侵食の針）：その状態が付いた敵へのダメージの上乗せ
+# ------------------------------------------------------------
+# 11 回目：POW（攻撃力の基礎）・SLD（ブロック量の基礎）
+#   カードの攻撃 ＝ "pow_pct"（POW の %）。ダメージ＝POW × % ÷ 100（切り捨て、最低 1）＋ "power"（固定の上乗せ）＋攻撃力 − 防御力
+#     キーワードの追加効果・炎刃（if_self_status）・侵食の針（vs_status）の "pow_pct" は % に足してから切り捨てる
+#     "power" は固定の上乗せ（バッジ・砥石・数珠・詠唱の構え・盾打ち・怒涛の締めなど）。敵の行動・アイテム・パワーは "power" だけ
+#   カードのブロック ＝ 効果 add_shield の "sld_pct"（使った人の SLD の %。切り捨て）＋ "eff_val"（固定）
+#     味方全体・もう 1 人の味方に与えるブロックも、使った人（user）の SLD で計算する
+# ------------------------------------------------------------
+static func get_pow(u: Dictionary) -> int:
+	return int(u.get("pow", 0))
+
+
+static func get_sld(u: Dictionary) -> int:
+	return int(u.get("sld", 0))
+
+
+## POW × % の部分（% が無い行動は 0）。target を渡すと侵食の針（vs_status の pow_pct）も足す
+static func pow_part(user: Dictionary, action: Dictionary, target: Dictionary = {}) -> int:
+	var pct := int(action.get("pow_pct", 0))
+	var vs = action.get("vs_status")
+	if not target.is_empty() and vs is Dictionary and StatusController.has(target, str(vs.get("status", ""))):
+		pct += int(vs.get("pow_pct", 0))
+	if pct <= 0:
+		return 0
+	return maxi(1, get_pow(user) * pct / 100)
+
+
+## 効果 1 つの SLD × % の部分（sld_pct が無ければ 0）
+static func sld_part(user: Dictionary, eff: Dictionary) -> int:
+	var pct := int(eff.get("sld_pct", 0))
+	if pct <= 0:
+		return 0
+	return get_sld(user) * pct / 100
+
+
+## 効果 1 つのブロック量（X 倍の前。add_shield の sld_pct＋eff_val）
+static func shield_amount(user: Dictionary, eff: Dictionary) -> int:
+	return int(eff.get("eff_val", 0)) + sld_part(user, eff)
+
+
+## 攻撃力・防御力を見ない「基本のダメージ」（POW × % ＋固定の上乗せ）。カードの左上の色分けの基準
+static func base_power(user: Dictionary, action: Dictionary) -> int:
+	return pow_part(user, action) + int(action.get("power", 0))
+
+
+## 行動の「すぐ出るブロック」の合計（effects の add_shield。to が自分・味方全体・もう 1 人でも 1 人分の量）。X の倍率は x
+static func shield_total(user: Dictionary, action: Dictionary, x: int = 1) -> int:
+	var total := 0
+	for e in ActionList.effects_of(action):
+		var ed: Dictionary = e
+		if str(ed.get("effect", "")) == "add_shield":
+			total += shield_amount(user, ed) * (x if ed.get("x", false) else 1)
+	return total
+
+
+## カードの持ち主（戦闘外の表示用）：今の冒険の味方（いなければ初期ステータス）
+static func owner_unit(card: Dictionary) -> Dictionary:
+	var ow := str(card.get("owner", ""))
+	for a in CurrentStatus.allies:
+		if str((a as Dictionary).get("id", "")) == ow:
+			return a
+	return InitAllyStatus.get_status(ow) if InitAllyStatus.DATA.has(ow) else {}
+
+
+## D（10 回目・侵食の針）：その状態が付いた敵へのダメージの固定の上乗せ（11 回目からは vs_status の pow_pct を pow_part で足す）
 static func vs_status_add(action: Dictionary, target: Dictionary) -> int:
 	var vs = action.get("vs_status")
 	if vs is Dictionary and StatusController.has(target, str(vs.get("status", ""))):
@@ -259,9 +323,11 @@ static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}
 	var a: Dictionary = card.duplicate(true)
 	var effs: Array = ActionList.effects_of(card).duplicate(true)
 	var is_atk: bool = card.has("power")
-	var add := 0
+	var add := 0  # 固定の上乗せ（power）
+	var add_pct := 0  # POW の % の上乗せ（11 回目：キーワードの追加効果・炎刃・灰燼斬）
 	for b in active_bonuses(user, card, ctx):
 		add += int(b.get("power", 0))
+		add_pct += int(b.get("pow_pct", 0))
 		for e in b.get("effects", []):
 			effs.append((e as Dictionary).duplicate(true))
 		if b.has("target"):
@@ -327,13 +393,18 @@ static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}
 	var iss = card.get("if_self_status")
 	if iss is Dictionary and StatusController.has(user, str(iss.get("status", ""))):
 		add += int(iss.get("power", 0))
+		add_pct += int(iss.get("pow_pct", 0))
 	if int(card.get("per_exhaust", 0)) > 0:
 		add += int(card.per_exhaust) * int(ctx.get("exhausted", 0))
+	if int(card.get("per_exhaust_pct", 0)) > 0:
+		add_pct += int(card.per_exhaust_pct) * int(ctx.get("exhausted", 0))
 	if is_atk and StatusController.has(user, "chant"):
 		add += StatusController.val(user, "chant")
 		a["chant_used"] = true  # execute_action で状態 chant を外す
 	if is_atk and add != 0:
 		a["power"] = int(a.power) + add
+	if is_atk and add_pct != 0:
+		a["pow_pct"] = int(a.get("pow_pct", 0)) + add_pct
 	a["effects"] = effs
 	a.erase("effect")
 	return a
@@ -345,7 +416,7 @@ static func effective_power(user: Dictionary, action: Dictionary, allies: Array,
 		return 0
 	var rk := _pre_rank_begin(user, action)
 	var t := resolve_targets(user, action.get("target", "self"), allies, enemies)
-	var out := maxi(0, int(action.power) + get_atk(user) + relic_atk(user)) if t.is_empty() else calc_damage(user, action, t[0])
+	var out := maxi(0, base_power(user, action) + get_atk(user) + relic_atk(user)) if t.is_empty() else calc_damage(user, action, t[0])
 	_pre_rank_end(user, rk)
 	return out
 
@@ -536,6 +607,8 @@ static func _hit_effect_events(user: Dictionary, t: Dictionary, effs: Array, h: 
 
 static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: Dictionary, x: int = 1) -> void:
 	var v := int(eff.get("eff_val", 0))
+	if str(eff.get("effect", "")) == "add_shield":
+		v = shield_amount(user, eff)  # 11 回目：使った人（user）の SLD × sld_pct ＋固定の eff_val
 	if eff.get("x", false):
 		v *= x
 	match eff.get("effect", ""):
@@ -584,7 +657,9 @@ static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: 
 				t.status_effects.declare["hp"] = int(t.status_effects.declare.hp) + int(ev.heal)
 		"shield_per_status":
 			# D（熱き鼓動）：対象の状態の値 1 につきブロック +v（状態は減らさない）
-			var sv := v * StatusController.val(t, str(eff.get("status", "fire")))
+			# 11 回目：sld_pct があれば、状態の値 1 につき SLD × %（合計してから切り捨て）
+			var sn := StatusController.val(t, str(eff.get("status", "fire")))
+			var sv := v * sn + get_sld(user) * int(eff.get("sld_pct", 0)) * sn / 100
 			t["shield"] = int(t.get("shield", 0)) + sv
 			ev["shield"] = sv
 		"dmg_half_block":

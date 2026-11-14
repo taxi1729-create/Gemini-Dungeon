@@ -3040,7 +3040,7 @@ const BOSS_ICON_COL = {
 
 func _icon_boss9(ci: CanvasItem, kind: String, k: Color) -> bool:
 	if not BOSS_ICON_COL.has(kind):
-		return false
+		return _icon_kw11(ci, kind, k)  # 11 回目（C）：保留・揮発・ハイコストの札
 	var c: Color = BOSS_ICON_COL[kind] if k == Color.WHITE else k
 	# 後ろの光輪（ボスレリックの印）
 	ci.draw_colored_polygon(burst_pts(Vector2.ZERO, 0.52, 0.42, 16, 3), Color(COL.red, 0.85))
@@ -3086,4 +3086,44 @@ func _icon_boss9(ci: CanvasItem, kind: String, k: Color) -> bool:
 			_ink_poly(ci, pts([[-0.32, 0.2], [-0.34, -0.16], [-0.16, 0.0], [0, -0.26], [0.16, 0.0], [0.34, -0.16], [0.32, 0.2]]), c, 0.04)
 			ci.draw_colored_polygon(star_pts(Vector2(-0.14, 0.1), 0.11, 0.05), Color("2f7cf0"))
 			ci.draw_colored_polygon(star_pts(Vector2(0.14, 0.1), 0.11, 0.05), Color("e8213a"))
+	return true
+
+
+# ============================================================
+# 11 回目（C）：キーワード札 保留・揮発・ハイコスト のアイコン（丸い札）
+# ============================================================
+const ICON_DEFAULT11 = {
+	"kw_horyu": Color("2a9d8f"), "kw_kihatsu": Color("8d8aa6"), "kw_highcost": Color("e07a1f"),
+}
+
+
+func _icon_kw11(ci: CanvasItem, kind: String, k: Color) -> bool:
+	if not ICON_DEFAULT11.has(kind):
+		return false
+	var c: Color = ICON_DEFAULT11[kind] if k == Color.WHITE else k
+	_kw_disc(ci, c)
+	match kind:
+		"kw_horyu":
+			# 保留：白いカードを金のピンで留める（次のターンも手札に残る）
+			_ink_poly(ci, pts([[-0.17, -0.2], [0.17, -0.2], [0.17, 0.28], [-0.17, 0.28]]), COL.paper, 0.035)
+			ci.draw_line(Vector2(-0.09, 0.06), Vector2(0.09, 0.06), c.darkened(0.2), 0.04)
+			ci.draw_line(Vector2(-0.09, 0.15), Vector2(0.09, 0.15), c.darkened(0.2), 0.04)
+			ci.draw_line(Vector2(0, -0.2), Vector2(0, -0.06), COL.ink, 0.05)
+			ci.draw_circle(Vector2(0, -0.24), 0.1, COL.ink)
+			ci.draw_circle(Vector2(0, -0.24), 0.07, COL.gold)
+		"kw_kihatsu":
+			# 揮発：下半分だけ残った白いカードから、上へ立ちのぼる煙
+			_ink_poly(ci, pts([[-0.18, 0.04], [-0.08, 0.0], [0.0, 0.05], [0.09, 0.0], [0.18, 0.04], [0.18, 0.3], [-0.18, 0.3]]), COL.paper, 0.035)
+			for i in 3:
+				var x0 := -0.12 + i * 0.12
+				var wisp := PackedVector2Array()
+				for j in 7:
+					var t := j / 6.0
+					wisp.append(Vector2(x0 + sin(t * PI * 1.6 + i) * 0.05, -0.04 - t * 0.3))
+				ci.draw_polyline(wisp, Color(COL.paper, 0.9 - i * 0.15), 0.045, true)
+		"kw_highcost":
+			# ハイコスト：AP の玉の右上に、太い上向きの矢印（使うたび AP+1）
+			ci.draw_circle(Vector2(-0.08, 0.08), 0.2, COL.ink)
+			ci.draw_circle(Vector2(-0.08, 0.08), 0.15, ICON_DEFAULT.ap)
+			_ink_poly(ci, pts([[0.2, -0.34], [0.36, -0.12], [0.26, -0.12], [0.26, 0.14], [0.14, 0.14], [0.14, -0.12], [0.04, -0.12]]), COL.paper, 0.035)
 	return true

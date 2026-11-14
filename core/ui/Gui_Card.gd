@@ -233,6 +233,12 @@ func _draw_keywords(art: Rect2) -> void:
 				face = ImageController.ICON_DEFAULT8.get("kw_" + str(kw), IC.COL.paper)
 				fg = IC.COL.paper
 				line = IC.COL.ink
+			"horyu", "kihatsu", "highcost":
+				# 11 回目（C）：保留・揮発・ハイコスト。札の色はアイコンと同じ（ImageController.ICON_DEFAULT11）
+				lb = str(DeckController.KW_NAME[kw])
+				face = ImageController.ICON_DEFAULT11.get("kw_" + str(kw), IC.COL.paper)
+				fg = IC.COL.paper
+				line = IC.COL.ink
 			_:
 				continue
 		var w := 18.0 + 12.0 * lb.length()

@@ -12,8 +12,8 @@ const PATH := "user://save.json"
 const TMP_PATH := "user://save.tmp"
 const RESUMES := ["map", "battle", "event", "shop", "rest", "result", "treasure"]
 # 味方で戦闘の外へ持ち越す項目（uid・pos・lane・status_effects・shield・ap などの戦闘用の項目は保存しない）
-const ALLY_KEYS := ["id", "name", "hp", "max_hp", "def", "atk", "max_ap", "side", "art"]  # 素早さ（spd）は 10 回目に撤去
-const ALLY_INT_KEYS := ["hp", "max_hp", "def", "atk", "max_ap"]
+const ALLY_KEYS := ["id", "name", "hp", "max_hp", "pow", "def", "sld", "atk", "max_ap", "side", "art"]  # 素早さ（spd）は 10 回目に撤去。POW・SLD は 11 回目
+const ALLY_INT_KEYS := ["hp", "max_hp", "pow", "def", "sld", "atk", "max_ap"]
 const REMOVED_CARDS := ["thunder"]  # 削除したカード（読み込み時にデッキから外す。9 回目：雷撃）
 
 ## 画面ごとの途中の状態（イベントの id、戦利品、ショップの品ぞろえなど）。
@@ -170,6 +170,10 @@ func _apply(data: Dictionary) -> bool:
 		for k in ALLY_KEYS:
 			if o.has(k):
 				a[k] = int(o[k]) if k in ALLY_INT_KEYS else str(o[k])
+		if not o.has("pow"):
+			# 11 回目より前のセーブ：古い値（最大 HP 60 等）を今のステータスに直す
+			a.erase("pow")
+			InitAllyStatus.upgrade_old(a)
 		a["max_hp"] = maxi(1, int(a.max_hp))
 		a["hp"] = clampi(int(a.hp), 0, int(a.max_hp))
 		allies.append(a)

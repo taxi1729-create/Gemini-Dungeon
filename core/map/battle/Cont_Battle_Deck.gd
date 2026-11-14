@@ -12,6 +12,7 @@ var draw_pile: Array = []
 var hand: Array = [null, null, null, null, null, null]
 var discard_pile: Array = []
 var exhaust_pile: Array = []  # 廃棄札（廃棄カードを使うとここへ。戦闘中は戻らない）
+var last_consumed: Dictionary = {}  # 消費で最後に手札から捨てたカード（揮発なら廃棄札にある）
 
 
 func setup_battle_deck(master_deck_ids: Array) -> void:
@@ -52,10 +53,10 @@ func draw_cards(amount: int, only_slots: Array = []) -> Array:
 	return filled
 
 
-## 使ったカードを捨札（廃棄なら廃棄札）へ
+## 使ったカードを捨札（廃棄・揮発なら廃棄札）へ
 func _to_used(c: Dictionary) -> void:
 	c.erase("free")
-	if burns(c, "exhaust"):
+	if burns(c, "exhaust") or burns(c, "kihatsu"):
 		exhaust_pile.append(c)
 	else:
 		discard_pile.append(c)
@@ -66,16 +67,27 @@ static func burns(c: Dictionary, kw: String) -> bool:
 	return ActionList.has_keyword(c, kw) and str(c.get("badge", "")) != "keep"
 
 
-## 軽のバッジを反映した消費 AP（0 未満にしない）。APX はそのまま
+## 軽のバッジ・ハイコストを反映した消費 AP（0 未満にしない）。APX はそのまま
+## ハイコスト（11 回目）：使うたびにカードの辞書の ap_up が +1（戦闘中の山札のカードだけ。戦闘中セーブにも差分で残る）
 static func card_ap(c: Dictionary) -> int:
 	var ap := int(c.get("ap", 0))
-	if str(c.get("badge", "")) == "light" and not c.get("ap_x", false):
+	if c.get("ap_x", false):
+		return ap
+	if str(c.get("badge", "")) == "light":
 		ap = maxi(0, ap - 1)
-	return ap
+	return ap + int(c.get("ap_up", 0))
 
 
+## ハイコスト：使ったカードの AP を 1 上げる（その戦闘中。カードごと）
+static func raise_highcost(c: Dictionary) -> void:
+	if ActionList.has_keyword(c, "highcost") and not c.get("ap_x", false):
+		c["ap_up"] = int(c.get("ap_up", 0)) + 1
+
+
+## カードを使った：ハイコストなら AP+1 して、捨札（廃棄・揮発なら廃棄札）へ
 func play_and_discard(hand_index: int) -> void:
 	if hand[hand_index] != null:
+		raise_highcost(hand[hand_index])
 		_to_used(hand[hand_index])
 		hand[hand_index] = null
 
@@ -88,7 +100,8 @@ func has_consume_target(except_slot: int) -> bool:
 	return false
 
 
-## 消費：except_slot 以外の手札からランダムに 1 枚を捨札へ。捨てた枠の番号を返す（無ければ -1）
+## 消費：except_slot 以外の手札からランダムに 1 枚を捨札（揮発なら廃棄札）へ。捨てた枠の番号を返す（無ければ -1）
+## 捨てたカードは last_consumed に入る
 func consume_random(except_slot: int) -> int:
 	var cand: Array = []
 	for i in hand.size():
@@ -99,9 +112,18 @@ func consume_random(except_slot: int) -> int:
 	var slot: int = cand.pick_random()
 	var c: Dictionary = hand[slot]
 	c.erase("free")
-	discard_pile.append(c)
+	_to_unused(c)
+	last_consumed = c
 	hand[slot] = null
 	return slot
+
+
+## 使わずに手札から捨てる（ターン終了・消費）：捨札へ。揮発は廃棄札へ
+func _to_unused(c: Dictionary) -> void:
+	if burns(c, "kihatsu"):
+		exhaust_pile.append(c)
+	else:
+		discard_pile.append(c)
 
 
 ## 倒したらもう一度使える：使ったカードを捨札（廃棄札）から元の欄へ戻す。戻した欄を返す。戻せなければ -2
@@ -138,13 +160,41 @@ func clear_free() -> void:
 func discard_hand(slots: Array = []) -> void:
 	for i in hand.size():
 		if hand[i] != null and (slots.is_empty() or slots.has(i)):
-			discard_pile.append(hand[i])
+			_to_unused(hand[i])
 			hand[i] = null
 
 
+## ターン終了：保留のカードは空き欄（9→3）へ移して手札に残し、残りは捨札（揮発は廃棄札）へ
 func turn_end_and_discard() -> void:
 	clear_free()
-	discard_hand()
+	keep_horyu()  # 保留以外を捨て、保留を空き欄へ（入らない保留も捨てる）
+
+
+## 保留（11 回目）：ターン終了時、保留でない手札を先に捨て（揮発は廃棄札）、保留のカードを空き欄へ移して残す。
+## もう空き欄にある保留のカードはそのまま。4 枠の保留のカードは空いている空き欄へ 9→3 の順（4 枠の 8・4・2・6 の順）に移し、
+## 空き欄が保留のカードで埋まっていれば捨札へ。空き欄に残したカードの欄の番号を返す
+func keep_horyu() -> Array:
+	var others: Array = []
+	for i in hand.size():
+		if hand[i] != null and not ActionList.has_keyword(hand[i], "horyu"):
+			others.append(i)
+	if not others.is_empty():
+		discard_hand(others)  # 空の配列だと手札全部を捨てるので
+	var kept: Array = []
+	for f in FREE_SLOTS:
+		if hand[f] != null:
+			kept.append(f)
+	for i in BASE_SLOTS:
+		if hand[i] == null:
+			continue
+		for f in FREE_SLOTS:
+			if hand[f] == null:
+				hand[f] = hand[i]
+				hand[i] = null
+				kept.append(f)
+				break
+	discard_hand(BASE_SLOTS)  # 空き欄に入らなかった保留のカード
+	return kept
 
 
 func _shuffle_discard_to_draw() -> void:
@@ -275,7 +325,12 @@ static func card_text(user: Dictionary, action: Dictionary) -> String:
 		row += "　[i:ap]AP 0（このターン）"
 	elif action.has("ap"):
 		var ap := card_ap(action)
-		row += "　[i:ap]AP %d" % ap + ("（軽のバッジで-1）" if ap != int(action.ap) or str(action.get("badge", "")) == "light" else "")
+		var why: Array = []  # AP が元と違う理由（軽のバッジ -1・ハイコスト +N）
+		if str(action.get("badge", "")) == "light":
+			why.append("軽のバッジで-1")
+		if int(action.get("ap_up", 0)) > 0:
+			why.append("ハイコストで+%d" % int(action.ap_up))
+		row += "　[i:ap]AP %d" % ap + ("（%s）" % "・".join(why) if not why.is_empty() else "")
 	lines.append(row)
 	lines.append(effect_text(user, action))
 	var bt := badge_text(action)
@@ -285,7 +340,14 @@ static func card_text(user: Dictionary, action: Dictionary) -> String:
 
 
 ## キーワード（即応・最後・陣形・転身）の名前
-const KW_NAME := {"sokuou": "即応", "saigo": "最後", "jinkei": "陣形", "tenshin": "転身", "gekiha": "撃破", "hangeki": "反撃", "yoyaku": "予約"}
+const KW_NAME := {"sokuou": "即応", "saigo": "最後", "jinkei": "陣形", "tenshin": "転身", "gekiha": "撃破", "hangeki": "反撃", "yoyaku": "予約",
+		"horyu": "保留", "kihatsu": "揮発", "highcost": "ハイコスト"}
+## 11 回目（C）：条件の無い札（保留・揮発・ハイコスト）の説明
+const KW_RULE := {
+	"horyu": "ターン終了時に手札に残っていれば、空き欄（9→3）へ移って次のターンも手札に残る（空き欄が埋まっていれば捨札へ）",
+	"kihatsu": "捨札に行かず廃棄札へ（使っても、使わずにターン終了しても）",
+	"highcost": "使うたびに、このカードのAPが1上がる（この戦闘中）",
+}
 ## キーワードの条件の説明
 const KW_COND := {
 	"sokuou": "このラウンドに味方の誰かが入替していれば",
@@ -335,6 +397,11 @@ static func keyword_lines(user: Dictionary, action: Dictionary) -> Array:
 		elif KW_COND.has(k):
 			# 札ごとの追加効果（bonus_sokuou など。無ければ bonus）
 			out.append("[i:kw_%s]%s：%s %s" % [k, KW_NAME[k], KW_COND[k], bonus_text(user, action.get("bonus_" + k, action.get("bonus", {})))])
+		elif KW_RULE.has(k):
+			# 保留・揮発・ハイコスト（残のバッジがあれば揮発は効かない）
+			if k == "kihatsu" and not burns(action, k):
+				continue
+			out.append("[i:kw_%s]%s：%s" % [k, KW_NAME[k], KW_RULE[k]])
 	return out
 
 
@@ -491,7 +558,7 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 					_: parts.append("%s%s%s%s+%d" % [ic, who, dur, str(st.get("name", "")).replace("アップ", ""), int(e.eff_val)])
 	if burns(action, "exhaust") and not is_power:
 		parts.append("[i:kw_exhaust]使うと廃棄")
-	if str(action.get("badge", "")) == "keep" and (ActionList.has_keyword(action, "exhaust") or ActionList.has_keyword(action, "consume")):
+	if str(action.get("badge", "")) == "keep" and (ActionList.has_keyword(action, "exhaust") or ActionList.has_keyword(action, "consume") or ActionList.has_keyword(action, "kihatsu")):
 		parts.append("[i:b_keep]廃棄・消費しない")
 	var kl := keyword_lines(user, action)
 	if action.get("saigo_only", false):

@@ -892,6 +892,7 @@ func _restore_battle(st: Dictionary, enemies: Array) -> void:
 			a["sp_gauge"] = 0
 		if not (a.get("powers") is Array):
 			a["powers"] = []
+		InitAllyStatus.upgrade_old(a)  # 11 回目より前の途中セーブ：HP・POW・DEF・SLD を今のステータスに（"pow" があれば何もしない）
 	# st.ext の項目はここで戻す（battle_snapshot() の d["ext"] と対に）
 
 
@@ -1078,7 +1079,7 @@ func _ally_turn(u: Dictionary) -> void:
 	# パワーの「ターン終了時」（薬師の加護・魔力の転換）：使ったパワーが効いていれば発動
 	if u.hp > 0 and not _all_dead(CurrentStatus.enemies):
 		await _power_turn_end(u, dc)
-	# 使わなかった手札（空き欄を含む 6 欄）は捨札へ
+	# 使わなかった手札（空き欄を含む 6 欄）は捨札へ（揮発は廃棄札へ。保留は空き欄 9→3 へ移して残す。11 回目）
 	dc.turn_end_and_discard()
 	_refresh_all()
 	await _wait(0.3)
@@ -1619,7 +1620,7 @@ func _use_special(dc: DeckController) -> void:
 			var gone: GuiCard = hand_cards[cs]
 			_fly_card(gone, Vector2(0, 1))
 			gone.visible = false
-			var gone_card: Dictionary = dc.discard_pile.back()
+			var gone_card: Dictionary = dc.last_consumed  # 揮発のカードは廃棄札へ行くので捨札の末尾ではない
 			_log("消費：%sを捨てた" % gone_card.get("name", ""))
 			_ash_altar()
 		consumed = true
@@ -1904,7 +1905,7 @@ func _use_card(info: Dictionary, dc: DeckController, dir: Vector2) -> void:
 			var gone: GuiCard = hand_cards[cs]
 			_fly_card(gone, Vector2(0, 1))
 			gone.visible = false
-			var gone_card: Dictionary = dc.discard_pile.back()
+			var gone_card: Dictionary = dc.last_consumed  # 揮発のカードは廃棄札へ行くので捨札の末尾ではない
 			_log("消費：%sを捨てた" % gone_card.get("name", ""))
 			_ash_altar()
 	_fly_card(hand_cards[slot], dir)
@@ -2168,7 +2169,7 @@ func _power_turn_end(u: Dictionary, dc: DeckController) -> void:
 				var cs := dc.consume_random(-1)
 				if cs < 0:
 					continue
-				var gone: Dictionary = dc.discard_pile.back()
+				var gone: Dictionary = dc.last_consumed  # 揮発のカードは廃棄札へ行くので捨札の末尾ではない
 				var gain := DeckController.card_ap(gone) if gone.has("ap") else 0
 				u["ap"] = mini(int(u.get("max_ap", InitAllyStatus.AP_MAX)), int(u.ap) + gain)
 				_fly_card(hand_cards[cs], Vector2(0, 1))
@@ -2417,21 +2418,34 @@ func _set_eff(c: Dictionary, slot: int = -1) -> void:
 	c["kw_on"] = on
 	if (c.get("keywords", []) as Array).has("jinkei"):
 		c["kw_side"] = "左" if int(current.get("lane", 0)) == 0 else "右"
+	# 11 回目：power_eff＝実際のダメージ、power_base＝攻撃力・防御力を見ない基本（POW×%＋固定）、shield_eff＝実際のブロック量（盾のバッジ）
+	var pa := ActionController.play_action(current, c, ctx)
 	if c.has("power"):
-		c["power_eff"] = ActionController.effective_power(current, ActionController.play_action(current, c, ctx), CurrentStatus.allies, CurrentStatus.enemies)
+		c["power_eff"] = ActionController.effective_power(current, pa, CurrentStatus.allies, CurrentStatus.enemies)
+		c["power_base"] = ActionController.base_power(current, pa)
 	else:
 		c.erase("power_eff")
+		c.erase("power_base")
+	var sh := ActionController.shield_total(current, pa)
+	if sh > 0:
+		c["shield_eff"] = sh
+	else:
+		c.erase("shield_eff")
 
 
 ## 必殺技ボタンの左上の効果量：攻撃は主な対象への実際のダメージ（カードの power_eff と同じ計算）、
 ## ブロックは盾の量。数値の無い必殺技は {}（出さない）
+## 11 回目：攻撃とブロックの両方がある必殺技（虚空連斬）は {"kind": "power", …, "shield": n}。ブロックは使った人の SLD で計算した量
 func _special_badge(sp: Dictionary) -> Dictionary:
+	var sh := ActionController.shield_total(current, sp)
 	if sp.has("power"):
-		return {"kind": "power", "val": ActionController.effective_power(current, sp, CurrentStatus.allies, CurrentStatus.enemies),
-				"base": int(sp.power)}
-	for eff in ActionList.effects_of(sp):
-		if eff.get("effect", "") == "add_shield":
-			return {"kind": "shield", "val": int(eff.get("eff_val", 0))}
+		var d := {"kind": "power", "val": ActionController.effective_power(current, sp, CurrentStatus.allies, CurrentStatus.enemies),
+				"base": ActionController.base_power(current, sp)}
+		if sh > 0:
+			d["shield"] = sh
+		return d
+	if sh > 0:
+		return {"kind": "shield", "val": sh}
 	return {}
 
 
