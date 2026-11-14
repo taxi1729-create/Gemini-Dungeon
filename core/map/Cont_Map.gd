@@ -282,7 +282,7 @@ func _open_specials(ui: CanvasLayer) -> void:
 			var open: bool = CurrentStatus.is_special_unlocked(str(sp.id))
 			var txt := "？？？\n（強敵を倒すと解放）"
 			if open:
-				txt = "%s（AP%d）\n%s" % [sp.name, int(sp.ap), str(sp.get("desc", ""))]
+				txt = "%s（ゲージ%dで使える）\n%s" % [sp.name, ActionController.GAUGE_MAX, str(sp.get("desc", ""))]
 			var pos := Vector2(40 + (n % 2) * 324, y + 44 + (n >> 1) * 172)
 			# 文字はボタンの上のラベルで折り返す（ボタンの文字だと横に伸びてしまう）
 			var b := UiSystem.make_button(box, "", pos, Vector2(316, 164), Callable(), 17)

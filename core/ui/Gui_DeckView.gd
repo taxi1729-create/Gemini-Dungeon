@@ -287,7 +287,7 @@ const TYPE_NAME := ["アタック", "スキル", "パワー", "その他"]
 
 ## 種類の順（アタック 0・スキル 1・パワー 2・その他 3）
 static func type_rank(c: Dictionary) -> int:
-	if ActionList.has_keyword(c, "power") or str(c.get("type", "")) == "unselectable":
+	if ActionList.has_keyword(c, "power") or str(c.get("type", "")) in ["power", "unselectable"]:
 		return 2
 	match str(c.get("type", "")):
 		"attack": return 0

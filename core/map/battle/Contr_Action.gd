@@ -138,6 +138,9 @@ static func relic_atk(u: Dictionary) -> int:
 	# D（10 回目）：イベント「双子の肖像画」の赤い絵（この階の間、右のキャラの攻撃力+1）
 	if str(u.get("side", "")) == "ally" and int(u.get("lane", 0)) == 1:
 		add += CurrentStatus.floor_fx_val("right_atk")
+	# D（10 回目）：イベント「石像の問い」の剣（この階の間、ナイトの攻撃力+1）
+	if str(u.get("side", "")) == "ally" and str(u.get("id", "")) == "knight":
+		add += CurrentStatus.floor_fx_val("knight_atk")
 	return add
 
 

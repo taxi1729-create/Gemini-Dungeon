@@ -383,6 +383,7 @@ func _take_other(i: int) -> void:
 		"boss_relic", "sr_cards":
 			sub_mode = str(o.kind)
 			sub_index = i
+			_clear_warn()
 			_refresh()
 
 

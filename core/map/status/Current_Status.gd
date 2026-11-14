@@ -33,6 +33,12 @@ var next_battle := {}  # 料理の効果 {"ap": n, "atk": n, "def": n, "regen": 
 var battle_stats := {}  # 直前の戦闘の集計 {"overkill": 倒した時の余りの合計, "rounds": ラウンド数, "hp_lost": 味方が減らされた HP の合計}
 var special_choice := {"knight": "k_sp_formation", "witch": "w_sp_explosion"}  # 前回セットした必殺技
 var special_unlocked: Array = ActionList.SPECIAL_START.duplicate()  # 解放済みの必殺技 ID（強敵を倒すと 1 つ増える）
+# 10 回目（D）：イベントの効果
+#   floor_fx     : この階の間の効果（階が変わると消える）。{"knight_atk": n, "witch_ap": n, "left_block": n, "right_atk": n}
+#   event_reward : イベントの戦闘に勝った時の追加報酬（結果画面のその他の報酬に足す）。{"kind": "ev_card"/"relic"/"dup", "id": ...}
+#   next_battle の "sokuou_all"（聖歌の楽譜：次の戦闘の間、即応が常に成立）も D が足した
+var floor_fx := {}
+var event_reward := {}
 
 
 func start_new_game() -> void:
@@ -49,6 +55,8 @@ func start_new_game() -> void:
 	last_result = ""
 	gold_multiplier = 1
 	next_battle = {}
+	floor_fx = {}
+	event_reward = {}
 	reset_specials()
 	initialized = true
 
@@ -237,6 +245,7 @@ func advance_stage_if_cleared() -> bool:
 		return false
 	stage += 1
 	current_area_id = STAGES[stage - 1]
+	on_floor_changed()
 	_generate_map()
 	current_floor = -1
 	current_index = -1
@@ -304,3 +313,57 @@ func boss_relic_choices() -> Array:
 	var keys: Array = RelicList.boss_ids().filter(func(k): return not Inventory.relics.has(k))
 	keys.shuffle()
 	return keys.slice(0, 3)
+
+
+# ============================================================
+# 10 回目（D）：階が変わった時・イベントの効果
+# ============================================================
+
+## 階が変わった時（2 階・3 階に入った時）：全員の HP を最大 HP まで回復し、この階の間の効果を消す
+func on_floor_changed() -> void:
+	for a in allies:
+		a["hp"] = int(a.max_hp)
+	floor_fx = {}
+
+
+## この階の間の効果の値（無ければ 0）
+func floor_fx_val(key: String) -> int:
+	return int(floor_fx.get(key, 0))
+
+
+func add_floor_fx(key: String, v: int) -> void:
+	floor_fx[key] = floor_fx_val(key) + v
+
+
+## 聖歌の楽譜：次の戦闘の間、即応が常に成立（next_battle は戦闘の終わりに空になる）
+func sokuou_always() -> bool:
+	return int(next_battle.get("sokuou_all", 0)) > 0
+
+
+## 全員の HP を減らす（倒れはしない。1 残す）
+func damage_all(v: int) -> void:
+	for a in allies:
+		a["hp"] = maxi(1, int(a.hp) - v)
+
+
+## 全員の HP を最大 HP の pct% 回復（倒れた仲間も起き上がる）
+func heal_pct_all(pct: int) -> void:
+	for a in allies:
+		heal_all_one(a, int(ceil(int(a.max_hp) * pct / 100.0)))
+
+
+func heal_all_one(a: Dictionary, v: int) -> void:
+	a["hp"] = mini(int(a.max_hp), maxi(1, int(a.hp)) + v)
+
+
+## 最大 HP を変える（v が負なら減らす。最低 1）。HP は最大 HP を超えないよう合わせ、増やした時は HP も同じだけ増やす
+func change_max_hp(a: Dictionary, v: int) -> void:
+	a["max_hp"] = maxi(1, int(a.max_hp) + v)
+	a["hp"] = clampi(int(a.hp) + maxi(0, v), 0, int(a.max_hp))
+
+
+## イベントの戦闘の追加報酬を受け取る（1 回だけ。勝った時に結果画面が呼ぶ）
+func take_event_reward() -> Dictionary:
+	var r := event_reward.duplicate(true)
+	event_reward = {}
+	return r

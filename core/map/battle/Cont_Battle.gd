@@ -930,6 +930,10 @@ func _run_turn(u: Dictionary) -> void:
 		if u.side == "ally" and int(u.get("lane", 0)) == 0 and Inventory.has_relic("blue_crest"):
 			u["shield"] = int(u.get("shield", 0)) + 4
 			fx.popup(views[u.uid], "蒼の盾章 盾+4", ImageController.COL.shield, 26)
+		# D（イベント「双子の肖像画」の青い絵）：この階の間、左に立つ味方はターン開始時にブロック+n
+		if u.side == "ally" and int(u.get("lane", 0)) == 0 and CurrentStatus.floor_fx_val("left_block") > 0:
+			u["shield"] = int(u.get("shield", 0)) + CurrentStatus.floor_fx_val("left_block")
+			fx.popup(views[u.uid], "青い絵 盾+%d" % CurrentStatus.floor_fx_val("left_block"), ImageController.COL.shield, 26)
 		var ticks := StatusController.trigger_start_of_turn(u)
 		_tally(ticks)
 		var hurt := false
@@ -1000,6 +1004,8 @@ func _ally_turn(u: Dictionary) -> void:
 		gain += int(CurrentStatus.next_battle.get("ap", 0))
 		first_turn[u.id] = false
 	gain += _boss_ap_bonus()  # ボスレリック「暁の聖杯」：ターン開始時 AP+1
+	if u.id == "witch":
+		gain += CurrentStatus.floor_fx_val("witch_ap")  # D（イベント「石像の問い」の杖）：この階の間、ウィッチの毎ターン AP+1
 	# 毎ターン AP 3 ＋ 加算（前のターンの終わりで 0 にしてあるので、u.ap は予約・他の味方から入った分だけ）。上限は大きな砂時計で +5
 	u["ap"] = mini(int(u.get("max_ap", InitAllyStatus.AP_MAX)), int(u.ap) + gain)
 	whet_used[u.id] = false
@@ -1515,7 +1521,8 @@ func _play_ctx(c: Dictionary, slot: int, use: bool = false) -> Dictionary:
 				rosary_ready = true
 			for a in CurrentStatus.allies:
 				a["rosary"] = 0 if rosary_ready else rosary_left
-	return {"swapped": last_swap_round == round_no, "alone": alone, "whet": whet, "rosary": ros}
+	# exhausted：D（灰燼斬）自分の廃棄札の枚数
+	return {"swapped": last_swap_round == round_no, "alone": alone, "whet": whet, "rosary": ros, "exhausted": dc.exhaust_pile.size()}
 
 
 ## 固有スキルを今使えないわけ（"" = 使える）。一転攻勢は手札に空きが無いと使えない

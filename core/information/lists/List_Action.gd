@@ -79,7 +79,7 @@ const ALLY_CARDS = {
 		"big_shield": {"no": "K005", "owner": "knight", "name": "ビッグシールド", "type": "skill", "target": "self", "art": "c_big_shield", "ap": 2,
 			"effects": [{"effect": "add_shield", "eff_val": 14}]},
 		"hone": {"no": "K006", "owner": "knight", "name": "研ぎ澄ます", "type": "skill", "target": "self", "art": "c_hone", "ap": 1,
-			"effects": [{"effect": "add_shield", "eff_val": 9}, {"effect": "add_status", "status": "spd_buff", "eff_val": 1}]},
+			"effects": [{"effect": "add_shield", "eff_val": 9}, {"effect": "draw", "eff_val": 1}]},  # 10 回目：素早さ+1 → 1 枚引く
 		"flash": {"no": "K007", "owner": "knight", "name": "一閃", "type": "attack", "target": "front_row", "art": "c_flash", "power": 4, "ap": 1, "keywords": ["sokuou"],
 			"bonus_sokuou": {"power": 5}},
 		"chop": {"no": "K008", "owner": "knight", "name": "切り刻み", "type": "attack", "target": "front_pair", "art": "c_chop", "power": 8, "ap": 2, "on_kill": "reuse_free", "keywords": ["gekiha"]},
@@ -131,7 +131,7 @@ const ALLY_CARDS = {
 			"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 1}]},
 		"k_escort": {"no": "K016", "owner": "knight", "name": "護衛の構え", "type": "skill", "target": "other_ally", "art": "shield_sword", "ap": 1, "keywords": ["jinkei"],
 			"bonus_left": {"effects": [{"effect": "add_shield", "eff_val": 8}]},
-			"bonus_right": {"effects": [{"effect": "add_shield", "eff_val": 4}, {"effect": "add_status", "status": "spd_buff", "eff_val": 2}]}},
+			"bonus_right": {"effects": [{"effect": "add_shield", "eff_val": 4}, {"effect": "draw", "eff_val": 1}]}},  # 10 回目：素早さ+2 → 1 枚引く
 		"k_step_in": {"no": "K017", "owner": "knight", "name": "踏み込み", "type": "skill", "target": "self", "art": "formation", "ap": 0, "keywords": ["tenshin"],
 			"effects": [{"effect": "rank_swap"}],
 			"bonus": {"effects": [{"effect": "add_status", "status": "atk_buff", "eff_val": 1}, {"effect": "add_status", "status": "def_buff", "eff_val": 1}]}},
@@ -219,7 +219,7 @@ const ALLY_CARDS = {
 			"effects": [{"effect": "add_shield", "eff_val": 10}, {"effect": "add_status", "status": "ap_next", "eff_val": 3, "turns": 1},
 				{"effect": "add_status", "status": "def_buff", "eff_val": 1}]},
 		"focus": {"no": "K026", "owner": "knight", "name": "精神統一", "type": "skill", "target": "self", "art": "c_focus", "ap": 3, "keywords": ["yoyaku"],
-			"effects": [{"effect": "add_status", "status": "focus", "eff_val": 1}]},
+			"bonus_yoyaku": {"effects": [{"effect": "add_gauge", "eff_val": 20, "to": "self"}]}},  # 10 回目：必殺技 AP-1 → 予約：ゲージ+20（リーダー決定）
 		"barricade": {"no": "K027", "owner": "knight", "name": "バリケード", "type": "skill", "target": "self", "art": "c_barricade", "ap": 3,
 			"effects": [{"effect": "add_status", "status": "barricade", "eff_val": 1}]},
 		"dance": {"no": "K028", "owner": "knight", "name": "演舞", "type": "attack", "target": "enemy_all", "art": "c_dance", "power": 5, "hits": 3, "ap": 2, "keywords": ["consume"]},
@@ -346,20 +346,13 @@ const ALLY_CARDS = {
 	},
 }
 
-## キャラ固有スキル（テンキー 3）
-const UNIQUE_SKILLS = {
-	"witch": {"id": "first_step", "name": "ファーストステップ", "type": "skill", "target": "ally_all", "art": "chevrons", "ap": 1,
-			"effects": [{"effect": "add_status", "status": "spd_buff", "eff_val": 1}, {"effect": "add_shield", "eff_val": 3}]},
-	"knight": {"id": "turnabout", "name": "一転攻勢", "type": "skill", "target": "self", "art": "atk_buff", "ap": 1,
-			"effects": [{"effect": "turnabout", "eff_val": 1}]},
-}
-
 ## 必殺技（中央長押し。マップ画面でキャラごとに 1 つセット。9 回目で各キャラ 4 種）
+## 10 回目：AP は使わず、必殺技ゲージ（ActionController.GAUGE_MAX＝50）が満タンの時に使える。使うと 0 に戻る
 ## 最初に解放済み＝SPECIAL_START。残りは強敵を倒すとランダムに 1 つずつ解放（CurrentStatus.special_unlocked）
 ## 必殺技だけの項目（実際に使う行動は Cont_Battle._special_play が作る）
 ##   desc       : 説明文（マップの選択画面・戦闘の説明帯）
 ##   left/right : 陣形の札。左（lane 0）／右（lane 1）に立っている時の行動（target・power・effects を上書き）
-##   void_hits  : 虚空連斬。消費が発動した後の「カードアクション（手札 4 枠＋保留枠）の空き数」× power_per ダメージ、× shield_per 自分にブロック
+##   void_hits  : 虚空連斬。消費が発動した後の「手札 6 欄（4 枠＋空き欄 2）の空き数」× power_per ダメージ、× shield_per 自分にブロック
 ##   sokuou_only: 即応の条件（このラウンドに左右の入替をした）を満たした時だけ使える
 ##   poison_hits: 毒が付いた敵が 1 体でもいれば hits 回攻撃
 ##   効果 purge_self：自分のデバフ（火傷・毒・攻撃力低下・防御力低下・回復不可・スタン）を解除。
@@ -367,31 +360,31 @@ const UNIQUE_SKILLS = {
 const SPECIAL_START := ["k_sp_formation", "k_sp_guard", "w_sp_explosion", "w_sp_turnskip"]
 const SPECIALS = {
 	"knight": [
-		{"id": "k_sp_formation", "name": "双陣斬", "type": "attack", "target": "front_pair", "art": "sweep", "ap": 1, "keywords": ["jinkei"],
+		{"id": "k_sp_formation", "name": "双陣斬", "type": "attack", "target": "front_pair", "art": "sweep", "keywords": ["jinkei"],
 			"power": 11,
 			"left": {"type": "attack", "target": "front_pair", "power": 11},
 			"right": {"type": "skill", "target": "ally_all", "effects": [{"effect": "add_shield", "eff_val": 7}]},
 			"desc": "陣形　左：目の前の敵前衛に11ダメージ／右：味方全体にブロック+7"},
-		{"id": "k_sp_void", "name": "虚空連斬", "type": "attack", "target": "enemy_all", "art": "c_mushin", "ap": 2, "keywords": ["consume"],
+		{"id": "k_sp_void", "name": "虚空連斬", "type": "attack", "target": "enemy_all", "art": "c_mushin", "keywords": ["consume"],
 			"power": 0, "void_hits": {"power_per": 8, "shield_per": 6},
-			"desc": "消費　消費が発動した後、カードアクションの空き数×8ダメージを敵全体に。自分に空き数×6ブロック"},
-		{"id": "k_sp_purge", "name": "浄化の誓い", "type": "skill", "target": "self", "art": "c_holy", "ap": 1,
+			"desc": "消費　消費が発動した後、手札6欄の空き数×8ダメージを敵全体に。自分に空き数×6ブロック"},
+		{"id": "k_sp_purge", "name": "浄化の誓い", "type": "skill", "target": "self", "art": "c_holy",
 			"effects": [{"effect": "purge_self"}],
 			"desc": "自分のデバフを解除。火傷を解除した時、火傷の残りターン分 攻撃力・防御力+（戦闘中）"},
-		{"id": "k_sp_guard", "name": "大防御", "type": "skill", "target": "self", "art": "shield", "ap": 2,
+		{"id": "k_sp_guard", "name": "大防御", "type": "skill", "target": "self", "art": "shield",
 			"effects": [{"effect": "add_shield", "eff_val": 20}],
 			"desc": "自分にブロック+20"},
 	],
 	"witch": [
-		{"id": "w_sp_explosion", "name": "爆発", "type": "attack", "target": "enemy_all", "art": "burst", "power": 14, "ap": 3,
+		{"id": "w_sp_explosion", "name": "爆発", "type": "attack", "target": "enemy_all", "art": "burst", "power": 14,
 			"desc": "敵全体に14ダメージ"},
-		{"id": "w_sp_turnskip", "name": "ターンスキップ", "type": "skill", "target": "self", "art": "hourglass", "ap": 5,
+		{"id": "w_sp_turnskip", "name": "ターンスキップ", "type": "skill", "target": "self", "art": "hourglass",
 			"effects": [{"effect": "extra_turn"}],
 			"desc": "ターン終了時、もう一度ターンを得る"},
-		{"id": "w_sp_stun", "name": "星縛り", "type": "skill", "target": "random_enemy", "art": "star", "ap": 1, "keywords": ["sokuou"],
+		{"id": "w_sp_stun", "name": "星縛り", "type": "skill", "target": "random_enemy", "art": "star", "keywords": ["sokuou"],
 			"sokuou_only": true, "effects": [{"effect": "add_status", "status": "stun", "eff_val": 1}],
 			"desc": "即応　ランダムな敵1体にスタン1（即応の条件を満たした時だけ使える）"},
-		{"id": "w_sp_venom", "name": "毒蛇の舞", "type": "attack", "target": "front_enemy_group", "art": "st_poison", "power": 8, "ap": 2,
+		{"id": "w_sp_venom", "name": "毒蛇の舞", "type": "attack", "target": "front_enemy_group", "art": "st_poison", "power": 8,
 			"poison_hits": 3,
 			"desc": "目の前の敵グループに8ダメージ。毒が付いた敵がいれば3回攻撃"},
 	],

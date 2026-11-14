@@ -137,6 +137,8 @@ func _collect(resume: String) -> Dictionary:
 			"next_battle": CS.next_battle.duplicate(true),
 			"special_choice": CS.special_choice.duplicate(true),
 			"special_unlocked": CS.special_unlocked.duplicate(),  # D：解放済みの必殺技
+			"floor_fx": CS.floor_fx.duplicate(true),  # D（10 回目）：この階の間のイベントの効果
+			"event_reward": CS.event_reward.duplicate(true),  # D（10 回目）：イベントの戦闘の追加報酬
 		},
 		"inventory": {
 			"items": Inventory.items.duplicate(),
@@ -268,6 +270,15 @@ func _apply(data: Dictionary) -> bool:
 	# D：解放済みの必殺技（古いセーブには無いので最初の 4 つ）。未解放・旧 ID のセットは初期に戻す
 	CS.special_unlocked = (st.special_unlocked as Array).map(func(x): return str(x)) if st.get("special_unlocked") is Array else ActionList.SPECIAL_START.duplicate()
 	CS.fix_specials()
+	# D（10 回目）：この階の間の効果（数値だけ）・イベントの戦闘の追加報酬（古いセーブには無い）
+	CS.floor_fx = {}
+	if st.get("floor_fx") is Dictionary:
+		for k in st.floor_fx:
+			CS.floor_fx[str(k)] = int(st.floor_fx[k])
+	CS.event_reward = {}
+	if st.get("event_reward") is Dictionary:
+		for k in st.event_reward:
+			CS.event_reward[str(k)] = str(st.event_reward[k])
 	CS.initialized = true
 	Inventory.items = items
 	Inventory.foods = foods

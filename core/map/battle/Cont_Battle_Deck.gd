@@ -1,14 +1,17 @@
 extends Node
 class_name DeckController
-## 戦闘中の1キャラ分の山札・手札（4枠：0=8上 1=4左 2=2下 3=6右）・捨札・廃棄札・保留枠
+## 戦闘中の1キャラ分の山札・手札（6 欄：0=8上 1=4左 2=2下 3=6右、空き欄 4=9 5=3）・捨札・廃棄札
+## 10 回目：保留枠を撤去。9・3 は「空き欄」＝「カードを引く」効果で 4 枠が埋まっている時に 9→3 の順で入る手札の欄
 
-const HAND_SIZE := 4  # 手札の枠（テンキー 8・4・2・6）
+const HAND_SIZE := 4  # ターン開始時に補充する手札の枠（テンキー 8・4・2・6 ＝ hand の 0〜3）
+const HAND_SLOTS := 6  # 手札の欄の数（4 枠＋空き欄 2。手札は最大 6 枚）
+const BASE_SLOTS := [0, 1, 2, 3]  # ターン開始の補充で埋める欄
+const FREE_SLOTS := [4, 5]  # 空き欄（9・3）
 
 var draw_pile: Array = []
-var hand: Array = [null, null, null, null]
+var hand: Array = [null, null, null, null, null, null]
 var discard_pile: Array = []
 var exhaust_pile: Array = []  # 廃棄札（廃棄カードを使うとここへ。戦闘中は戻らない）
-var hold = null  # 保留カード（ターンをまたいで残る）
 
 
 func setup_battle_deck(master_deck_ids: Array) -> void:
@@ -16,8 +19,7 @@ func setup_battle_deck(master_deck_ids: Array) -> void:
 	discard_pile.clear()
 	exhaust_pile.clear()
 	hand = []
-	hand.resize(HAND_SIZE)
-	hold = null
+	hand.resize(HAND_SLOTS)
 	for card_id in master_deck_ids:
 		var c := ActionList.make_card(card_id)
 		if not c.is_empty():
@@ -29,7 +31,8 @@ func setup_battle_deck(master_deck_ids: Array) -> void:
 		draw_pile = draw_pile.filter(func(x): return str(x.get("badge", "")) != "first") + first
 
 
-## 空いている枠をカードで埋める（最大 amount 枚）。引いた枠の番号を返す。only_slots を渡すとその枠だけ埋める
+## 空いている欄をカードで埋める（最大 amount 枚。4 枠 → 空き欄 9 → 3 の順）。引いた欄の番号を返す。only_slots を渡すとその欄だけ埋める
+## ターン開始の補充は only_slots = BASE_SLOTS（空き欄は埋めない）
 func draw_cards(amount: int, only_slots: Array = []) -> Array:
 	var filled: Array = []
 	for i in amount:
@@ -77,45 +80,7 @@ func play_and_discard(hand_index: int) -> void:
 		hand[hand_index] = null
 
 
-func play_hold() -> void:
-	if hold != null:
-		_to_used(hold)
-		hold = null
-
-
-## 手札の slot を保留枠へ。保留中のカードがあれば、そのカードは空いた slot へ戻る。
-## パワーカードは保留枠に入るとすぐ捨札へ行く（戻り値 true）
-func put_on_hold(slot: int) -> bool:
-	var c = hand[slot]
-	if c == null:
-		return false
-	hand[slot] = hold
-	hold = c
-	if ActionList.has_keyword(c, "power"):
-		discard_pile.append(c)
-		hold = null
-		return true
-	return false
-
-
-## ターン終了時：保留枠が空で手札が残っていれば、ランダムに 1 枚を保留枠へ（パワーカードは除く）。保留したカードを返す
-func auto_hold():
-	if hold != null:
-		return null
-	var cand: Array = []
-	for i in hand.size():
-		if hand[i] != null and not ActionList.has_keyword(hand[i], "power"):
-			cand.append(i)
-	if cand.is_empty():
-		return null
-	var slot: int = cand.pick_random()
-	hold = hand[slot]
-	hand[slot] = null
-	hold.erase("free")
-	return hold
-
-
-## 消費：except_slot 以外の手札（5 枠。保留枠は含まない）から捨てられるカードがあるか。except_slot = -1 なら手札全部が候補
+## 消費：except_slot 以外の手札（空き欄を含む 6 欄）から捨てられるカードがあるか。except_slot = -1 なら手札全部が候補
 func has_consume_target(except_slot: int) -> bool:
 	for i in hand.size():
 		if i != except_slot and hand[i] != null:
@@ -139,7 +104,7 @@ func consume_random(except_slot: int) -> int:
 	return slot
 
 
-## 倒したらもう一度使える：使ったカードを捨札（廃棄札）から元の枠へ戻す。slot = -1 は保留枠。戻した枠（保留枠は -1）を返す。戻せなければ -2
+## 倒したらもう一度使える：使ったカードを捨札（廃棄札）から元の欄へ戻す。戻した欄を返す。戻せなければ -2
 func return_card(c: Dictionary, slot: int) -> int:
 	var removed := false
 	for pile in [discard_pile, exhaust_pile]:
@@ -152,9 +117,6 @@ func return_card(c: Dictionary, slot: int) -> int:
 			break
 	if not removed:
 		return -2
-	if slot == -1 and hold == null:
-		hold = c
-		return -1
 	if slot >= 0 and hand[slot] == null:
 		hand[slot] = c
 		return slot
@@ -168,7 +130,7 @@ func return_card(c: Dictionary, slot: int) -> int:
 
 ## ターン終了：「このターンの間 AP 0」を外す
 func clear_free() -> void:
-	for c in hand + [hold] + draw_pile + discard_pile + exhaust_pile:
+	for c in hand + draw_pile + discard_pile + exhaust_pile:
 		if c is Dictionary:
 			c.erase("free")
 
@@ -185,18 +147,6 @@ func turn_end_and_discard() -> void:
 	discard_hand()
 
 
-## 手札にあるパワーカードの効果の合計 {"atk": n, "def": n}
-func power_mods() -> Dictionary:
-	var m := {"atk": 0, "def": 0}
-	for c in hand:
-		if c != null and ActionList.has_keyword(c, "power"):
-			var pe: Dictionary = c.get("power_effect", {})
-			match pe.get("status", ""):
-				"atk_buff": m.atk += int(pe.eff_val)
-				"def_buff": m.def += int(pe.eff_val)
-	return m
-
-
 func _shuffle_discard_to_draw() -> void:
 	draw_pile = discard_pile.duplicate()
 	draw_pile.shuffle()
@@ -204,7 +154,7 @@ func _shuffle_discard_to_draw() -> void:
 
 
 # ------------------------------------------------------------
-# 戦闘の途中のセーブ（SaveData.save_battle）：山札・手札・捨札・廃棄札・保留を辞書にする／戻す
+# 戦闘の途中のセーブ（SaveData.save_battle）：山札・手札・捨札・廃棄札を辞書にする／戻す
 # ------------------------------------------------------------
 ## 今の山札などを辞書にする。山札の順（末尾から引く）・手札の枠の位置もそのまま残す
 func to_save() -> Dictionary:
@@ -213,7 +163,6 @@ func to_save() -> Dictionary:
 		"hand": hand.map(func(c): return card_to_save(c)),
 		"discard": discard_pile.map(func(c): return card_to_save(c)),
 		"exhaust": exhaust_pile.map(func(c): return card_to_save(c)),
-		"hold": card_to_save(hold),
 	}
 
 
@@ -232,11 +181,22 @@ func from_save(d: Dictionary) -> bool:
 	var h: Array = []
 	for o in d.hand:
 		h.append(card_from_save(o))
+	h.resize(HAND_SLOTS)  # 古いセーブ（4 枠）は空き欄を足す
+	# 古いセーブの保留カード：手札の空き欄（9→3）へ。入らなければ捨札へ
+	var old_hold = card_from_save(d.get("hold"))
+	if old_hold != null:
+		var put := false
+		for i in FREE_SLOTS:
+			if h[i] == null:
+				h[i] = old_hold
+				put = true
+				break
+		if not put:
+			piles.discard.append(old_hold)
 	draw_pile = piles.draw
 	discard_pile = piles.discard
 	exhaust_pile = piles.exhaust
 	hand = h
-	hold = card_from_save(d.get("hold"))
 	return true
 
 
@@ -247,7 +207,7 @@ static func save_ok(d) -> bool:
 	for k in ["draw", "hand", "discard", "exhaust"]:
 		if not (d as Dictionary).get(k) is Array:
 			return false
-	return (d.hand as Array).size() == HAND_SIZE
+	return (d.hand as Array).size() in [HAND_SIZE, HAND_SLOTS]  # 4 は古いセーブ（保留枠があった頃）
 
 
 ## カード 1 枚 → {"id": デッキの ID（"カードID@バッジID"）, "x": 元のカードと違う項目, "del": 消えた項目}。null は null
@@ -329,7 +289,7 @@ const KW_NAME := {"sokuou": "即応", "saigo": "最後", "jinkei": "陣形", "te
 ## キーワードの条件の説明
 const KW_COND := {
 	"sokuou": "このラウンドに味方の誰かが入替していれば",
-	"saigo": "手札にも保留枠にも他のカードが無ければ",
+	"saigo": "手札（空き欄を含む）に他のカードが無ければ",
 	"tenshin": "戦闘開始時と違う位置にいれば",
 	"gekiha": "この攻撃で敵を倒したら",
 	"hangeki": "次の自分のターン開始まで、攻撃してきた敵に",
@@ -485,8 +445,8 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 			"heal_pct": parts.append("[i:heart]HPを最大HPの%d%%回復" % int(e.eff_val))
 			"draw": parts.append("[i:cards]カードを%d枚引く" % e.eff_val)
 			"swap": parts.append("[i:swap]味方の位置を入れ替える")
-			"double": parts.append("[i:st_double]次に使うカード・保留カードが2回発動")
-			"turnabout": parts.append("[i:cards]空いている手札の枠を補充する　[i:atk_buff]攻撃力+1")
+			"double": parts.append("[i:st_double]次に使うカードが2回発動")
+			"add_gauge": parts.append("[i:burst]%s必殺技ゲージ+%d" % [who, int(e.eff_val)])
 			"extra_turn": parts.append("[i:hourglass]ターン終了時、もう一度ターンを得る")
 			"set_next_action": parts.append("[i:hourglass]次に強攻撃")
 			"rank_swap": parts.append("[i:formation]自分の前衛・後衛を入れ替える")
@@ -520,26 +480,26 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 	if action.get("saigo_only", false):
 		# 「最後」の効果しか無いカード：条件を満たした時だけ使える
 		kl = kl.filter(func(s): return not str(s).begins_with("[i:kw_saigo]"))
-		kl.append("[i:kw_saigo]最後：手札にも保留枠にも他のカードが無い時だけ使える")
+		kl.append("[i:kw_saigo]最後：手札（空き欄を含む）に他のカードが無い時だけ使える")
 	if is_power:
 		kl = kl.filter(func(s): return not str(s).begins_with("[i:kw_jinkei]") and not str(s).begins_with("[i:kw_sokuou]"))  # power_text で説明済み
 	parts.append_array(kl)
 	return "　".join(parts)
 
 
-## パワーカードの説明（power_effect の形は ActionList の説明を参照）
+## パワーカードの説明（power_effect の形は ActionList の説明を参照）。10 回目：AP2 で使い、戦闘終了まで効く
 static func power_text(user: Dictionary, action: Dictionary) -> String:
 	var pe: Dictionary = action.get("power_effect", {})
-	var head := "[i:kw_power]使えない。手札にある間、次の自分のターンまで"
+	var head := "[i:kw_power]パワー：使うと戦闘終了まで"
 	if pe.has("left") or pe.has("right"):
-		return "%s [i:kw_jinkei]陣形：左（青）なら %s／右（赤）なら %s（手札に入った時の位置）" % [
+		return "%s [i:kw_jinkei]陣形：左（青）にいる間 %s／右（赤）にいる間 %s（入替・陣形変更で切り替わる。重ねて使える）" % [
 				head, _power_body(user, pe.get("left", {})), _power_body(user, pe.get("right", {}))]
-	var kind := str(pe.get("kind", ""))
-	if kind in ["end_herb", "end_convert"]:
-		return "[i:kw_power]使えない。" + _power_body(user, pe)
 	if pe.get("exhaust_now", false):
-		return "[i:kw_power]使えない。手札に入った時に %s（その後すぐ廃棄）" % _power_body(user, pe)
-	return "%s %s（保留枠に入ると捨札へ）" % [head, _power_body(user, pe)]
+		return "[i:kw_power]パワー：使うと %s（その後廃棄）" % _power_body(user, pe)
+	var tail := "（重ねて使える）"
+	if burns(action, "exhaust"):
+		tail = "（使うと廃棄）"
+	return "%s %s%s" % [head, _power_body(user, pe), tail]
 
 
 static func _power_body(user: Dictionary, pe: Dictionary) -> String:
@@ -549,12 +509,12 @@ static func _power_body(user: Dictionary, pe: Dictionary) -> String:
 		parts.append(("味方全体の" if pe.get("all", false) else "") + "[i:%s]%s+%d" % [st.get("icon", "star"), str(st.get("name", "")).replace("アップ", ""), int(pe.get("eff_val", 0))])
 	if pe.has("once"):
 		var t := effect_text(user, {"effects": pe.once})
-		parts.append(t if pe.get("exhaust_now", false) else "手札に入った時 " + t)
+		parts.append(t if pe.get("exhaust_now", false) else "使った時 " + t)
 	if int(pe.get("aid_atk", 0)) > 0:
 		parts.append("[i:atk_buff]もう1人の味方の攻撃力+%d" % int(pe.aid_atk))
 	match str(pe.get("kind", "")):
 		"burn_atk": parts.append("[i:flame]自分の火傷の残りターン分、攻撃力+")
-		"last_stand": parts.append("[i:stat_atk]HPの残りX%で 攻撃力+Y・素早さ+Y（Y＝(100−X)÷10 切り捨て）")
+		"last_stand": parts.append("[i:stat_atk]HPの残りX%で 攻撃力+Y・防御力+Y（Y＝(100−X)÷10 切り捨て）")
 		"on_plain_card": parts.append("[i:tgt_enemy_all]札の無いカードが発動するたび、敵全体に%dダメージ　[i:kw_sokuou]即応：さらに+%d" % [int(pe.get("dmg", 0)), int(pe.get("sokuou_add", 0))])
 		"on_burn": parts.append("[i:tgt_enemy_all]消費・廃棄が発動するたび、敵全体に%dダメージ" % int(pe.get("dmg", 0)))
 		"on_attack_poison": parts.append("[i:st_poison]アタックカードを使うたび、当たった敵に毒%d" % int(pe.get("eff_val", 1)))
@@ -563,8 +523,8 @@ static func _power_body(user: Dictionary, pe: Dictionary) -> String:
 		"on_gekiha_card": parts.append("[i:atk_buff]%sのカードを使うたび、自分の攻撃力+%d（戦闘中）" % [_kws_text(pe.get("kws", ["gekiha"])), int(pe.get("atk", 1))])
 		"on_kw_card": parts.append("[i:tgt_enemy_all]%sのカードが発動するたび、敵全体に%dダメージ　[i:kw_sokuou]即応：さらに+%d" % [_kws_text(pe.get("kws", [])), int(pe.get("dmg", 0)), int(pe.get("sokuou_add", 0))])
 		"on_gekiha_hangeki": parts.append("[i:tgt_random]撃破・反撃が発動するたび、ランダムな敵に%d×%d（固定）" % [int(pe.get("power", 2)), int(pe.get("hits", 5))])
-		"end_herb": parts.append("[i:item_herb]自分のターン終了時に手札にあれば、薬草を得る（アイテムがいっぱいなら得られない）。その後廃棄")
-		"end_convert": parts.append("[i:kw_consume]自分のターン終了時に手札にあれば、他の手札1枚をランダムに捨て（消費）、そのカードのAP分 AP+")
+		"end_herb": parts.append("[i:item_herb]自分のターン終了時に薬草を得る（アイテムがいっぱいなら得られない）")
+		"end_convert": parts.append("[i:kw_consume]自分のターン終了時に、手札1枚をランダムに捨て（消費）、そのカードのAP分 AP+")
 	return "　".join(parts) if not parts.is_empty() else "—"
 
 
