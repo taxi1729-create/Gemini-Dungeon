@@ -298,6 +298,8 @@ static func card_from_save(o) -> Variant:
 
 ## 説明文（アイコン入り。"[i:アイコン名]" は ImageController.rich_text で描く。文字だけの場所は plain() を通す）
 static func card_text(user: Dictionary, action: Dictionary) -> String:
+	if user.is_empty():
+		user = ActionController.owner_unit(action)  # 11 回目：POW%・SLD% の（）の値は持ち主のステータスで
 	var lines: Array = []
 	var head: String = action.get("name", "")
 	if str(action.get("no", "")) != "":
@@ -368,11 +370,61 @@ static func badge_text(c: Dictionary) -> String:
 	return "[i:%s]%s：%s" % [d.icon, d.name, d.desc]
 
 
-## 追加効果（bonus）の文。例「ダメージ+4　自分にブロック+3」
+## 11 回目：「POW40%（8）」の形（% と、使う人の POW で計算した値）。user が空なら % だけ
+static func pow_txt(user: Dictionary, pct: int) -> String:
+	if user.is_empty():
+		return "POW%d%%" % pct
+	return "POW%d%%（%d）" % [pct, maxi(1, ActionController.get_pow(user) * pct / 100) if pct > 0 else 0]
+
+
+## 11 回目：「SLD140%（11）」の形（使う人の SLD で計算した値）。user が空なら % だけ
+static func sld_txt(user: Dictionary, pct: int) -> String:
+	if user.is_empty():
+		return "SLD%d%%" % pct
+	return "SLD%d%%（%d）" % [pct, ActionController.get_sld(user) * pct / 100]
+
+
+## ダメージの数の文：pow_pct があれば「POW40%（8）」（固定の上乗せ power があれば「+n」も）、無ければ power の数（敵の行動・アイテムなど）
+static func _dmg_txt(user: Dictionary, d: Dictionary) -> String:
+	var pct := int(d.get("pow_pct", 0))
+	var flat := int(d.get("power", 0))
+	if pct <= 0:
+		return str(flat)
+	return pow_txt(user, pct) + ("%+d" % flat if flat != 0 else "")
+
+
+## ブロックの数の文：sld_pct があれば「SLD140%（11）」（固定の eff_val があれば「+n」も）、無ければ eff_val の数
+static func _shield_txt(user: Dictionary, e: Dictionary) -> String:
+	var pct := int(e.get("sld_pct", 0))
+	var flat := int(e.get("eff_val", 0))
+	if pct <= 0:
+		return str(flat)
+	return sld_txt(user, pct) + ("%+d" % flat if flat != 0 else "")
+
+
+## 11 回目：文の中の「POW70%」「SLD400%」に、使う人の値を（）で足す（必殺技の desc・陣形の差し替えの文など）
+static func pct_fill(user: Dictionary, s: String) -> String:
+	if user.is_empty() or s.find("%") < 0:
+		return s
+	var re := RegEx.new()
+	re.compile("(POW|SLD)(\\d+)%(?!（)")
+	var out := ""
+	var at := 0
+	for m in re.search_all(s):
+		out += s.substr(at, m.get_start() - at)
+		var pct := int(m.get_string(2))
+		out += pow_txt(user, pct) if m.get_string(1) == "POW" else sld_txt(user, pct)
+		at = m.get_end()
+	return out + s.substr(at)
+
+
+## 追加効果（bonus）の文。例「ダメージ+POW25%（5）　自分にブロック+SLD60%（4）」
 static func bonus_text(user: Dictionary, b: Dictionary) -> String:
 	if b.has("text"):
-		return str(b.text)  # 説明文を差し替える（星降り）
+		return pct_fill(user, str(b.text))  # 説明文を差し替える（星降り）
 	var parts: Array = []
+	if int(b.get("pow_pct", 0)) != 0:
+		parts.append("ダメージ+" + pow_txt(user, int(b.pow_pct)))
 	if int(b.get("power", 0)) != 0:
 		parts.append("ダメージ%+d" % int(b.power))
 	var effs: Array = b.get("effects", [])
@@ -468,25 +520,27 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 		if str(action.get("power_from", "")) == "poison":
 			parts.append("[i:st_poison]それぞれの毒の残り分の固定ダメージ（毒は減らない）")
 		elif action.get("hits_used", false):
-			parts.append("[i:stat_atk]%dダメージ×X回（X＝このターンにこのキャラが使ったカードの枚数%s）" % [action.power, ("。攻撃力%+d" % atk) if atk != 0 else ""])
+			parts.append("[i:stat_atk]%sダメージ×X回（X＝このターンにこのキャラが使ったカードの枚数%s）" % [_dmg_txt(user, action), ("。攻撃力%+d" % atk) if atk != 0 else ""])
 		elif action.get("power_used", false):
 			parts.append("[i:stat_atk]Xダメージ%s（X＝このターンにこのキャラが使ったカードの枚数%s）" % [times, ("。攻撃力%+d" % atk) if atk != 0 else ""])
 		elif atk != 0 and not action.get("fixed", false):
-			parts.append("[i:stat_atk]%dダメージ%s（攻撃力%+d）" % [action.power, times, atk])
+			parts.append("[i:stat_atk]%sダメージ%s（攻撃力%+d）" % [_dmg_txt(user, action), times, atk])
 		else:
-			parts.append("[i:stat_atk]%dダメージ%s" % [action.power, times])
+			parts.append("[i:stat_atk]%sダメージ%s" % [_dmg_txt(user, action), times])
 	# D（10 回目の新カード）：盾打ち・炎刃・侵食の針・灰燼斬
 	if action.get("power_half_block", false) and action.has("power"):
 		var hb := int(floor(int(user.get("shield", 0)) / 2.0)) if not user.is_empty() else 0
 		parts[parts.size() - 1] = "[i:shield]自分のブロックの半分のダメージ（今のブロックなら%d）" % hb
 	var iss = action.get("if_self_status")
 	if iss is Dictionary:
-		parts.append("[i:flame]自分に%sがあればさらに+%d" % [str(StatusEffectList.DATA.get(str(iss.get("status", "")), {}).get("name", "")), int(iss.get("power", 0))])
+		parts.append("[i:flame]自分に%sがあればさらに+%s" % [str(StatusEffectList.DATA.get(str(iss.get("status", "")), {}).get("name", "")), _dmg_txt(user, iss)])
 	var vss = action.get("vs_status")
 	if vss is Dictionary:
-		parts.append("[i:st_poison]%sが付いた敵にはさらに+%d" % [str(StatusEffectList.DATA.get(str(vss.get("status", "")), {}).get("name", "")), int(vss.get("power", 0))])
+		parts.append("[i:st_poison]%sが付いた敵にはさらに+%s" % [str(StatusEffectList.DATA.get(str(vss.get("status", "")), {}).get("name", "")), _dmg_txt(user, vss)])
 	if int(action.get("per_exhaust", 0)) > 0:
 		parts.append("[i:kw_exhaust]自分の廃棄札1枚につきさらに+%d" % int(action.per_exhaust))
+	if int(action.get("per_exhaust_pct", 0)) > 0:
+		parts.append("[i:kw_exhaust]自分の廃棄札1枚につきさらに+%s" % pow_txt(user, int(action.per_exhaust_pct)))
 	var aph = action.get("ap_hits")
 	if aph is Dictionary:
 		parts.append("[i:ap]使う前のAPが%d以上なら、さらに%d回" % [int(aph.get("min", 0)), int(aph.get("hits", 1)) - maxi(1, int(action.get("hits", 1)))])
@@ -517,7 +571,7 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 		var turns := int(e.get("turns", -1))
 		var dur := ("%dターン " % turns) if turns > 0 else ""
 		match e.get("effect", ""):
-			"add_shield": parts.append("[i:shield]%sブロック+%d%s" % [who, e.eff_val, "×X" if e.get("x", false) else ""])
+			"add_shield": parts.append("[i:shield]%sブロック+%s%s" % [who, _shield_txt(user, e), "×X" if e.get("x", false) else ""])
 			"absorb_block": parts.append("[i:shield]対象の敵のブロックの合計を、自分のブロックに足す")
 			"add_ap": parts.append("[i:ap]AP+%d" % e.eff_val)
 			"heal": parts.append("[i:heart]HP%d回復" % e.eff_val)
@@ -532,8 +586,8 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 			"rank_to": parts.append("[i:formation]自分を%sに移動" % ("前衛" if int(e.get("eff_val", 1)) == 0 else "後衛"))
 			"cleanse": parts.append("[i:heart]%sデバフ（火傷・毒・攻撃力低下・防御力低下・回復不可・スタン）を解除" % who)
 			"repeat": parts.append("[i:skull]もう一度この攻撃が発動")
-			"shield_per_status": parts.append("[i:shield]自分の%s1につきブロック+%d（%sは減らない）" % [
-					str(StatusEffectList.DATA.get(str(e.get("status", "fire")), {}).get("name", "")), int(e.eff_val),
+			"shield_per_status": parts.append("[i:shield]自分の%s1につきブロック+%s（%sは減らない）" % [
+					str(StatusEffectList.DATA.get(str(e.get("status", "fire")), {}).get("name", "")), _shield_txt(user, e),
 					str(StatusEffectList.DATA.get(str(e.get("status", "fire")), {}).get("name", ""))])
 			"dmg_half_block": parts.append("[i:shield]自分のブロックの半分のダメージ")
 			"add_status":

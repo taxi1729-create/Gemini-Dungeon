@@ -75,12 +75,17 @@ static func icon_rows_height(u: Dictionary, w: float) -> float:
 # ============================================================
 
 ## ステータスの並び：[[アイコン名, 数字の文字列], ...]。ブロックは 1 以上の時だけ
+## 11 回目：味方は HP・POW（＋攻撃力の加算があれば「+2」）・DEF・SLD・ブロック。敵は HP・攻撃・防御・ブロック
 static func stat_items(u: Dictionary) -> Array:
-	var out: Array = [
-		["stat_hp", "%d/%d" % [int(u.get("hp", 0)), int(u.get("max_hp", 0))]],
-		["stat_atk", str(ActionController.get_atk(u) + ActionController.relic_atk(u))],
-		["stat_def", str(ActionController.get_def(u))],
-	]
+	var atk := ActionController.get_atk(u) + ActionController.relic_atk(u)
+	var out: Array = [["stat_hp", "%d/%d" % [int(u.get("hp", 0)), int(u.get("max_hp", 0))]]]
+	if str(u.get("side", "")) == "ally":
+		out.append(["stat_atk", "POW%d%s" % [ActionController.get_pow(u), ("%+d" % atk) if atk != 0 else ""]])
+		out.append(["stat_def", "DEF%d" % ActionController.get_def(u)])
+		out.append(["c_big_shield", "SLD%d" % ActionController.get_sld(u)])
+	else:
+		out.append(["stat_atk", str(atk)])
+		out.append(["stat_def", str(ActionController.get_def(u))])
 	var sh := int(u.get("shield", 0))
 	if sh > 0:
 		out.append(["shield", str(sh)])

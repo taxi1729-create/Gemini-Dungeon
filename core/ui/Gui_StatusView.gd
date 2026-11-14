@@ -2,7 +2,7 @@ extends Control
 class_name GuiStatusView
 ## 戦闘中の全員のステータス一覧（全画面のオーバーレイ）。
 ## 生きているキャラを味方→敵の順に 2 列のカードで並べる（最大 2 + 6 体が 1 画面に収まる）。
-## 各カード：名前、ステータス（HP・攻撃・防御・素早さ・ブロック）、状態異常、
+## 各カード：名前、ステータス（味方は HP・POW・DEF・SLD・ブロック、敵は HP・攻撃・防御・ブロック。GuiInfoPanel.stat_items）、状態異常、
 ## 味方は AP と立ち位置、敵は次の行動。下の「閉じる」で closed を出して消える。
 
 signal closed

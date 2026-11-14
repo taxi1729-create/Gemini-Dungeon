@@ -115,9 +115,11 @@ func _draw() -> void:
 		draw_string(f, Vector2(sx + isz + gap, sy + (f.get_ascent(fs) - f.get_descent(fs)) / 2.0), sm, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, IC.COL.text)
 	# 威力（左上）：ギザギザの星に数字。実際のダメージ（power_eff）を出し、
 	# 基本より高ければ緑の星＋▲、低ければ白い星に赤い数字＋▼、同じなら赤い星に白い数字
-	var power: int = int(card.get("power", 0))
+	# 11 回目：基本（power）＝POW×%＋固定の上乗せ（戦闘中は power_base、戦闘外は持ち主のステータスで計算）
+	var vals := show_values(card)
+	var power: int = int(vals.base)
 	if power > 0:
-		var eff: int = int(card.get("power_eff", power))
+		var eff: int = int(vals.eff)
 		var pc := Vector2(17, 17)
 		var badge: Color = IC.COL.red
 		var num_col: Color = IC.COL.paper
@@ -140,6 +142,13 @@ func _draw() -> void:
 		var hr := Rect2(2, 37, 30, 15)
 		IC.slant(self, hr, IC.COL.ink, 4, 1.5, IC.COL.paper)
 		IC.text(self, hits, hr.get_center() + Vector2(0, -0.5), 13, IC.COL.paper, true, 0, 26)
+	# 11 回目：ブロックのカードは左上に盾の形のバッジ（実際のブロック量）。攻撃もあるカードは威力の星の下に
+	var shv := int(vals.shield)
+	if shv > 0:
+		var sc := Vector2(17, 17)
+		if power > 0:
+			sc.y = 63.0 if hits != "" else 50.0
+		draw_shield_badge(self, sc, shv)
 	# 消費AP（右上）。戦闘中は ap_show（APX は "X"、free は "0"）を描く
 	if card.has("ap"):
 		var apc: Color = IC.COL.ap if playable else Color("5a2a30")
@@ -177,6 +186,37 @@ static func hits_label(c: Dictionary) -> String:
 		return "×X"
 	var n := int(c.get("hits", 1))
 	return "×%d" % n if n > 1 else ""
+
+
+## 11 回目：左上に出す値 {"base": 基本のダメージ, "eff": 実際のダメージ, "shield": ブロック量}（0 は出さない）。
+## 戦闘中は Cont_Battle._set_eff が入れた power_base・power_eff・shield_eff、戦闘外は持ち主の POW・SLD でカードの値から計算
+static func show_values(c: Dictionary) -> Dictionary:
+	var u: Dictionary = {}
+	var base := 0
+	if c.has("power"):
+		if c.has("power_base"):
+			base = int(c.power_base)
+		else:
+			u = ActionController.owner_unit(c)
+			base = ActionController.base_power(u, c)
+	var eff := int(c.get("power_eff", base)) if c.has("power") else 0
+	var sh := 0
+	if c.has("shield_eff"):
+		sh = int(c.shield_eff)
+	elif not ActionList.has_keyword(c, "power"):
+		if u.is_empty():
+			u = ActionController.owner_unit(c)
+		sh = ActionController.shield_total(u, c)
+	return {"base": base, "eff": eff, "shield": sh}
+
+
+## 盾の形のバッジ（ブロック量）。カードの左上と必殺技のボタンで使う。dark は暗くする量
+static func draw_shield_badge(ci: CanvasItem, p: Vector2, val: int, dark: float = 0.0) -> void:
+	var IC = ImageController
+	# 盾の輪郭（上が平ら・下が尖る）：黒い縁に青い面、白い数字
+	var pts := PackedVector2Array([p + Vector2(-15, -15), p + Vector2(15, -15), p + Vector2(15, 1), p + Vector2(0, 17), p + Vector2(-15, 1)])
+	IC.poly_box(ci, pts, Color("4f86c6").darkened(dark), 2.0, IC.COL.ink)
+	IC.head(ci, str(val), p + Vector2(0, -1), 19 if val < 100 else 15, Color.WHITE.darkened(dark), 26, Color(0, 0, 0, 0), Vector2.ZERO, 4, IC.COL.ink)
 
 
 ## バッジの紋章：絵柄の窓の右下に、バッジ一覧と同じメダルのアイコン（BadgeList.DATA[b].icon）。
@@ -325,17 +365,22 @@ static func summary(c: Dictionary) -> String:
 		parts.append("X×%d" % maxi(1, int(c.get("hits", 1))))  # 怒涛の締め（8 回目の形）
 	elif str(c.get("power_from", "")) == "poison":
 		parts.append("毒の分")
-	elif hl != "" and int(c.get("power", 0)) > 0:
-		parts.append("%d%s" % [int(c.get("power_eff", c.power)), hl])
-	# D（10 回目の新カード）：盾打ち・炎刃・侵食の針・灰燼斬
+	elif hl != "" and int(show_values(c).base) > 0:
+		parts.append("%d%s" % [int(show_values(c).eff), hl])
+	# D（10 回目の新カード）：盾打ち・炎刃・侵食の針・灰燼斬（11 回目：POW% は持ち主の POW で計算した値）
+	var ou := ActionController.owner_unit(c)
 	if c.get("power_half_block", false):
 		parts.append("盾の半分")
 	if c.get("if_self_status") is Dictionary:
-		parts.append("自%s+%d" % [str(StatusEffectList.DATA.get(str(c.if_self_status.get("status", "")), {}).get("short", "")), int(c.if_self_status.get("power", 0))])
+		parts.append("自%s+%d" % [str(StatusEffectList.DATA.get(str(c.if_self_status.get("status", "")), {}).get("short", "")),
+				int(c.if_self_status.get("power", 0)) + ActionController.pow_part(ou, c.if_self_status)])
 	if c.get("vs_status") is Dictionary:
-		parts.append("%s敵+%d" % [str(StatusEffectList.DATA.get(str(c.vs_status.get("status", "")), {}).get("short", "")), int(c.vs_status.get("power", 0))])
+		parts.append("%s敵+%d" % [str(StatusEffectList.DATA.get(str(c.vs_status.get("status", "")), {}).get("short", "")),
+				int(c.vs_status.get("power", 0)) + ActionController.pow_part(ou, c.vs_status)])
 	if int(c.get("per_exhaust", 0)) > 0:
 		parts.append("廃棄1枚+%d" % int(c.per_exhaust))
+	if int(c.get("per_exhaust_pct", 0)) > 0:
+		parts.append("廃棄1枚+%d" % ActionController.pow_part(ou, {"pow_pct": int(c.per_exhaust_pct)}))
 	var aph = c.get("ap_hits")
 	if aph is Dictionary:
 		parts.append("AP%d+で×%d" % [int(aph.get("min", 0)), int(aph.get("hits", 1))])
@@ -350,18 +395,18 @@ static func summary(c: Dictionary) -> String:
 	match String(c.get("on_kill", "")):
 		"reuse": parts.append("撃破で再使用")
 		"reuse_free": parts.append("撃破でAP0再使用")
-	parts.append_array(_eff_summary(ActionList.effects_of(c)))
-	parts.append_array(_eff_summary(side_b.get("effects", [])))
+	parts.append_array(_eff_summary(ActionList.effects_of(c), ou))
+	parts.append_array(_eff_summary(side_b.get("effects", []), ou))
 	# D：「最後」の時だけ使えるカードの効果（瞑想）
 	if c.get("saigo_only", false) and c.get("bonus_saigo") is Dictionary:
-		var ss := _eff_summary(c.bonus_saigo.get("effects", []))
+		var ss := _eff_summary(c.bonus_saigo.get("effects", []), ou)
 		if not ss.is_empty():
 			parts.append("最後" + "".join(ss))
 	# 撃破・反撃・予約の追加効果
 	for k in ActionController.KW_TIMED:
 		if ActionList.has_keyword(c, k):
 			var tb := ActionController.timed_bonus(c, k)
-			var sub := _eff_summary(tb.get("effects", []))
+			var sub := _eff_summary(tb.get("effects", []), ou)
 			if not sub.is_empty():
 				parts.append(str(DeckController.KW_NAME[k]) + "".join(sub))
 	var s := " ".join(parts)
@@ -369,12 +414,13 @@ static func summary(c: Dictionary) -> String:
 
 
 ## 効果の配列の短い文（summary 用）
-static func _eff_summary(effs: Array) -> Array:
+## u = ブロックの SLD% を計算する人（カードの持ち主。空なら固定の eff_val だけ）
+static func _eff_summary(effs: Array, u: Dictionary = {}) -> Array:
 	var parts: Array = []
 	for e in effs:
 		var xs := "×X" if e.get("x", false) else ""
 		match e.get("effect", ""):
-			"add_shield": parts.append("盾%d%s" % [e.eff_val, xs])
+			"add_shield": parts.append("盾%d%s" % [ActionController.shield_amount(u, e), xs])  # 11 回目：SLD × %
 			"absorb_block": parts.append("盾吸収")
 			"add_ap": parts.append("AP+%d" % e.eff_val)
 			"heal": parts.append("回復%d" % e.eff_val)
@@ -388,7 +434,7 @@ static func _eff_summary(effs: Array) -> Array:
 			"rank_to": parts.append("前衛へ" if int(e.get("eff_val", 1)) == 0 else "後衛へ")
 			"cleanse": parts.append("デバフ解除")
 			"repeat": parts.append("再発動")
-			"shield_per_status": parts.append("火傷1で盾%d" % int(e.eff_val))  # D：熱き鼓動
+			"shield_per_status": parts.append("火傷1で盾%d" % ActionController.shield_amount(u, e))  # D：熱き鼓動
 			"dmg_half_block": parts.append("盾半分返し")  # D：盾の返し
 			"add_gauge": parts.append("ゲージ+%d" % int(e.eff_val))  # D：闘気溜め
 			"add_status":

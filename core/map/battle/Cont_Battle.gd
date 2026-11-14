@@ -1482,7 +1482,7 @@ func _action_for(num) -> Dictionary:
 		5:
 			var s: Dictionary = specials[current.id]
 			var gtxt := "（ゲージ%d/%d）" % [int(current.get("sp_gauge", 0)), ActionController.GAUGE_MAX]
-			var sd := str(s.get("desc", "")) + gtxt if s.has("desc") else _short(s) + gtxt
+			var sd := DeckController.pct_fill(current, str(s.get("desc", ""))) + gtxt if s.has("desc") else _short(s) + gtxt  # 11 回目：「POW70%」→「POW70%（21）」
 			return {"title": "必殺", "desc": "%s　%s（長押し）" % [s.name, sd], "action": _boss_mod(current, _special_play(s), true), "kind": "special", "ap": 0,
 					"block_msg": _special_block(s)}
 	return {}
@@ -2431,11 +2431,7 @@ func _set_eff(c: Dictionary, slot: int = -1) -> void:
 	else:
 		c.erase("power_eff")
 		c.erase("power_base")
-	var sh := ActionController.shield_total(current, pa)
-	if sh > 0:
-		c["shield_eff"] = sh
-	else:
-		c.erase("shield_eff")
+	c["shield_eff"] = ActionController.shield_total(current, pa)
 
 
 ## 必殺技ボタンの左上の効果量：攻撃は主な対象への実際のダメージ（カードの power_eff と同じ計算）、
@@ -2595,10 +2591,14 @@ func _boss_mod(user: Dictionary, act: Dictionary, is_special: bool = false) -> D
 	if crown:
 		if boss_special_mult(user, "dmg") > 1 and a.has("power"):
 			a["power"] = int(a.power) * 2
+			if a.has("pow_pct"):
+				a["pow_pct"] = int(a.pow_pct) * 2  # 11 回目：POW% も 2 倍
 		if boss_special_mult(user, "block") > 1 and a.has("effects"):
 			for e in a.effects:
 				if str(e.get("effect", "")) == "add_shield":
 					e["eff_val"] = int(e.get("eff_val", 0)) * 2
+					if e.has("sld_pct"):
+						e["sld_pct"] = int(e.sld_pct) * 2  # 11 回目：SLD% も 2 倍
 	return a
 
 

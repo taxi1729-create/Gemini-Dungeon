@@ -106,9 +106,10 @@ func _draw_badge() -> void:
 	var dark := 0.6 if dimmed else 0.0  # 暗くする量
 	var val := int(badge.get("val", 0))
 	if badge.get("kind", "") == "shield":
-		IC.icon(self, "shield", pc, 36, Color("4f86c6").darkened(dark))  # 盾の既定色（ImageController.ICON_DEFAULT と同じ）
-		IC.text(self, str(val), pc + Vector2(0, 1), 17, Color.WHITE.darkened(dark), true, 4, -1.0, IC.COL.ink)
+		GuiCard.draw_shield_badge(self, pc, val, dark)  # 11 回目：カードと同じ盾の形のバッジ
 		return
+	if int(badge.get("shield", 0)) > 0:
+		GuiCard.draw_shield_badge(self, pc + Vector2(0, 36), int(badge.shield), dark)  # 攻撃とブロックの両方（虚空連斬）：星の下に盾
 	var base := int(badge.get("base", val))
 	var face: Color = IC.COL.red
 	var num_col: Color = IC.COL.paper
