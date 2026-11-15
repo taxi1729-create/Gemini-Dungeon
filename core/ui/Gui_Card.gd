@@ -476,9 +476,11 @@ static func _power_summary(c: Dictionary) -> String:
 	if pe.has("left") or pe.has("right"):
 		pe = pe.get("right" if str(c.get("kw_side", "左")) == "右" else "left", {})
 	if pe.has("status"):
-		return "%s%s+%d" % ["全" if pe.get("all", false) else "", "攻" if pe.get("status", "") == "atk_buff" else "防", int(pe.get("eff_val", 0))]
+		# 12 回目：攻・防 → POW・DEF・SLD（旧 ID atk_buff / def_buff も読み替える）
+		var pst := StatusController.canon(str(pe.get("status", "")))
+		return "%s%s+%d" % ["全" if pe.get("all", false) else "", {"pow_up": "POW", "sld_up": "SLD"}.get(pst, "DEF"), int(pe.get("eff_val", 0))]
 	if int(pe.get("aid_atk", 0)) > 0:
-		return "味方攻+%d" % int(pe.aid_atk)
+		return "味方POW+%d" % int(pe.aid_atk)
 	match str(pe.get("kind", "")):
 		"burn_atk": return "POW+火傷"
 		"last_stand": return "HP減でPOW・DEF+"
@@ -489,10 +491,13 @@ static func _power_summary(c: Dictionary) -> String:
 		"on_ally_attack": return "味方の攻撃で全盾%d" % int(pe.get("shield", 0))
 		"on_plain_card": return "札無しで全%d" % int(pe.get("dmg", 0))
 		"on_burn": return "消費廃棄で全%d" % int(pe.get("dmg", 0))
-		"on_attack_poison": return "攻撃で毒%d" % int(pe.get("eff_val", 1))
+		"on_attack_poison": return "%sで毒%d" % ["使うたび" if pe.get("any_card", false) else "攻撃", int(pe.get("eff_val", 1))]
+		# D（12 回目）：フォース・双星の魔法陣
+		"turn_start_stat": return "毎ターン全%s+%d" % [str(ActionController.STAT_NAME.get(str(pe.get("stat", "sld")), "")), int(pe.get("eff_val", 1))]
+		"on_skill_card": return "スキルで盾%d%%" % int(pe.get("sld_pct", 0))
 		"on_debuff_card": return "状態異常で盾%d" % int(pe.get("shield", 1))
 		"on_own_card": return "使うたび火傷盾%d" % int(pe.get("shield", 0))
-		"on_gekiha_card": return "%s札で攻+%d" % [_kws_short(pe.get("kws", ["gekiha"])), int(pe.get("atk", 1))]
+		"on_gekiha_card": return "%s札でPOW+%d" %[_kws_short(pe.get("kws", ["gekiha"])), int(pe.get("atk", 1))]
 		"on_kw_card": return "%s札で全%d" % [_kws_short(pe.get("kws", [])), int(pe.get("dmg", 0))]
 		"on_gekiha_hangeki": return "撃破反撃で%d×%d" % [int(pe.get("power", 2)), int(pe.get("hits", 5))]
 		"end_herb": return "終了時 薬草"

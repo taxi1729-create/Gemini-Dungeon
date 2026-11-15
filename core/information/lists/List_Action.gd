@@ -13,7 +13,7 @@ class_name ActionList
 ##   power    : ダメージ（対象全員に与える）
 ##   effects  : 効果の配列。各効果 {"effect": 種類, "eff_val": 値, "status": 状態ID, "turns": ターン数, "to": "target"/"self"/"ally_all"}
 ##              種類：add_shield / add_status / heal / add_ap / draw / swap / double / extra_turn / set_next_action / add_gauge（必殺技ゲージ+）
-##   keywords : "exhaust"（廃棄：使うと廃棄札へ）、"power"（パワー：type "power"・AP2 で使う。使うと戦闘終了まで power_effect が効く。10 回目）
+##   keywords : "exhaust"（廃棄：使うと廃棄札へ）、"power"（パワー：type "power"。12 回目から AP はカードごと（"ap"）。使うと戦闘終了まで power_effect が効く。10 回目）
 ##              "consume"（消費：使う時、このカード以外の手札からランダムに 1 枚を捨札へ。捨てるカードが無ければ使えない）
 ##   ap_x     : true なら APX（使う時に全ての AP を消費し、その量を X とする。AP 1 以上で使える。"ap" は 1 を入れておく）
 ##   hits     : 多段攻撃の回数（power を hits 回与える）。hits_x = true なら X 回
@@ -232,7 +232,8 @@ const ALLY_CARDS = {
 			"effects": [{"effect": "add_shield", "sld_pct": 120}, {"effect": "add_stat", "stat": "sld", "eff_val": 2}]},
 		"w_link_magic": {"no": "W092", "rarity": "common", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "連携魔法", "type": "attack", "target": "front_pair", "art": "c_double", "pow_pct": 125, "ap": 1,
 			"keywords": ["tenshin"],
-			"bonus_tenshin": {"pow_pct": 125, "effects": [{"effect": "add_stat", "stat": "pow", "eff_val": -1}]}},  # 転身：さらに POW125%、当たった敵に POW−1（敵のダメージ −1。戦闘中）
+			"bonus_tenshin": {"pow_pct": 125, "effects": [{"effect": "add_stat", "stat": "pow", "eff_val": -1}],
+				"text": "さらにPOW125%ダメージ　当たった敵にPOW-1（戦闘中。敵のダメージ-1）"}},  # 転身：さらに POW125%、当たった敵に POW−1（敵のダメージ −1。戦闘中）
 		"w_first_aid": {"no": "W093", "rarity": "common", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "応急手当", "type": "skill", "target": "other_ally", "art": "heart", "ap": 0, "keywords": ["kihatsu"],
 			"effects": [{"effect": "add_shield", "sld_pct": 100}]},
 	},
@@ -449,46 +450,57 @@ const ALLY_CARDS = {
 }
 
 ## 必殺技（中央長押し。マップ画面でキャラごとに 1 つセット。9 回目で各キャラ 4 種）
-## 10 回目：AP は使わず、必殺技ゲージ（ActionController.GAUGE_MAX＝50）が満タンの時に使える。使うと 0 に戻る
-## 最初に解放済み＝SPECIAL_START。残りは強敵を倒すとランダムに 1 つずつ解放（CurrentStatus.special_unlocked）
+## 10 回目：AP は使わず、必殺技ゲージが満タンの時に使える。使うと 0 に戻る
+## 12 回目：上限は必殺技ごと（"gauge_max"。無ければ ActionController.GAUGE_MAX＝50。虚空連斬だけ 150）、
+##   貯まり方も必殺技ごと（"gauge_by"：block＝得たブロック／targeted＝敵の攻撃の対象にされた時 +20／hp_lost＝自分のターン開始時に 最大HP−今のHP／
+##   damage＝与えたダメージ／ap＝使った AP／move＝移動した時 +10／skill＝スキルカードを使うたび +10。Cont_Battle._gauge_on）。
+##   "gauge_text" はその説明。"pool"：init＝最初から選べる／unlock＝ラスボスを倒すと 1 つずつ解放（SaveData）。% は specials.csv の通り（+100%）
 ## 必殺技だけの項目（実際に使う行動は Cont_Battle._special_play が作る）
 ##   desc       : 説明文（マップの選択画面・戦闘の説明帯）
 ##   left/right : 陣形の札。左（lane 0）／右（lane 1）に立っている時の行動（target・power・effects を上書き）
 ##   void_hits  : 虚空連斬。消費が発動した後の「手札 6 欄（4 枠＋空き欄 2）の空き数」× power_per ダメージ、× shield_per 自分にブロック
 ##   sokuou_only: 即応の条件（このラウンドに左右の入替をした）を満たした時だけ使える
 ##   poison_hits: 毒が付いた敵が 1 体でもいれば hits 回攻撃
-##   効果 purge_self：自分のデバフ（火傷・毒・攻撃力低下・防御力低下・回復不可・スタン）を解除。
-##                    火傷を解除した時、火傷の残りターン分 攻撃力・防御力+（戦闘中）
+##   効果 purge_self：自分のデバフ（火傷・毒・POWダウン・SLDダウン・DEFダウン・回復不可・スタン）を解除。
+##                    火傷を解除した時、火傷の残りターン分 POW・DEF+（戦闘中。add_stat）
 const SPECIAL_START := ["k_sp_formation", "k_sp_guard", "w_sp_explosion", "w_sp_turnskip"]
 const SPECIALS = {
 	"knight": [
-		{"id": "k_sp_formation", "name": "双陣斬", "type": "attack", "target": "front_pair", "art": "sweep", "keywords": ["jinkei"],
-			"pow_pct": 55,
-			"left": {"type": "attack", "target": "front_pair", "pow_pct": 55},
+		{"id": "k_sp_formation", "no": "KS01", "pool": "init", "name": "双陣斬", "type": "attack", "target": "front_pair", "art": "sweep", "keywords": ["jinkei"],
+			"gauge_by": "block", "gauge_text": "得たブロックで貯まる",
+			"pow_pct": 155,
+			"left": {"type": "attack", "target": "front_pair", "pow_pct": 155},
 			"right": {"type": "skill", "target": "ally_all", "effects": [{"effect": "add_shield", "sld_pct": 140}]},
-			"desc": "陣形　左：目の前の敵前衛にPOW55%ダメージ／右：味方全体にブロック+SLD140%"},
-		{"id": "k_sp_void", "name": "虚空連斬", "type": "attack", "target": "enemy_all", "art": "c_mushin", "keywords": ["consume"],
-			"power": 0, "void_hits": {"pow_pct_per": 40, "sld_pct_per": 120},
-			"desc": "消費　消費が発動した後、手札6欄の空き数×POW40%ダメージを敵全体に。自分に空き数×SLD120%ブロック"},
-		{"id": "k_sp_purge", "name": "浄化の誓い", "type": "skill", "target": "self", "art": "c_holy",
+			"desc": "陣形　左：目の前の敵前衛にPOW155%ダメージ／右：味方全体にブロック+SLD140%"},
+		{"id": "k_sp_void", "no": "KS03", "pool": "unlock", "name": "虚空連斬", "type": "attack", "target": "enemy_all", "art": "c_mushin", "keywords": ["consume"],
+			"gauge_by": "block", "gauge_max": 150, "gauge_text": "得たブロックで貯まる",
+			"power": 0, "void_hits": {"pow_pct_per": 140, "sld_pct_per": 120},
+			"desc": "消費　消費が発動した後、手札6欄の空き数×POW140%ダメージを敵全体に。自分に空き数×SLD120%ブロック"},
+		{"id": "k_sp_purge", "no": "KS04", "pool": "unlock", "name": "浄化の誓い", "type": "skill", "target": "self", "art": "c_holy",
+			"gauge_by": "hp_lost", "gauge_text": "自分のターン開始時に減っているHPの分貯まる",
 			"effects": [{"effect": "purge_self"}],
-			"desc": "自分のデバフを解除。火傷を解除した時、火傷の残りターン分 攻撃力・防御力+（戦闘中）"},
-		{"id": "k_sp_guard", "name": "大防御", "type": "skill", "target": "self", "art": "shield",
+			"desc": "自分のデバフを解除。火傷を解除した時、火傷の残りターン分 POW・DEF+（戦闘中）"},
+		{"id": "k_sp_guard", "no": "KS02", "pool": "init", "name": "大防御", "type": "skill", "target": "self", "art": "shield",
+			"gauge_by": "targeted", "gauge_text": "敵の攻撃の対象にされるたび+20",
 			"effects": [{"effect": "add_shield", "sld_pct": 400}],
 			"desc": "自分にブロック+SLD400%"},
 	],
 	"witch": [
-		{"id": "w_sp_explosion", "name": "爆発", "type": "attack", "target": "enemy_all", "art": "burst", "pow_pct": 70,
-			"desc": "敵全体にPOW70%ダメージ"},
-		{"id": "w_sp_turnskip", "name": "ターンスキップ", "type": "skill", "target": "self", "art": "hourglass",
+		{"id": "w_sp_explosion", "no": "WS01", "pool": "init", "name": "爆発", "type": "attack", "target": "enemy_all", "art": "burst", "pow_pct": 170,
+			"gauge_by": "damage", "gauge_text": "与えたダメージで貯まる",
+			"desc": "敵全体にPOW170%ダメージ"},
+		{"id": "w_sp_turnskip", "no": "WS02", "pool": "init", "name": "ターンスキップ", "type": "skill", "target": "self", "art": "hourglass",
+			"gauge_by": "ap", "gauge_text": "使ったAPの分貯まる",
 			"effects": [{"effect": "extra_turn"}],
-			"desc": "ターン終了時、もう一度ターンを得る"},
-		{"id": "w_sp_stun", "name": "星縛り", "type": "skill", "target": "random_enemy", "art": "star", "keywords": ["sokuou"],
+			"desc": "ターン終了時、もう一度ターンを得る（追加ターンも開始時にAP+3・手札補充）"},
+		{"id": "w_sp_stun", "no": "WS03", "pool": "unlock", "name": "星縛り", "type": "skill", "target": "random_enemy", "art": "star", "keywords": ["sokuou"],
+			"gauge_by": "move", "gauge_text": "移動するたび+10（入替・前後の移動）",
 			"sokuou_only": true, "effects": [{"effect": "add_status", "status": "stun", "eff_val": 1}],
 			"desc": "即応　ランダムな敵1体にスタン1（即応の条件を満たした時だけ使える）"},
-		{"id": "w_sp_venom", "name": "毒蛇の舞", "type": "attack", "target": "front_enemy_group", "art": "st_poison", "pow_pct": 40,
+		{"id": "w_sp_venom", "no": "WS04", "pool": "unlock", "name": "毒蛇の舞", "type": "attack", "target": "front_enemy_group", "art": "st_poison", "pow_pct": 140,
+			"gauge_by": "skill", "gauge_text": "スキルカードを使うたび+10",
 			"poison_hits": 3,
-			"desc": "目の前の敵グループにPOW40%ダメージ。毒が付いた敵がいれば3回攻撃"},
+			"desc": "目の前の敵グループにPOW140%ダメージ。毒が付いた敵がいれば3回攻撃"},
 	],
 }
 

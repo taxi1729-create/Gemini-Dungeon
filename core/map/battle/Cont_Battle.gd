@@ -1840,7 +1840,7 @@ func _preview_action(num) -> void:
 			return
 		if info.kind == "formation":
 			for a in CurrentStatus.allies:
-				views[a.uid].preview = {"on": true, "label": "→後衛 防+2" if int(a.rank) == 0 else "→前衛 攻+2"}
+				views[a.uid].preview = {"on": true, "label": "→後衛 DEF+2" if int(a.rank) == 0 else "→前衛 POW+2"}  # 12 回目：攻・防 → POW・DEF
 			return
 		var x := int(current.ap) if (act.get("ap_x", false) and not act.get("free", false)) else 1
 		for ev in ActionController.preview(current, act, CurrentStatus.allies, CurrentStatus.enemies, x):
@@ -2063,7 +2063,7 @@ func _play(act: Dictionary, x: int = 1) -> Array:
 
 # ------------------------------------------------------------
 # パワー（10 回目）。power_effect の形は ActionList の説明を参照
-#   AP2 で使うと、持ち主の powers に power_effect を足す（戦闘終了まで。同じカード 2 枚なら 2 つ入って重なる）
+#   使うと（AP はカードごと。12 回目）、持ち主の powers に power_effect を足す（戦闘終了まで。同じカード 2 枚なら 2 つ入って重なる）
 #   陣形のパワー（left / right）は効果を出すたびに持ち主の今の位置で判定する（ActionController.power_side）
 #   攻撃力・防御力のパワーは _power_recalc が powers から power_atk / power_def / aid_atk / aid_def を計算し直す
 #   once（守りの陣 A のブロック+5・天啓の AP 等）は使った時に 1 回（陣形なら使った時の位置）
@@ -2773,8 +2773,13 @@ func _lastboss_check() -> void:
 			continue
 		e["phase"] = 2
 		e["actions"] = (base.phase2_actions as Array).duplicate()
-		for sid in ["fire", "poison", "atk_down", "def_down", "no_heal", "stun"]:
+		for sid in ActionController.DEBUFFS:  # 12 回目：pow_down・sld_down も（旧 atk_down は pow_down に読み替え済み）
 			StatusController.remove(e, sid)
+		var esa = e.get("stat_add")
+		if esa is Dictionary:
+			for k in (esa as Dictionary).keys():
+				if int(esa[k]) < 0:
+					(esa as Dictionary).erase(k)  # 12 回目：戦闘終了までの下げ（連携魔法の POW−1 など）も払う
 		e["next_action"] = "twin_charge"
 		_choose_intent(e)
 		_log("%sが第2段階へ！" % e.name)

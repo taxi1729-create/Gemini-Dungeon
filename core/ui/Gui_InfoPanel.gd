@@ -75,14 +75,15 @@ static func icon_rows_height(u: Dictionary, w: float) -> float:
 # ============================================================
 
 ## ステータスの並び：[[アイコン名, 数字の文字列], ...]。ブロックは 1 以上の時だけ
-## 11 回目：味方は HP・POW（＋攻撃力の加算があれば「+2」）・DEF・SLD・ブロック。敵は HP・攻撃・防御・ブロック
+## 11 回目：味方は HP・POW・DEF・SLD・ブロック。敵は HP・攻撃・防御・ブロック
+## 12 回目：味方は「基礎＋増減」の形（「POW20+3」「DEF0+2」。ActionController.stat_text）
 static func stat_items(u: Dictionary) -> Array:
-	var atk := ActionController.get_atk(u) + ActionController.relic_atk(u)
+	var atk := ActionController.get_atk(u)
 	var out: Array = [["stat_hp", "%d/%d" % [int(u.get("hp", 0)), int(u.get("max_hp", 0))]]]
 	if str(u.get("side", "")) == "ally":
-		out.append(["stat_atk", "POW%d%s" % [ActionController.get_pow(u), ("%+d" % atk) if atk != 0 else ""]])
-		out.append(["stat_def", "DEF%d" % ActionController.get_def(u)])
-		out.append(["c_big_shield", "SLD%d" % ActionController.get_sld(u)])
+		out.append(["stat_atk", ActionController.stat_text(u, "pow")])
+		out.append(["stat_def", ActionController.stat_text(u, "def")])
+		out.append(["c_big_shield", ActionController.stat_text(u, "sld")])
 	else:
 		out.append(["stat_atk", str(atk)])
 		out.append(["stat_def", str(ActionController.get_def(u))])
@@ -169,9 +170,9 @@ static func display_status(u: Dictionary) -> Array:
 	if str(u.get("side", "")) == "ally" and u.has("rank"):
 		var fb := ActionController.FORMATION_BONUS
 		if int(u.rank) == 0:
-			out.append({"id": "rank_front", "icon": "rank_front", "text": "前衛 攻+%d" % fb, "label": "攻+%d" % fb, "good": true})
+			out.append({"id": "rank_front", "icon": "rank_front", "text": "前衛 POW+%d" % fb, "label": "+%d" % fb, "good": true})  # 12 回目：攻→POW（丸の横の小さい数字は「+2」だけ）
 		else:
-			out.append({"id": "rank_back", "icon": "rank_back", "text": "後衛 防+%d" % fb, "label": "防+%d" % fb, "good": true})
+			out.append({"id": "rank_back", "icon": "rank_back", "text": "後衛 DEF+%d" % fb, "label": "+%d" % fb, "good": true})  # 防→DEF
 	if reserve > 0:
 		out.append({"id": "reserve", "icon": "st_reserve", "text": "予約" if reserve == 1 else "予約 %d" % reserve,
 				"label": "" if reserve == 1 else str(reserve), "good": true})

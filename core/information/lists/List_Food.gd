@@ -45,16 +45,16 @@ static func fish_grade(hp_lost_total: int) -> int:
 
 
 ## 料理の一覧。heal_pct = 全員の HP 回復（最大 HP の %）。next = 次の戦闘の効果（CurrentStatus.next_battle に足す）
-## next のキー：atk（攻撃力）/ def（防御力）/ regen（リジェネのターン数）/ ap（最初のターンの AP）
+## next のキー：atk（POW。12 回目に攻撃力から統一）/ def（DEF）/ regen（リジェネのターン数）/ ap（最初のターンの AP）
 const DISHES = {
 	"plain": {"name": "まかない飯", "heal_pct": 30, "next": {}, "desc": "HP30%回復"},
-	"yakiniku": {"name": "ガッツリ焼肉", "heal_pct": 45, "next": {"atk": 1}, "desc": "HP45%回復。次の戦闘で味方全体の攻撃力+1"},
+	"yakiniku": {"name": "ガッツリ焼肉", "heal_pct": 45, "next": {"atk": 1}, "desc": "HP45%回復。次の戦闘で味方全体のPOW+1"},
 	"mush_pot": {"name": "森のきのこ鍋", "heal_pct": 45, "next": {"regen": 2}, "desc": "HP45%回復。次の戦闘で味方全体に2ターンリジェネ"},
-	"fish_set": {"name": "焼き魚定食", "heal_pct": 45, "next": {"def": 3}, "desc": "HP45%回復。次の戦闘で味方全体の防御力+3"},
+	"fish_set": {"name": "焼き魚定食", "heal_pct": 45, "next": {"def": 3}, "desc": "HP45%回復。次の戦闘で味方全体のDEF+3"},
 	"plate": {"name": "彩りプレート", "heal_pct": 45, "next": {}, "desc": "HP45%回復"},
-	"steak": {"name": "極上ステーキ", "heal_pct": 60, "next": {"atk": 3}, "desc": "HP60%回復。次の戦闘で味方全体の攻撃力+3"},
+	"steak": {"name": "極上ステーキ", "heal_pct": 60, "next": {"atk": 3}, "desc": "HP60%回復。次の戦闘で味方全体のPOW+3"},
 	"mush_soup": {"name": "秘伝きのこスープ", "heal_pct": 60, "next": {"regen": 5}, "desc": "HP60%回復。次の戦闘で味方全体に5ターンリジェネ"},
-	"sashimi": {"name": "大漁の舟盛り", "heal_pct": 60, "next": {"def": 3}, "desc": "HP60%回復。次の戦闘で味方全体の防御力+3"},
+	"sashimi": {"name": "大漁の舟盛り", "heal_pct": 60, "next": {"def": 3}, "desc": "HP60%回復。次の戦闘で味方全体のDEF+3"},
 	"kiwami": {"name": "三種の極み膳", "heal_pct": 60, "next": {"ap": 3}, "max_hp": 3, "item": "ultimate_soup",
 		"desc": "HP60%回復。最大HP+3。次の戦闘で最初のAP+3。アイテム「極みスープ」を得る"},
 	"dinner": {"name": "豪華ディナー", "heal_pct": 60, "next": {"ap": 1}, "desc": "HP60%回復。次の戦闘で最初のAP+1"},

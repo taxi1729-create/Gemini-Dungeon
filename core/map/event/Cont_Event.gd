@@ -382,7 +382,7 @@ func _choose_new(id: String) -> void:
 				_give_card(cid, ""))
 		"statue_sword":
 			CS.add_floor_fx("knight_atk", 1)
-			_done("剣に力が宿った（この階の間、ナイトの攻撃力+1）")
+			_done("剣に力が宿った（この階の間、ナイトのPOW+1）")
 		"statue_staff":
 			CS.add_floor_fx("witch_ap", 1)
 			_done("杖に魔力が宿った（この階の間、ウィッチの毎ターンAP+1）")
@@ -421,7 +421,7 @@ func _choose_new(id: String) -> void:
 			_done("青い光に包まれた（この階の間、左のキャラはターン開始時ブロック+2）")
 		"portrait_red":
 			CS.add_floor_fx("right_atk", 1)
-			_done("赤い光に包まれた（この階の間、右のキャラの攻撃力+1）")
+			_done("赤い光に包まれた（この階の間、右のキャラのPOW+1）")
 		# ----- 3 階 -----
 		"glass_blue":
 			for a in CS.allies:
@@ -431,7 +431,7 @@ func _choose_new(id: String) -> void:
 			for a in CS.allies:
 				a["atk"] = int(a.get("atk", 0)) + 1
 			CS.damage_all(10)
-			_done("赤の光を浴びた（全員の攻撃力+1・全員HP-10）")
+			_done("赤の光を浴びた（全員のPOW+1・全員HP-10）")
 		"conf_tell":
 			_remove_cards(2)
 		"conf_pray":

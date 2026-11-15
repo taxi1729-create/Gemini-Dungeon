@@ -9,7 +9,7 @@ const DATA = {
 	"blue_crest": {"name": "蒼の盾章", "icon": "r_blue_crest", "price": 150,
 		"desc": "左（青）に立つ味方は、ターン開始時にブロック+4"},
 	"red_crest": {"name": "紅の剣章", "icon": "r_red_crest", "price": 150,
-		"desc": "右（赤）に立つ味方は攻撃力+1"},
+		"desc": "右（赤）に立つ味方はPOW+1"},
 	"oath": {"name": "誓いの紋章", "icon": "r_oath", "price": 140,
 		"desc": "必殺技を使うと、味方全体にブロック+10"},
 	"hourglass": {"name": "大きな砂時計", "icon": "r_hourglass", "price": 160,

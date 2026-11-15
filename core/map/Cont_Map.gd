@@ -274,7 +274,7 @@ func _open_specials(ui: CanvasLayer) -> void:
 	box.add_child(dim)
 	UiSystem.make_panel(box, Rect2(20, 150, 680, 1000))
 	UiSystem.make_banner(box, "必殺技をセット", Rect2(40, 122, 380, 64), 32)
-	UiSystem.make_label(box, "戦闘中は中央を長押しして発動（AP消費）。強敵を倒すと新しい必殺技が解放される", Vector2(40, 196), Vector2(640, 60), 18, col.sub)
+	UiSystem.make_label(box, "戦闘中、必殺技ゲージが満タンの時に中央を長押しして発動。ラスボスを倒すと新しい必殺技が解放される", Vector2(40, 196), Vector2(640, 60), 18, col.sub)
 	var y := 262.0
 	for a in CurrentStatus.allies:
 		UiSystem.make_banner(box, a.name, Rect2(44, y, 170, 38), 22, col.get(a.id, col.ink), col.paper, 12)
@@ -282,9 +282,10 @@ func _open_specials(ui: CanvasLayer) -> void:
 		var n := 0
 		for sp in ActionList.SPECIALS[a.id]:
 			var open: bool = CurrentStatus.is_special_unlocked(str(sp.id))
-			var txt := "？？？\n（強敵を倒すと解放）"
+			var txt := "？？？\n（ラスボスを倒すと解放）"  # 12 回目：解放はラスボス（SaveData.unlock_special）
 			if open:
-				txt = "%s（ゲージ%dで使える）\n%s" % [sp.name, ActionController.GAUGE_MAX, str(sp.get("desc", ""))]
+				# 12 回目：上限・貯まり方は必殺技ごと（虚空連斬 150）
+				txt = "%s（ゲージ%d：%s）\n%s" % [sp.name, ActionController.special_gauge_max(sp), str(sp.get("gauge_text", "")), str(sp.get("desc", ""))]
 			var pos := Vector2(40 + (n % 2) * 324, y + 44 + (n >> 1) * 172)
 			# 文字はボタンの上のラベルで折り返す（ボタンの文字だと横に伸びてしまう）
 			var b := UiSystem.make_button(box, "", pos, Vector2(316, 164), Callable(), 17)
