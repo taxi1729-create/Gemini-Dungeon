@@ -6,19 +6,40 @@ class_name StatusEffectList
 ## 残りターンは「持ち主の自分のターンが終わった時」に 1 減る（火傷・毒は val も同時に 1 減る）
 ## label: 表示の仕方（"val" = 強さ、"neg" = −強さ、"turns" = 残りターン）
 
+## 12 回目：旧 ID → 新しい ID（攻撃力→POW、防御力→DEF）。StatusController.canon が使う
+const ALIAS = {"atk_buff": "pow_up", "atk_down": "pow_down", "def_buff": "def_up"}
+
 const DATA = {
 	"fire": {"name": "火傷", "short": "火傷", "timing": "start_turn", "icon": "flame", "good": false, "label": "val",
 		"desc": "ターン開始時に数値分のダメージ。毎ターン1減る"},
 	"poison": {"name": "毒", "short": "毒", "timing": "start_turn", "icon": "st_poison", "good": false, "label": "val",
 		"desc": "ターン開始時に残りターン分のダメージ。毎ターン1減る"},
-	"atk_buff": {"name": "攻撃力アップ", "short": "攻↑", "timing": "all", "icon": "atk_buff", "good": true, "label": "val",
-		"desc": "与えるダメージ +数値"},
-	"atk_down": {"name": "攻撃力低下", "short": "攻↓", "timing": "all", "icon": "st_atk_down", "good": false, "label": "neg",
-		"desc": "与えるダメージ −数値"},
-	"def_buff": {"name": "防御力アップ", "short": "防↑", "timing": "all", "icon": "st_def_up", "good": true, "label": "val",
-		"desc": "受けるダメージ −数値"},
-	"def_down": {"name": "防御力低下", "short": "防↓", "timing": "all", "icon": "st_def_down", "good": false, "label": "neg",
-		"desc": "受けるダメージ +数値"},
+	# 12 回目：ステータス増減（ターン限定）。味方は POW・SLD・DEF そのものが変わる（% のカードすべてに効く）。
+	#   敵には POW・SLD が無いので、pow_up / pow_down は今まで通り敵のダメージの増減（表示は POW↑／POW↓）
+	#   戦闘終了までの増減は状態ではなく効果 add_stat（ActionController.add_stat。u.stat_add）
+	"pow_up": {"name": "POWアップ", "short": "POW↑", "timing": "all", "icon": "atk_buff", "good": true, "label": "val",
+		"desc": "POW +数値（敵に付いた時は与えるダメージ +数値）"},
+	"pow_down": {"name": "POWダウン", "short": "POW↓", "timing": "all", "icon": "st_atk_down", "good": false, "label": "neg",
+		"desc": "POW −数値（敵に付いた時は与えるダメージ −数値）"},
+	"sld_up": {"name": "SLDアップ", "short": "SLD↑", "timing": "all", "icon": "c_big_shield", "good": true, "label": "val",
+		"desc": "SLD +数値（ブロックのカードの量が増える）"},
+	"sld_down": {"name": "SLDダウン", "short": "SLD↓", "timing": "all", "icon": "c_big_shield", "good": false, "label": "neg",
+		"desc": "SLD −数値（ブロックのカードの量が減る）"},
+	"def_up": {"name": "DEFアップ", "short": "DEF↑", "timing": "all", "icon": "st_def_up", "good": true, "label": "val",
+		"desc": "DEF +数値（受けるダメージ −数値）"},
+	"def_down": {"name": "DEFダウン", "short": "DEF↓", "timing": "all", "icon": "st_def_down", "good": false, "label": "neg",
+		"desc": "DEF −数値（受けるダメージ +数値）"},
+	# 旧 ID（11 回目まで）。付ける時に StatusController.apply_status が新しい ID に読み替えるので、ユニットには残らない。
+	# データ（敵の行動など）に古い ID が残っていても表示が引けるように、同じ中身を置いておく（ALIAS と対）
+	"atk_buff": {"name": "POWアップ", "short": "POW↑", "timing": "all", "icon": "atk_buff", "good": true, "label": "val",
+		"desc": "POW +数値（敵に付いた時は与えるダメージ +数値）"},
+	"atk_down": {"name": "POWダウン", "short": "POW↓", "timing": "all", "icon": "st_atk_down", "good": false, "label": "neg",
+		"desc": "POW −数値（敵に付いた時は与えるダメージ −数値）"},
+	"def_buff": {"name": "DEFアップ", "short": "DEF↑", "timing": "all", "icon": "st_def_up", "good": true, "label": "val",
+		"desc": "DEF +数値（受けるダメージ −数値）"},
+	# 12 回目：庇う（城壁・聖域）。残りは「ラウンド」で数える（1＝付けたラウンドの敵の攻撃が終わるまで）
+	"cover": {"name": "庇う", "short": "庇う", "timing": "all", "icon": "shield", "good": true, "label": "turns",
+		"desc": "もう1人の味方への敵の攻撃（単体・全体の分）を代わりに受ける"},
 	"ap_plus": {"name": "APプラス", "short": "AP+", "timing": "start_turn", "icon": "st_ap_plus", "good": true, "label": "turns",
 		"desc": "自分のターン開始時に AP +数値"},
 	"ap_next": {"name": "次ターンAP", "short": "次AP", "timing": "start_turn", "icon": "st_ap_next", "good": true, "label": "val",

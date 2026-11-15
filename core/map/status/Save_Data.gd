@@ -352,3 +352,109 @@ func _read(path: String) -> Dictionary:
 	if not str(d.get("resume", "")) in RESUMES or not d.get("status") is Dictionary:
 		return {}
 	return d
+
+
+# ============================================================
+# 12 回目（C）：周回をまたぐ記録（カード・必殺技の解放）
+# ・user://unlock.json に置く。冒険のセーブ（save.json）とは別のファイルなので、clear()（全滅・踏破・新しい冒険）でも消えない。
+# ・解放したカード（"pool": "unlock"）は ActionList.unlocked_cards、必殺技は unlocked_specials に入れる。
+# ・1 階・2 階のボスを倒すと 3 枚、ラスボスを倒すと 5 枚＋必殺技 1 つ、ゲームオーバーで 1 枚（ナイト・ウィッチ合わせた数）。
+# ============================================================
+const META_PATH := "user://unlock.json"
+const META_VERSION := 1
+const UNLOCK_COUNT := {"boss": 3, "lastboss": 5, "gameover": 1}
+
+var unlocked_specials: Array = []  # 解放した "pool": "unlock" の必殺技 ID
+
+
+func _ready() -> void:
+	load_meta()
+
+
+## 周回をまたぐ記録を読む（無い・壊れている時は何も解放していない状態）
+func load_meta() -> void:
+	ActionList.unlocked_cards = {}
+	unlocked_specials = []
+	if not FileAccess.file_exists(META_PATH):
+		return
+	var json := JSON.new()
+	if json.parse(FileAccess.get_file_as_string(META_PATH)) != OK or not json.data is Dictionary:
+		return
+	var d: Dictionary = json.data
+	if d.get("cards") is Array:
+		for c in d.cards:
+			if not ActionList.card_raw(str(c)).is_empty():  # 知らないカードは捨てる
+				ActionList.unlocked_cards[str(c)] = true
+	if d.get("specials") is Array:
+		for s in d.specials:
+			if ActionList.special_owner(str(s)) != "" and not unlocked_specials.has(str(s)):
+				unlocked_specials.append(str(s))
+
+
+func save_meta() -> void:
+	var f := FileAccess.open(META_PATH, FileAccess.WRITE)
+	if f == null:
+		push_warning("SaveData: 解放の記録を保存できません (%s)" % error_string(FileAccess.get_open_error()))
+		return
+	f.store_string(JSON.stringify({"version": META_VERSION, "cards": ActionList.unlocked_cards.keys(), "specials": unlocked_specials}))
+	f.close()  # Web 版は close した時に IndexedDB へ書き出される
+
+
+## 解放の記録を消す（テスト・デバッグ用）
+func reset_meta() -> void:
+	ActionList.unlocked_cards = {}
+	unlocked_specials = []
+	save_meta()
+
+
+## カードを n 枚解放する。未解放カードが残っているグループを 1 つランダムに選んでその中から解放し、
+## 足りなければ残りを別のグループから。解放したカード ID の配列（全部解放済みなら空）
+func unlock_cards(n: int) -> Array:
+	var got: Array = []
+	while got.size() < n:
+		var by := {}  # グループ名 → 未解放のカード ID
+		for id in ActionList.locked_card_ids():
+			var g := ActionList.group_of(str(id))
+			if not by.has(g):
+				by[g] = []
+			(by[g] as Array).append(str(id))
+		if by.is_empty():
+			break
+		var ids: Array = by[by.keys().pick_random()]
+		ids.shuffle()
+		for id in ids.slice(0, n - got.size()):
+			ActionList.unlocked_cards[str(id)] = true
+			got.append(str(id))
+	if not got.is_empty():
+		save_meta()
+	return got
+
+
+## 必殺技が選べるか（最初から選べる、または解放済み）
+func is_special_open(special_id: String) -> bool:
+	return ActionList.special_pool(special_id) == "init" or unlocked_specials.has(special_id)
+
+
+## 選べる必殺技の ID（両キャラ）
+func open_specials() -> Array:
+	return ActionList.special_ids().filter(func(id): return is_special_open(str(id)))
+
+
+## 未解放の必殺技をランダムに 1 つ解放する（ラスボスを倒した時）。解放した ID（全部解放済みなら ""）
+func unlock_special() -> String:
+	var cand: Array = ActionList.special_ids().filter(func(id): return not is_special_open(str(id)))
+	if cand.is_empty():
+		return ""
+	var id := str(cand.pick_random())
+	unlocked_specials.append(id)
+	save_meta()
+	return id
+
+
+## 解放をまとめて行う。kind＝"boss"（1・2 階のボス）／"lastboss"／"gameover"。
+## 戻り値 {"cards": [カード ID…], "special": 必殺技 ID か ""}（結果画面が表示する）
+func unlock_for(kind: String) -> Dictionary:
+	var out := {"cards": unlock_cards(int(UNLOCK_COUNT.get(kind, 0))), "special": ""}
+	if kind == "lastboss":
+		out["special"] = unlock_special()
+	return out

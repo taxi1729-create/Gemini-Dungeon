@@ -280,8 +280,9 @@ func _paint_sort_btns() -> void:
 		UiSystem.set_button_red(_sort_btns[k], k == sort_key)
 
 
-const RARITY_ORDER := ["normal", "rare", "super_rare"]
-const RARITY_NAME := {"normal": "通常", "rare": "レア", "super_rare": "超レア"}
+## 12 回目（C）：レア度は 4 段階（ActionList.RARITIES。古い値は norm_rarity で読み替える）
+const RARITY_ORDER := ["common", "rare", "epic", "legend"]
+const RARITY_NAME := {"common": "コモン", "rare": "レア", "epic": "エピック", "legend": "レジェンド"}
 const TYPE_NAME := ["アタック", "スキル", "パワー", "その他"]
 
 
@@ -307,7 +308,7 @@ static func ap_rank(c: Dictionary) -> int:
 ## 並べ替えの主キー（数）。名前・No. は 0（後ろの比べで決まる）
 static func sort_rank(c: Dictionary, key: String) -> int:
 	match key:
-		"rarity": return RARITY_ORDER.find(str(c.get("rarity", "normal")))
+		"rarity": return RARITY_ORDER.find(ActionList.norm_rarity(c.get("rarity", "common")))
 		"type": return type_rank(c)
 		"ap": return ap_rank(c)
 	return 0
@@ -316,7 +317,7 @@ static func sort_rank(c: Dictionary, key: String) -> int:
 ## 見出しの名前（regroup の時）
 static func group_name(c: Dictionary, key: String) -> String:
 	match key:
-		"rarity": return str(RARITY_NAME.get(str(c.get("rarity", "normal")), "通常"))
+		"rarity": return str(RARITY_NAME[ActionList.norm_rarity(c.get("rarity", "common"))])
 		"type": return TYPE_NAME[type_rank(c)]
 		"ap":
 			var r := ap_rank(c)

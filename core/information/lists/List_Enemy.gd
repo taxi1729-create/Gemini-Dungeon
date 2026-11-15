@@ -75,7 +75,7 @@ const DATA = {
 
 ## 11 回目：敵の HP は表の値の 1.2 倍（ウィッチの攻撃が 1.5 倍になる分の見込み。リーダー決定）。make_enemy で掛けて四捨五入
 ## （攻撃の約 1.6 倍は ActionList.ENEMY_ACTIONS の power に書き込み済み）
-const HP_MULT := 1.2
+const HP_MULT := 2.5  # 12 回目：元の表の 2.5 倍（ユーザー決定。11 回目は 1.2）
 
 
 ## 敵を作る。floor_no は階の中の段（0〜7）

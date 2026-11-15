@@ -22,7 +22,9 @@ var pad: GuiFlickPad
 var reward_cards: Array = []  # カードの辞書 ×3
 var card_taken := -1  # 受け取ったカードの番号（-1＝まだ）
 var others: Array = []  # [{"kind", "id", "ids", "done"}]
-var unlocked := ""  # この戦闘で解放した必殺技の ID
+var unlocked := ""  # この戦闘で解放した必殺技の ID（12 回目：ラスボスを倒した時だけ）
+var card_unlocks: Array = []  # 12 回目（C）：この結果画面で解放したカードの ID
+var _unlock_shown := false  # 解放したカードの表示を出した（次の _leave で閉じる）
 var sub_mode := ""  # "" ＝通常 / "boss_relic"・"sr_cards" ＝ 3 択の画面（others の番号は sub_index）
 var sub_index := -1
 var _t := 0.0
@@ -106,10 +108,16 @@ func _show_win() -> void:
 		drops = SaveData.screen.drops
 	UiSystem.make_banner(ui, "戦利品　" + "、".join(drops), Rect2(30, 262, 660, 54), 22, col.paper, col.ink, 18)
 	_build_foods(SaveData.screen.get("foods_got", []))
-	if unlocked != "":
-		var sp := ActionList.special(ActionList.special_owner(unlocked), unlocked)
-		var who: String = InitAllyStatus.DATA[ActionList.special_owner(unlocked)].name
-		UiSystem.make_banner(ui, "必殺技「%s」（%s）を解放！" % [sp.name, who], Rect2(40, 456, 640, 48), 22,
+	# 12 回目（C）：1・2 階のボスを倒すとカードを 3 枚解放（1 回だけ。解放した ID は SaveData.screen に残し、再読み込みでやり直さない）。
+	# 必殺技は強敵では解放しなくなった（ラスボスを倒した時に 1 つ。_show_clear）
+	if CurrentStatus.battle_kind == "boss" and CurrentStatus.stage < CurrentStatus.STAGE_MAX:
+		if not SaveData.screen.get("card_unlocks") is Array:
+			SaveData.screen["card_unlocks"] = SaveData.unlock_for("boss").cards
+		for cid in SaveData.screen.card_unlocks:
+			if not ActionList.make_card(str(cid)).is_empty():
+				card_unlocks.append(str(cid))
+	if not card_unlocks.is_empty():
+		UiSystem.make_banner(ui, "カード解放！　新しいカード %d 枚（閉じる時に表示）" % card_unlocks.size(), Rect2(40, 456, 640, 48), 22,
 				ImageController.GLASS.deep_rose, col.paper, 16)
 	UiSystem.make_banner(ui, "8・4・6＝カードを1枚　2・3・1＝その他の報酬　確定で閉じる", Rect2(30, 590, 660, 36), 18,
 			ImageController.GLASS.sacred_blue, col.paper, 14)
@@ -264,8 +272,8 @@ func _other_info(o: Dictionary) -> Dictionary:
 					"desc": "[i:crown]ボスレリックを 3 つから 1 つ選ぶ：%s" % "／".join(names)}
 		"sr_cards":
 			var names2: Array = (o.ids as Array).map(func(c): return str(ActionList.make_card(str(c)).get("name", "")))
-			info = {"title": "超レア報酬", "icon": "cards", "accent": Color("ffb03a"), "sub": "3枚から1枚",
-					"desc": "[i:cards]超レア確定のカードを 3 枚から 1 枚選ぶ：%s" % "／".join(names2)}
+			info = {"title": "エピック報酬", "icon": "cards", "accent": Color("ffb03a"), "sub": "3枚から1枚",
+					"desc": "[i:cards]エピック以上のカードを 3 枚から 1 枚選ぶ：%s" % "／".join(names2)}
 		"ev_card":
 			# D：イベントの戦闘の報酬（カード 1 枚）
 			var ec := ActionList.make_card(str(o.id))
@@ -287,7 +295,7 @@ func _other_info(o: Dictionary) -> Dictionary:
 func _refresh_sub() -> void:
 	var o: Dictionary = others[sub_index]
 	var ids: Array = o.ids
-	pad.header_left = "ボスレリック" if sub_mode == "boss_relic" else "超レア報酬"
+	pad.header_left = "ボスレリック" if sub_mode == "boss_relic" else "エピック報酬"
 	for i in mini(ids.size(), CARD_KEYS.size()):
 		var id := str(ids[i])
 		if sub_mode == "boss_relic":
@@ -519,8 +527,7 @@ func _process_drops() -> Array:
 		var rid := RelicList.random_id(Inventory.relics)
 		if rid != "":
 			others.append({"kind": "relic", "id": rid, "ids": [], "done": false})
-		# 強敵を倒すと、まだ解放されていない必殺技（両キャラから）をランダムに 1 つ解放
-		unlocked = CurrentStatus.unlock_random_special()
+		# 12 回目（C）：強敵では必殺技を解放しない（ラスボスを倒すたびに 1 つ。周回をまたいで残る）
 	elif CurrentStatus.battle_kind == "battle" and randf() < 0.25:
 		others.append({"kind": "badge", "id": BadgeList.random_id(), "ids": [], "done": false})
 	if randf() < (0.6 if elite else 0.25):
@@ -566,6 +573,9 @@ func _show_lose() -> void:
 	l.add_theme_font_override("font", ImageController.font_head)
 	UiSystem.make_red_button(ui, "もう一度挑む", Vector2(160, 760), Vector2(400, 90), _restart, 30)
 	UiSystem.make_button(ui, "タイトルに戻る", Vector2(160, 870), Vector2(400, 90), _to_title, 30)
+	# 12 回目（C）：ゲームオーバーでカードを 1 枚解放（全部解放済みなら何も出さない）
+	card_unlocks = SaveData.unlock_for("gameover").cards
+	_build_unlocks(ui, Rect2(40, 440, 640, 300), card_unlocks, "")
 
 
 func _show_clear() -> void:
@@ -579,6 +589,62 @@ func _show_clear() -> void:
 	UiSystem.make_button(ui, "デッキを見る", Vector2(160, 650), Vector2(400, 80), _open_deck, 26)
 	UiSystem.make_red_button(ui, "もう一度冒険する", Vector2(160, 760), Vector2(400, 90), _restart, 30)
 	UiSystem.make_button(ui, "タイトルに戻る", Vector2(160, 870), Vector2(400, 90), _to_title, 30)
+	# 12 回目（C）：ラスボスを倒すとカードを 5 枚＋必殺技を 1 つ解放（全部解放済みなら何も出さない）
+	var u: Dictionary = SaveData.unlock_for("lastboss")
+	card_unlocks = u.cards
+	unlocked = str(u.special)
+	_build_unlocks(ui, Rect2(40, 975, 640, 285), card_unlocks, unlocked)
+
+
+## 「カード解放」の表示（12 回目・C）：見出しと、解放したカード（と必殺技）を rect の中に並べる。何も無ければ何も出さない
+func _build_unlocks(parent: Node, rect: Rect2, ids: Array, special_id: String) -> void:
+	if ids.is_empty() and special_id == "":
+		return
+	var col: Dictionary = ImageController.COL
+	var head := "カード解放！　次の冒険から報酬・ショップに出る" if not ids.is_empty() else "必殺技解放！"
+	UiSystem.make_banner(parent, head, Rect2(rect.position.x + 10, rect.position.y, rect.size.x - 20, 44), 20,
+			ImageController.GLASS.deep_rose, col.paper, 16)
+	var h := rect.size.y - 54
+	if special_id != "":
+		h -= 54
+		var sp := ActionList.special(ActionList.special_owner(special_id), special_id)
+		var who: String = InitAllyStatus.DATA[ActionList.special_owner(special_id)].name
+		UiSystem.make_banner(parent, "必殺技「%s」（%s）を解放！" % [sp.name, who], Rect2(rect.position.x + 30, rect.end.y - 46, rect.size.x - 60, 44), 20,
+				col.ink, col.paper, 16)
+	var n := ids.size()
+	if n == 0:
+		return
+	var sc := minf(1.0, minf(h / GuiCard.SIZE.y, (rect.size.x - 10.0 * (n - 1)) / (n * GuiCard.SIZE.x)))
+	var cw := GuiCard.SIZE.x * sc + 10.0
+	var x0 := rect.position.x + (rect.size.x - (n * cw - 10.0)) / 2.0
+	for i in n:
+		var v := GuiCard.new()
+		v.set_card(ActionList.make_card(str(ids[i])))
+		v.interactive = false
+		v.base_scale = sc
+		v.scale = Vector2(sc, sc)
+		# 拡大縮小の中心はカードの中央なので、見た目の左上が揃うようにずらす
+		v.position = Vector2(x0 + i * cw, rect.position.y + 54) - GuiCard.SIZE * (1.0 - sc) / 2.0
+		parent.add_child(v)
+
+
+## 勝利の結果画面を閉じる時：解放したカードを画面いっぱいに見せる（タップで先へ）
+func _show_unlock_overlay() -> void:
+	var v := Control.new()
+	v.size = Vector2(720, 1280)
+	v.mouse_filter = Control.MOUSE_FILTER_STOP
+	v.z_index = 200
+	var bg := ColorRect.new()
+	bg.color = Color(ImageController.GLASS.ivory_black, 0.85)
+	bg.size = v.size
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(bg)
+	_build_unlocks(v, Rect2(40, 400, 640, 300), card_unlocks, "")
+	UiSystem.make_label(v, "タップで進む", Vector2(0, 730), Vector2(720, 40), 22, ImageController.COL.paper, HORIZONTAL_ALIGNMENT_CENTER, 0)
+	v.gui_input.connect(func(e: InputEvent):
+		if (e is InputEventMouseButton or e is InputEventScreenTouch) and e.is_pressed():
+			_leave())
+	ui.add_child(v)
 
 
 func _restart() -> void:
@@ -742,6 +808,11 @@ func _draw_fx_front() -> void:
 
 
 func _leave() -> void:
+	# 12 回目（C）：ボスの報酬の後、解放したカードを見せてから閉じる（もう一度呼ぶと閉じる）
+	if not card_unlocks.is_empty() and not _unlock_shown and CurrentStatus.last_result == "win" and not _is_clear():
+		_unlock_shown = true
+		_show_unlock_overlay()
+		return
 	SaveData.screen = {}
 	SaveData.save("map")  # 結果画面を閉じた時の自動セーブ
 	UiSystem.goto("map")

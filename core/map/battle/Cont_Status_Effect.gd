@@ -27,12 +27,31 @@ static func reserve_lines(u: Dictionary) -> Array:
 	return out
 
 
+## 12 回目：旧 ID（atk_buff / atk_down / def_buff）を新しい ID（pow_up / pow_down / def_up）に読み替える
+static func canon(id: String) -> String:
+	return str(StatusEffectList.ALIAS.get(id, id))
+
+
+## ユニットに残っている旧 ID の状態（古い途中セーブ）を新しい ID に付け替える
+static func upgrade_ids(u: Dictionary) -> void:
+	var se = u.get("status_effects")
+	if not (se is Dictionary):
+		return
+	for old in StatusEffectList.ALIAS:
+		if not (se as Dictionary).has(old):
+			continue
+		var e = se[old]
+		(se as Dictionary).erase(old)
+		if e is Dictionary:
+			apply_status(u, str(old), int(e.get("val", 0)), int(e.get("turns", -1)))
+
+
 static func has(u: Dictionary, id: String) -> bool:
-	return u.get("status_effects", {}).has(id)
+	return u.get("status_effects", {}).has(canon(id))
 
 
 static func val(u: Dictionary, id: String) -> int:
-	var e = u.get("status_effects", {}).get(id)
+	var e = u.get("status_effects", {}).get(canon(id))
 	return int(e.val) if e is Dictionary else 0
 
 
@@ -51,6 +70,7 @@ static func label(u: Dictionary, id: String) -> String:
 ## 付与。turns = -1 なら戦闘中ずっと。同じ状態は強さを足し、残りターンは長い方
 static func apply_status(target: Dictionary, status_id: String, amount: int, turns: int = -1) -> void:
 	var se: Dictionary = target.status_effects
+	status_id = canon(status_id)  # 12 回目：旧 ID は新しい ID に
 	if status_id in ["fire", "poison", "regen"]:
 		turns = maxi(turns, amount)  # 火傷・毒・リジェネは強さ＝残りターン
 	if status_id in ["stun", "hangeki", "yoyaku"]:
@@ -78,7 +98,7 @@ static func apply_status(target: Dictionary, status_id: String, amount: int, tur
 
 
 static func remove(u: Dictionary, id: String) -> void:
-	u.status_effects.erase(id)
+	u.status_effects.erase(canon(id))
 
 
 ## 精神統一：このターン必殺技の AP をいくつ減らすか（付けたターンには効かない）
@@ -157,8 +177,8 @@ static func end_of_turn(u: Dictionary) -> void:
 			u.status_effects.erase("focus")
 	for k in u.status_effects.keys():
 		var e: Dictionary = u.status_effects[k]
-		if int(e.turns) < 0:
-			continue
+		if int(e.turns) < 0 or k == "cover":
+			continue  # 庇うはラウンドの終わりに減らす（decrease_all_durations）
 		e["turns"] = int(e.turns) - 1
 		if k in ["fire", "poison", "regen"]:
 			e["val"] = int(e.turns)
@@ -168,6 +188,19 @@ static func end_of_turn(u: Dictionary) -> void:
 		u.status_effects.erase(k)
 
 
-## 以前のラウンド終了処理（今はターン終了で減らすので何もしない。呼び出し互換のため残す）
-static func decrease_all_durations(_units: Array) -> void:
-	pass
+## ラウンド終了時（敵が全員動いた後。Cont_Battle._battle_loop が呼ぶ）。ほかの状態は持ち主のターン終了で減らすので、
+## ここで減らすのは 12 回目の「庇う」だけ：残りラウンドを 1 減らし、0 で消える
+## （行動順がウィッチ → ナイト → 敵なので、ターンで数えるとウィッチの聖域が敵の攻撃の前に切れてしまう）
+static func decrease_all_durations(units: Array) -> void:
+	for u in units:
+		var se = (u as Dictionary).get("status_effects")
+		if not (se is Dictionary):
+			continue
+		var e = (se as Dictionary).get("cover")
+		if not (e is Dictionary):
+			continue
+		if int(e.get("turns", -1)) < 0:
+			continue
+		e["turns"] = int(e.turns) - 1
+		if int(e.turns) <= 0:
+			(se as Dictionary).erase("cover")

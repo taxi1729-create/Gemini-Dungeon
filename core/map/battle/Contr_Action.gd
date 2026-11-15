@@ -15,12 +15,106 @@ class_name ActionController
 ##   {"target", "gauge": n} … 必殺技ゲージが n 増えた（add_gauge）
 
 
+## ダメージへの固定の加算。12 回目：味方の「攻撃力」はすべて POW に統一したので、味方は常に 0（get_pow に入る）。
+## 敵には POW が無いので、敵の atk（階での増加）と、敵に付いた POW の増減（pow_up / pow_down / add_stat の pow）がここでダメージに足される
 static func get_atk(u: Dictionary) -> int:
-	return int(u.get("atk", 0)) + StatusController.val(u, "atk_buff") - StatusController.val(u, "atk_down") + int(u.get("power_atk", 0)) + formation_atk(u) + power_dyn(u, "atk")
+	if str(u.get("side", "")) == "ally":
+		return 0
+	return int(u.get("atk", 0)) + stat_delta(u, "pow")
 
 
+## DEF（受けるダメージから引く。負なら増える）＝基礎＋増減
 static func get_def(u: Dictionary) -> int:
-	return int(u.get("def", 0)) + StatusController.val(u, "def_buff") - StatusController.val(u, "def_down") + int(u.get("power_def", 0)) + formation_def(u) + aid_def(u) + power_dyn(u, "def")
+	return stat_base(u, "def") + stat_delta(u, "def")
+
+
+# ------------------------------------------------------------
+# 12 回目：ステータス増減（POW・SLD・DEF）
+#   戦闘終了まで：効果 {"effect": "add_stat", "stat": "pow" | "sld" | "def", "eff_val": n, "to": …}（負で下げる）→ u.stat_add = {"pow": n, …}
+#   ターン限定  ：状態 pow_up / pow_down・sld_up / sld_down・def_up / def_down（StatusEffectList）
+#   味方の旧「攻撃力」の加算（陣形の前衛 +2・パワー・レリック紅の剣章・料理・イベント）も POW の増減に入れる
+#   表示は「POW20+3」＝ stat_base ＋ stat_delta
+# ------------------------------------------------------------
+const STATS := ["pow", "sld", "def"]
+const STAT_NAME := {"pow": "POW", "sld": "SLD", "def": "DEF"}
+
+
+## 基礎の値。味方の POW は、冒険の間ずっと続く加算（イベント「赤の光」などの u.atk）を含む
+static func stat_base(u: Dictionary, stat: String) -> int:
+	var v := int(u.get(stat, 0))
+	if stat == "pow" and str(u.get("side", "")) == "ally":
+		v += int(u.get("atk", 0))
+	return v
+
+
+## 戦闘中の増減の合計（add_stat ＋ 状態 ＋ 陣形・パワー・レリックなど）
+static func stat_delta(u: Dictionary, stat: String) -> int:
+	var sa = u.get("stat_add")
+	var add := int((sa as Dictionary).get(stat, 0)) if sa is Dictionary else 0
+	add += StatusController.val(u, stat + "_up") - StatusController.val(u, stat + "_down")
+	var ally: bool = str(u.get("side", "")) == "ally"
+	match stat:
+		"pow":
+			if ally:
+				add += int(u.get("power_atk", 0)) + formation_atk(u) + power_dyn(u, "atk") + relic_atk(u)
+		"def":
+			add += int(u.get("power_def", 0)) + formation_def(u) + aid_def(u) + power_dyn(u, "def")
+		"sld":
+			if ally:
+				add += int(u.get("power_sld", 0)) + _aid_sum(u, "aid_sld")
+	return add
+
+
+## u のステータス stat を n 増減する（戦闘終了まで。負で下げる。何回でも積み重なる）
+static func add_stat(u: Dictionary, stat: String, n: int) -> void:
+	if not STATS.has(stat) or n == 0:
+		return
+	var sa = u.get("stat_add")
+	var d: Dictionary = sa if sa is Dictionary else {}
+	d[stat] = int(d.get(stat, 0)) + n
+	u["stat_add"] = d
+
+
+## 「POW20+3」の形（増減が 0 なら「POW20」）
+static func stat_text(u: Dictionary, stat: String) -> String:
+	var d := stat_delta(u, stat)
+	return "%s%d%s" % [str(STAT_NAME.get(stat, stat)), stat_base(u, stat), ("%+d" % d) if d != 0 else ""]
+
+
+static func _aid_sum(u: Dictionary, key: String) -> int:
+	var add := 0
+	var aid = u.get(key)
+	if aid is Dictionary:
+		for k in aid:
+			add += int(aid[k])
+	return add
+
+
+# ------------------------------------------------------------
+# 12 回目：庇う（状態 cover。城壁・聖域）
+#   庇うが付いた味方が、もう 1 人の味方への敵の攻撃（単体・全体のその人の分）を代わりに受ける。
+#   敵の「攻撃」（power のある行動）だけ。状態異常だけの行動（火炎の爪など）は付け替えない
+# ------------------------------------------------------------
+
+## t への敵の攻撃を受ける味方（庇う味方がいればその人。t 自身に庇うが付いていれば t のまま）
+static func cover_of(t: Dictionary, allies: Array) -> Dictionary:
+	if str(t.get("side", "")) != "ally" or StatusController.has(t, "cover"):
+		return t
+	for a in allies:
+		if a != t and int(a.hp) > 0 and str(a.get("side", "")) == "ally" and StatusController.has(a, "cover"):
+			return a
+	return t
+
+
+## 敵 user の行動 action が実際に当たる相手（resolve_targets ＋ 庇うの付け替え）。全体攻撃を庇うと同じ味方が 2 回入る
+static func attack_targets(user: Dictionary, action: Dictionary, allies: Array, enemies: Array) -> Array:
+	var tg := resolve_targets(user, str(action.get("target", "self")), allies, enemies)
+	if str(user.get("side", "ally")) == "ally" or not action.has("power"):
+		return tg
+	var out: Array = []
+	for t in tg:
+		out.append(cover_of(t, allies))
+	return out
 
 
 # ------------------------------------------------------------
@@ -28,21 +122,32 @@ static func get_def(u: Dictionary) -> int:
 #   ウィッチ＝与えたダメージ（HP とブロックへの合計）、ナイト＝得たブロックで貯まる（Cont_Battle が数える）。
 #   カードの効果で増やす時は {"effect": "add_gauge", "eff_val": n, "to": "self"}（イベント {"target", "gauge": 増えた量}）
 # ------------------------------------------------------------
-const GAUGE_MAX := 50
+const GAUGE_MAX := 50  # 普通の上限。12 回目：上限は必殺技ごと（虚空連斬だけ 150）＝ gauge_max(u)
 
 
-## u の必殺技ゲージを n 増やす（味方だけ。GAUGE_MAX で頭打ち）。実際に増えた量を返す
+## 12 回目：u が選んでいる必殺技のゲージの上限（Cont_Battle が u.sp_gauge_max に入れる。無ければ 50）
+static func gauge_max(u: Dictionary) -> int:
+	return maxi(1, int(u.get("sp_gauge_max", GAUGE_MAX)))
+
+
+## 必殺技のデータ sp の上限（"gauge_max" が無ければ 50）
+static func special_gauge_max(sp: Dictionary) -> int:
+	return maxi(1, int(sp.get("gauge_max", GAUGE_MAX)))
+
+
+## u の必殺技ゲージを n 増やす（味方だけ。上限 gauge_max(u) で頭打ち）。実際に増えた量を返す
 static func add_gauge(u: Dictionary, n: int) -> int:
 	if str(u.get("side", "")) != "ally" or n <= 0:
 		return 0
-	var before := clampi(int(u.get("sp_gauge", 0)), 0, GAUGE_MAX)
-	u["sp_gauge"] = mini(GAUGE_MAX, before + n)
+	var mx := gauge_max(u)
+	var before := clampi(int(u.get("sp_gauge", 0)), 0, mx)
+	u["sp_gauge"] = mini(mx, before + n)
 	return int(u.sp_gauge) - before
 
 
 ## 必殺技ゲージが満タンか
 static func gauge_full(u: Dictionary) -> bool:
-	return int(u.get("sp_gauge", 0)) >= GAUGE_MAX
+	return int(u.get("sp_gauge", 0)) >= gauge_max(u)
 
 
 ## もう 1 人の味方のパワーで上がった防御力（鋼鉄化：味方全体）。u.aid_def = {渡した味方の id: n}
@@ -55,7 +160,7 @@ static func aid_def(u: Dictionary) -> int:
 
 
 ## デバフ（闘志・浄化で外す）：火傷・毒・攻撃力低下・防御力低下・回復不可・スタン
-const DEBUFFS := ["fire", "poison", "atk_down", "def_down", "no_heal", "stun"]
+const DEBUFFS := ["fire", "poison", "pow_down", "sld_down", "def_down", "no_heal", "stun"]  # 12 回目：攻撃力低下 → POW ダウン、SLD ダウンを追加
 
 
 ## 陣形効果（味方だけ）：前衛（rank 0）は攻撃力+2、後衛（rank 1）は防御力+2
@@ -119,7 +224,8 @@ static func calc_damage(user: Dictionary, action: Dictionary, target: Dictionary
 		return StatusController.val(target, "poison")  # 腐食：毒の残り分の固定ダメージ
 	if action.get("fixed", false):
 		return int(action.get("power", 0))
-	return maxi(0, pow_part(user, action, target) + int(action.get("power", 0)) + vs_status_add(action, target) + get_atk(user) + relic_atk(user) - get_def(target))
+	# 12 回目：味方の攻撃力の加算（レリック紅の剣章なども）は POW に入った（get_pow）。get_atk は敵のダメージの加算だけ
+	return maxi(0, pow_part(user, action, target) + int(action.get("power", 0)) + vs_status_add(action, target) + get_atk(user) - get_def(target))
 
 
 # ------------------------------------------------------------
@@ -130,12 +236,13 @@ static func calc_damage(user: Dictionary, action: Dictionary, target: Dictionary
 #   カードのブロック ＝ 効果 add_shield の "sld_pct"（使った人の SLD の %。切り捨て）＋ "eff_val"（固定）
 #     味方全体・もう 1 人の味方に与えるブロックも、使った人（user）の SLD で計算する
 # ------------------------------------------------------------
+## 12 回目：基礎 ＋ 増減（stat_base ＋ stat_delta）。0 未満にはならない
 static func get_pow(u: Dictionary) -> int:
-	return int(u.get("pow", 0))
+	return maxi(0, stat_base(u, "pow") + stat_delta(u, "pow"))
 
 
 static func get_sld(u: Dictionary) -> int:
-	return int(u.get("sld", 0))
+	return maxi(0, stat_base(u, "sld") + stat_delta(u, "sld"))
 
 
 ## POW × % の部分（% が無い行動は 0）。target を渡すと侵食の針（vs_status の pow_pct）も足す
@@ -301,6 +408,17 @@ static func _hangeki_events(attacker: Dictionary, owner: Dictionary) -> Array:
 	return out
 
 
+## D（12 回目）：期間つきで付けた時に「この後に動く味方」へは 1 ターン足す状態（敵の攻撃の時まで残したいステータス増減）
+const ROUND_STATS := ["pow_up", "sld_up", "def_up"]
+
+
+## D（12 回目）：味方 t が、味方 user より後にこのラウンドで動くか（行動順はウィッチ → ナイト。Cont_Battle.round_order）
+static func acts_later(user: Dictionary, t: Dictionary) -> bool:
+	if t == user or str(user.get("side", "")) != "ally" or str(t.get("side", "")) != "ally":
+		return false
+	return str(user.get("id", "")) == "witch" and str(t.get("id", "")) == "knight"
+
+
 ## 状態 hangeki / yoyaku に、効果（add_status の "payload"）を積む
 static func _attach_payload(t: Dictionary, sid: String, payload: Dictionary) -> void:
 	var e = t.status_effects.get(sid)
@@ -350,7 +468,8 @@ static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}
 			continue
 		var tb := timed_bonus(card, k)
 		var teffs: Array = (tb.get("effects", []) as Array).duplicate(true)
-		if teffs.is_empty():
+		# D（12 回目・豪炎）：予約の追加効果が攻撃（bonus_yoyaku の pow_pct）だけのカードも予約を積む
+		if teffs.is_empty() and not (k == "yoyaku" and int(tb.get("pow_pct", 0)) > 0):
 			continue
 		match k:
 			"gekiha":
@@ -358,8 +477,13 @@ static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}
 			"hangeki":
 				effs.append({"effect": "add_status", "status": "hangeki", "eff_val": 1, "to": "self", "payload": {"effects": teffs}})
 			"yoyaku":
-				effs.append({"effect": "add_status", "status": "yoyaku", "eff_val": 1, "to": "self",
-						"payload": {"target": str(tb.get("target", card.get("target", "self"))), "effects": teffs}})
+				var ypl := {"target": str(tb.get("target", card.get("target", "self"))), "effects": teffs}
+				# D（12 回目・豪炎）：予約の攻撃。次の自分のターン開始時に POW × pow_pct を hits 回（hits_x なら使った時の X 回。_apply_effect が入れる）
+				if int(tb.get("pow_pct", 0)) > 0:
+					ypl["pow_pct"] = int(tb.pow_pct)
+					ypl["hits"] = maxi(1, int(tb.get("hits", 1)))
+					ypl["hits_x"] = bool(tb.get("hits_x", false))
+				effs.append({"effect": "add_status", "status": "yoyaku", "eff_val": 1, "to": "self", "payload": ypl})
 	var rank := int(user.get("rank", 0))
 	match str(card.get("badge", "")):
 		"sharp":
@@ -390,6 +514,23 @@ static func play_action(user: Dictionary, card: Dictionary, ctx: Dictionary = {}
 	# D（10 回目の新カード）：盾打ち・炎刃・灰燼斬・詠唱の構え
 	if card.get("power_half_block", false):
 		a["power"] = int(floor(int(user.get("shield", 0)) / 2.0))
+	# A（12 回目のナイトのカード）：盾打ち・審判の大盾・剛腕・覇王の一撃・苦痛の糧・不死鳥の剣
+	if card.get("power_block", false):
+		a["power"] = int(user.get("shield", 0))  # 自分のブロックと同じダメージ（ブロックは減らない）
+	var ipw = card.get("if_pow")
+	if ipw is Dictionary and get_pow(user) >= int(ipw.get("min", 0)):
+		add_pct += int(ipw.get("pow_pct", 0))
+	if int(card.get("per_pow_up_pct", 0)) > 0:
+		add_pct += int(card.per_pow_up_pct) * maxi(0, stat_delta(user, "pow"))
+	var pss = card.get("per_self_status_pct")
+	if pss is Dictionary:
+		var ssum := 0
+		for sid0 in pss.get("statuses", []):
+			ssum += StatusController.val(user, str(sid0))
+		add_pct += int(pss.get("pow_pct", 0)) * ssum
+	if int(card.get("burn_all_pct", 0)) > 0:
+		add_pct += int(card.burn_all_pct) * StatusController.val(user, "fire")
+		a["burn_all_used"] = true  # execute_action で自分の火傷を全部消す
 	var iss = card.get("if_self_status")
 	if iss is Dictionary and StatusController.has(user, str(iss.get("status", ""))):
 		add += int(iss.get("power", 0))
@@ -416,7 +557,7 @@ static func effective_power(user: Dictionary, action: Dictionary, allies: Array,
 		return 0
 	var rk := _pre_rank_begin(user, action)
 	var t := resolve_targets(user, action.get("target", "self"), allies, enemies)
-	var out := maxi(0, base_power(user, action) + get_atk(user) + relic_atk(user)) if t.is_empty() else calc_damage(user, action, t[0])
+	var out := maxi(0, base_power(user, action) + get_atk(user)) if t.is_empty() else calc_damage(user, action, t[0])
 	_pre_rank_end(user, rk)
 	return out
 
@@ -479,7 +620,11 @@ static func execute_action(user: Dictionary, action: Dictionary, allies: Array, 
 	# D（詠唱の構え）：上乗せを使ったアタックカードが発動したら状態 chant を外す
 	if action.get("chant_used", false) and StatusController.has(user, "chant"):
 		StatusController.remove(user, "chant")
-	var targets := resolve_targets(user, action.get("target", "self"), allies, enemies)
+	# A（不死鳥の剣）：自分の火傷を全部消す（消した分の % は play_action が足してある）
+	if action.get("burn_all_used", false) and StatusController.has(user, "fire"):
+		StatusController.remove(user, "fire")
+		events.append({"target": user, "cleanse": ["fire"]})
+	var targets := attack_targets(user, action, allies, enemies)  # 12 回目：敵の攻撃は庇う（cover）の味方へ付け替える
 	var is_ally: bool = user.get("side", "ally") == "ally"
 	var friends := (allies if is_ally else enemies).filter(func(e): return e.hp > 0)
 	# ダメージ（hits 回。1 回ごとに攻撃力・防御力・ブロックを計算）
@@ -621,17 +766,31 @@ static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: 
 		"add_gauge":
 			# 必殺技ゲージ（10 回目。闘気溜め・精神統一など）
 			ev["gauge"] = add_gauge(t, v)
+		"add_stat":
+			# 12 回目：ステータス増減（戦闘終了まで。負で下げる）。敵が対象なら pow は敵のダメージの増減になる（get_atk）
+			var stt := str(eff.get("stat", "pow"))
+			add_stat(t, stt, v)
+			ev["stat"] = stt
+			ev["stat_val"] = v
 		"add_status":
 			var sid: String = eff.status
 			var turns := int(eff.get("turns", -1))
 			# 自分のターン中に自分へ付けた期間つきの効果は、このターンの終わりで減らないよう 1 足す
-			if turns > 0 and t == user:
-				turns += 1
+			if turns > 0 and t == user and StatusController.canon(sid) != "cover":
+				turns += 1  # 庇う（cover）はラウンドで数えるので足さない
+			elif turns > 0 and acts_later(user, t) and StatusController.canon(sid) in ROUND_STATS:
+				turns += 1  # D（12 回目・守護結界）：この後に動く味方へ付けた DEF・POW・SLD の増減も、そのターンの終わりで減らないよう 1 足す
 			if sid == "taunt":
 				v = int(user.get("uid", 0))  # 挑発してきたキャラ
 			StatusController.apply_status(t, sid, v, turns)
 			if eff.get("payload") is Dictionary:
-				_attach_payload(t, sid, eff.payload)  # 反撃・予約の効果を状態に積む
+				var pld: Dictionary = eff.payload
+				if pld.get("hits_x", false):
+					# D（12 回目・豪炎）：予約の攻撃の回数＝使った時の X
+					pld = pld.duplicate(true)
+					pld["hits"] = maxi(0, x)
+					pld.erase("hits_x")
+				_attach_payload(t, sid, pld)  # 反撃・予約の効果を状態に積む
 			if sid == "declare" and not t.status_effects.declare.has("hp"):
 				t.status_effects.declare["hp"] = int(t.hp)  # 宣言：この HP から減らなければ成功
 			ev["status"] = sid
@@ -655,6 +814,25 @@ static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: 
 			ev["heal"] = int(t.hp) - before2
 			if StatusController.has(t, "declare") and t.status_effects.declare.has("hp"):
 				t.status_effects.declare["hp"] = int(t.status_effects.declare.hp) + int(ev.heal)
+		"shield_pow":
+			# A（気炎）：使った人の POW × pow_pct のブロック（切り捨て）
+			var pv := get_pow(user) * int(eff.get("pow_pct", 0)) / 100
+			t["shield"] = int(t.get("shield", 0)) + pv
+			ev["shield"] = pv
+		"double_block":
+			# A（引きつけ）：今あるブロックを 2 倍にする（増えた分をブロックとして数える）
+			var db := int(t.get("shield", 0))
+			t["shield"] = db * 2
+			ev["shield"] = db
+		"cleanse_one":
+			# A（肩を貸す）：デバフを 1 つ解除（DEBUFFS の並びで最初に見つかったもの）
+			var one: Array = []
+			for sid1 in DEBUFFS:
+				if StatusController.has(t, sid1):
+					StatusController.remove(t, sid1)
+					one.append(sid1)
+					break
+			ev["cleanse"] = one
 		"shield_per_status":
 			# D（熱き鼓動）：対象の状態の値 1 につきブロック +v（状態は減らさない）
 			# 11 回目：sld_pct があれば、状態の値 1 につき SLD × %（合計してから切り捨て）
@@ -689,8 +867,8 @@ static func _apply_effect(user: Dictionary, t: Dictionary, eff: Dictionary, ev: 
 					gone.append(sid)
 			ev["purge"] = gone
 			if fire_left > 0:
-				StatusController.apply_status(t, "atk_buff", fire_left)
-				StatusController.apply_status(t, "def_buff", fire_left)
+				add_stat(t, "pow", fire_left)  # 12 回目：攻撃力・防御力 → POW・DEF（戦闘終了まで）
+				add_stat(t, "def", fire_left)
 				ev["purge_bonus"] = fire_left
 
 

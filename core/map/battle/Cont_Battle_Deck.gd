@@ -304,9 +304,12 @@ static func card_text(user: Dictionary, action: Dictionary) -> String:
 	var head: String = action.get("name", "")
 	if str(action.get("no", "")) != "":
 		head = "No.%s　%s" % [str(action.no), head]  # カードの No. を見出しの頭に
-	match action.get("rarity", ""):
-		"rare": head += "　★レア"
-		"super_rare": head += "　★★超レア"
+	if str(action.get("rarity", "")) != "":
+		# 12 回目（C）：レア度 4 段階（コモンは出さない。古い値も読み替える）
+		match ActionList.norm_rarity(action.get("rarity")):
+			"rare": head += "　★レア"
+			"epic": head += "　★★エピック"
+			"legend": head += "　★★★レジェンド"
 	var kw: Array = action.get("keywords", [])
 	if kw.has("power"):
 		head += "　[i:kw_power]パワー"
@@ -531,6 +534,22 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 	if action.get("power_half_block", false) and action.has("power"):
 		var hb := int(floor(int(user.get("shield", 0)) / 2.0)) if not user.is_empty() else 0
 		parts[parts.size() - 1] = "[i:shield]自分のブロックの半分のダメージ（今のブロックなら%d）" % hb
+	# A（12 回目のナイトのカード）：盾打ち・審判の大盾・不死鳥の剣・剛腕・覇王の一撃・苦痛の糧
+	if action.get("power_block", false) and action.has("power"):
+		parts[parts.size() - 1] = "[i:shield]自分のブロックと同じダメージ（今のブロックなら%d。ブロックは減らない）" % (int(user.get("shield", 0)) if not user.is_empty() else 0)
+	if int(action.get("burn_all_pct", 0)) > 0 and action.has("power"):
+		parts[parts.size() - 1] = "[i:stat_atk]POW0%%ダメージ　[i:flame]自分の火傷を全部消し、消した数値1につきさらに+%s" % pow_txt(user, int(action.burn_all_pct))
+	var ipw = action.get("if_pow")
+	if ipw is Dictionary:
+		parts.append("[i:atk_buff]自分のPOWが%d以上ならさらに+%s" % [int(ipw.get("min", 0)), pow_txt(user, int(ipw.get("pow_pct", 0)))])
+	if int(action.get("per_pow_up_pct", 0)) > 0:
+		parts.append("[i:atk_buff]自分のPOWの増えた分1につきさらに+POW%d%%" % int(action.per_pow_up_pct))
+	var pss = action.get("per_self_status_pct")
+	if pss is Dictionary:
+		var snames: Array = []
+		for sid0 in pss.get("statuses", []):
+			snames.append(str(StatusEffectList.DATA.get(str(sid0), {}).get("name", "")))
+		parts.append("[i:flame]自分の%sの数値の合計1につきさらに+POW%d%%" % ["・".join(snames), int(pss.get("pow_pct", 0))])
 	var iss = action.get("if_self_status")
 	if iss is Dictionary:
 		parts.append("[i:flame]自分に%sがあればさらに+%s" % [str(StatusEffectList.DATA.get(str(iss.get("status", "")), {}).get("name", "")), _dmg_txt(user, iss)])
@@ -584,12 +603,19 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 			"set_next_action": parts.append("[i:hourglass]次に強攻撃")
 			"rank_swap": parts.append("[i:formation]自分の前衛・後衛を入れ替える")
 			"rank_to": parts.append("[i:formation]自分を%sに移動" % ("前衛" if int(e.get("eff_val", 1)) == 0 else "後衛"))
-			"cleanse": parts.append("[i:heart]%sデバフ（火傷・毒・攻撃力低下・防御力低下・回復不可・スタン）を解除" % who)
+			"cleanse": parts.append("[i:heart]%sデバフ（火傷・毒・POWダウン・SLDダウン・DEFダウン・回復不可・スタン）を解除" % who)
 			"repeat": parts.append("[i:skull]もう一度この攻撃が発動")
 			"shield_per_status": parts.append("[i:shield]自分の%s1につきブロック+%s（%sは減らない）" % [
 					str(StatusEffectList.DATA.get(str(e.get("status", "fire")), {}).get("name", "")), _shield_txt(user, e),
 					str(StatusEffectList.DATA.get(str(e.get("status", "fire")), {}).get("name", ""))])
 			"dmg_half_block": parts.append("[i:shield]自分のブロックの半分のダメージ")
+			# A（12 回目）：気炎・引きつけ・肩を貸す、ステータス増減（戦闘終了まで）
+			"shield_pow": parts.append("[i:shield]%sブロック+%s" % [who, pow_txt(user, int(e.get("pow_pct", 0)))])
+			"double_block": parts.append("[i:shield]自分のブロックを2倍にする")
+			"cleanse_one": parts.append("[i:heart]%sデバフを1つ解除" % who)
+			"add_stat":
+				var sn := str(ActionController.STAT_NAME.get(str(e.get("stat", "pow")), ""))
+				parts.append("[i:%s]%s%s%+d%s（戦闘中）" % ["atk_buff" if str(e.get("stat", "pow")) == "pow" else "st_def_up", who, sn, int(e.get("eff_val", 0)), "×X" if e.get("x", false) else ""])
 			"add_status":
 				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
 				var ic := "[i:%s]" % str(st.get("icon", "star"))
@@ -609,6 +635,9 @@ static func effect_text(user: Dictionary, action: Dictionary) -> String:
 					"declare": parts.append("%s宣言：次の自分のターン開始時までにHPが減らなければ、%dターン APプラス（ターン開始時AP+1）" % [ic, int(e.eff_val)])
 					"reblock": parts.append("%s次の自分のターン開始時にブロック+%d" % [ic, int(e.eff_val)])
 					"chant": parts.append("%s次に使うアタックカードのダメージ+%d" % [ic, int(e.eff_val)])  # D：詠唱の構え
+					# A（12 回目）：庇う（城壁・身代わり）、敵に付ける POW ダウン（鉄壁の反撃）
+					"cover": parts.append("%s%s%s庇う（もう1人の味方への敵の攻撃を代わりに受ける）" % [ic, who, dur])
+					"pow_down": parts.append("%s%sPOW-%d%s" % [ic, dur, int(e.eff_val), "（戦闘中）" if turns < 0 else ""])
 					_: parts.append("%s%s%s%s+%d" % [ic, who, dur, str(st.get("name", "")).replace("アップ", ""), int(e.eff_val)])
 	if burns(action, "exhaust") and not is_power:
 		parts.append("[i:kw_exhaust]使うと廃棄")
@@ -645,14 +674,19 @@ static func _power_body(user: Dictionary, pe: Dictionary) -> String:
 	if pe.has("status"):
 		var st: Dictionary = StatusEffectList.DATA.get(pe.get("status", ""), {})
 		parts.append(("味方全体の" if pe.get("all", false) else "") + "[i:%s]%s+%d" % [st.get("icon", "star"), str(st.get("name", "")).replace("アップ", ""), int(pe.get("eff_val", 0))])
-	if pe.has("once"):
+	if pe.has("once") and str(pe.get("kind", "")) != "barricade":
 		var t := effect_text(user, {"effects": pe.once})
 		parts.append(t if pe.get("exhaust_now", false) else "使った時 " + t)
 	if int(pe.get("aid_atk", 0)) > 0:
-		parts.append("[i:atk_buff]もう1人の味方の攻撃力+%d" % int(pe.aid_atk))
+		parts.append("[i:atk_buff]もう1人の味方のPOW+%d" % int(pe.aid_atk))
 	match str(pe.get("kind", "")):
-		"burn_atk": parts.append("[i:flame]自分の火傷の残りターン分、攻撃力+")
-		"last_stand": parts.append("[i:stat_atk]HPの残りX%で 攻撃力+Y・防御力+Y（Y＝(100−X)÷10 切り捨て）")
+		"burn_atk": parts.append("[i:flame]自分の火傷の残りターン分、POW+")
+		"last_stand": parts.append("[i:stat_atk]HPの残りX%で POW+Y・DEF+Y（Y＝(100−X)÷10 切り捨て）")
+		# A（12 回目）：バリケード・闘気の昂り・業火の構え・双剣の誓い
+		"barricade": parts.append("[i:st_barricade]ターン開始時にブロックが消えない")
+		"turn_stat": parts.append("[i:atk_buff]自分のターン開始時に%s+%d（積み重なる）" % [str(ActionController.STAT_NAME.get(str(pe.get("stat", "pow")), "")), int(pe.get("eff_val", 1))])
+		"on_tick_dmg": parts.append("[i:flame]自分が状態異常のダメージを受けるたび、ランダムな敵に同じダメージ×%d回（固定。1回ごとに敵を選び直す）" % int(pe.get("hits", 2)))
+		"on_ally_attack": parts.append("[i:shield]もう1人の味方がアタックカードを使うたび、味方全体にブロック+%d（固定）" % int(pe.get("shield", 0)))
 		"on_plain_card": parts.append("[i:tgt_enemy_all]札の無いカードが発動するたび、敵全体に%dダメージ　[i:kw_sokuou]即応：さらに+%d" % [int(pe.get("dmg", 0)), int(pe.get("sokuou_add", 0))])
 		"on_burn": parts.append("[i:tgt_enemy_all]消費・廃棄が発動するたび、敵全体に%dダメージ" % int(pe.get("dmg", 0)))
 		"on_attack_poison": parts.append("[i:st_poison]アタックカードを使うたび、当たった敵に毒%d" % int(pe.get("eff_val", 1)))

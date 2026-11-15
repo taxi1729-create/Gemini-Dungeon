@@ -492,14 +492,11 @@ func _choose_new(id: String) -> void:
 			_done("ぐっすり眠った（全員HP40%回復）")
 
 
-## ランダムなカード ID（tier＝common/rare/super_rare。owner・type を指定するとそれだけ。except は出さない）
+## ランダムなカード ID（owner・type を指定するとそれだけ。except は出さない）
+## 12 回目（C）：tier は「これ以上のレア度」（common＝全部・rare＝レア以上・super_rare／epic＝エピック以上）。
+## 出やすさはコモン:レア:エピック:レジェンド＝50:25:10:5、解放済みのカードだけ（ActionList.random_card_id）
 func _card_of(tier: String, owner: String, type: String = "", except: Array = []) -> String:
-	var src: Dictionary = ActionList.ALLY_CARDS[tier]
-	var keys: Array = src.keys().filter(func(k): return (owner == "" or str(src[k].owner) == owner) \
-			and (type == "" or str(src[k].type) == type) and not except.has(k))
-	if keys.is_empty():
-		keys = src.keys().filter(func(k): return owner == "" or str(src[k].owner) == owner)
-	return str(keys.pick_random())
+	return ActionList.random_card_id("" if tier == "common" else tier, owner, type, except)
 
 
 func _give_card(card_id: String, pre: String) -> void:

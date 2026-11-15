@@ -5,7 +5,7 @@ extends Node2D
 ## 右の列：デッキ一覧／ステータス／確定＝店を出る。長押しで説明、弾く（またはタップ）と購入確認 → 購入。
 ## 品ぞろえと売れた物は SaveData.screen["shop"] に残す（再読み込みしても同じ店のまま）。
 
-const PRICE := {"normal": 50, "rare": 80, "super_rare": 120}
+const PRICE := {"common": 50, "rare": 80, "epic": 120, "legend": 160}  # 12 回目（C）：レア度 4 段階（レジェンド 160 は仮）
 const BADGE_CARD_EXTRA := 40  # バッジ付きカードの値上げ
 const BADGE_CARD_RATE := 0.3  # 3 枚のうち 1 枚がバッジ付きになる確率
 const ITEM_PRICE := 30
@@ -114,7 +114,7 @@ static func _price(type: String, id: String, grade: int) -> int:
 	match type:
 		"card":
 			var c := ActionList.make_card(id)
-			return int(PRICE.get(c.get("rarity", "normal"), 50)) + (BADGE_CARD_EXTRA if c.has("badge") else 0)
+			return int(PRICE.get(ActionList.norm_rarity(c.get("rarity", "common")), 50)) + (BADGE_CARD_EXTRA if c.has("badge") else 0)
 		"relic": return int(RelicList.DATA[id].price)
 		"badge": return int(BadgeList.DATA[id].price)
 		"item": return ITEM_PRICE

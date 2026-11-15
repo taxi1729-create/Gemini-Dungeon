@@ -79,280 +79,372 @@ class_name ActionList
 const ALLY_CARDS = {
 	"common": {
 		# --- ナイト ---
-		"strike": {"no": "K001", "owner": "knight", "name": "ストライク", "type": "attack", "target": "front_pair", "art": "sword", "pow_pct": 40, "ap": 1},
-		"block": {"no": "K002", "owner": "knight", "name": "ブロック", "type": "skill", "target": "self", "art": "shield", "ap": 1,
-			"effects": [{"effect": "add_shield", "sld_pct": 140}]},
-		"sweep": {"no": "K003", "owner": "knight", "name": "薙ぎ払い", "type": "attack", "target": "front_row", "art": "sweep", "pow_pct": 30, "ap": 1},
-		"spirit": {"no": "K004", "owner": "knight", "name": "気合", "type": "skill", "target": "self", "art": "chevrons", "ap": 2, "keywords": ["yoyaku"],
-			"effects": [{"effect": "add_shield", "sld_pct": 200}],
-			"bonus_yoyaku": {"effects": [{"effect": "add_ap", "eff_val": 2, "to": "self"}]}},
-		"big_shield": {"no": "K005", "owner": "knight", "name": "ビッグシールド", "type": "skill", "target": "self", "art": "c_big_shield", "ap": 2,
+		"strike": {"no": "K001", "group": "汎用・味方支援", "rarity": "common", "pool": "none", "owner": "knight", "name": "ストライク", "type": "attack", "target": "front_pair", "art": "sword", "pow_pct": 100, "ap": 1},
+		"block": {"no": "K002", "group": "汎用・味方支援", "rarity": "common", "pool": "none", "owner": "knight", "name": "ブロック", "type": "skill", "target": "self", "art": "shield", "ap": 1,
+			"effects": [{"effect": "add_shield", "sld_pct": 100}]},
+		"sweep": {"no": "K003", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "薙ぎ払い", "type": "attack", "target": "front_row", "art": "sweep", "pow_pct": 120, "ap": 1},
+		"spirit": {"no": "K004", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "気合", "type": "skill", "target": "self", "art": "chevrons", "ap": 1, "keywords": ["yoyaku"],
+			"bonus_yoyaku": {"effects": [{"effect": "add_ap", "eff_val": 2, "to": "self"}]}},  # 12 回目：ブロックを外して AP1
+		"big_shield": {"no": "K005", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "ビッグシールド", "type": "skill", "target": "self", "art": "c_big_shield", "ap": 2,
 			"effects": [{"effect": "add_shield", "sld_pct": 280}]},
-		"hone": {"no": "K006", "owner": "knight", "name": "研ぎ澄ます", "type": "skill", "target": "self", "art": "c_hone", "ap": 1,
-			"effects": [{"effect": "add_shield", "sld_pct": 180}, {"effect": "draw", "eff_val": 1}]},  # 10 回目：素早さ+1 → 1 枚引く
-		"flash": {"no": "K007", "owner": "knight", "name": "一閃", "type": "attack", "target": "front_row", "art": "c_flash", "pow_pct": 20, "ap": 1, "keywords": ["sokuou"],
-			"bonus_sokuou": {"pow_pct": 25}},
-		"chop": {"no": "K008", "owner": "knight", "name": "切り刻み", "type": "attack", "target": "front_pair", "art": "c_chop", "pow_pct": 40, "ap": 2, "on_kill": "reuse_free", "keywords": ["gekiha"]},
-		"flurry": {"no": "K009", "owner": "knight", "name": "乱撃", "type": "attack", "target": "front_pair", "art": "c_flurry", "pow_pct": 25, "hits": 2, "ap": 1},
-		"rampart": {"no": "K010", "owner": "knight", "name": "城壁", "type": "skill", "target": "self", "art": "c_rampart", "ap": 1, "keywords": ["consume"],
-			"effects": [{"effect": "add_shield", "sld_pct": 320}]},
-		"parry": {"no": "K011", "owner": "knight", "name": "受け流し", "type": "skill", "target": "front_row", "art": "c_parry", "ap": 1,
-			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}, {"effect": "add_shield", "sld_pct": 160, "to": "self"},
-				{"effect": "draw", "eff_val": 1, "to": "self"}]},
-		"taunt": {"no": "K012", "owner": "knight", "name": "挑発", "type": "skill", "target": "front_enemy_group", "art": "c_taunt", "ap": 0,
-			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}]},
+		"hone": {"no": "K006", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "研ぎ澄ます", "type": "skill", "target": "self", "art": "c_hone", "ap": 1,
+			"effects": [{"effect": "add_shield", "sld_pct": 150}, {"effect": "draw", "eff_val": 1}]},  # 10 回目：素早さ+1 → 1 枚引く
+		"flash": {"no": "K007", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "一閃", "type": "attack", "target": "front_row", "art": "c_flash", "pow_pct": 70, "ap": 1, "keywords": ["sokuou"],
+			"bonus_sokuou": {"pow_pct": 80}},
+		"chop": {"no": "K008", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "切り刻み", "type": "attack", "target": "front_pair", "art": "c_chop", "pow_pct": 140, "ap": 2, "on_kill": "reuse_free", "keywords": ["gekiha"]},
+		"flurry": {"no": "K009", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "乱撃", "type": "attack", "target": "front_pair", "art": "c_flurry", "pow_pct": 75, "hits": 2, "ap": 1},
+		"rampart": {"no": "K010", "group": "消費・廃棄・必殺技", "rarity": "common", "pool": "init", "owner": "knight", "name": "城壁", "type": "skill", "target": "self", "art": "c_rampart", "ap": 1, "keywords": ["consume"],
+			"effects": [{"effect": "add_shield", "sld_pct": 200}, {"effect": "add_status", "status": "cover", "eff_val": 1, "turns": 1, "to": "self"}]},  # 12 回目：庇う（仕組みは B）
+		"parry": {"no": "K011", "group": "挑発・ブロック攻撃", "rarity": "common", "pool": "init", "owner": "knight", "name": "受け流し", "type": "skill", "target": "front_row", "art": "c_parry", "ap": 1,
+			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}, {"effect": "add_shield", "sld_pct": 160, "to": "self"}]},
+		"taunt": {"no": "K012", "group": "挑発・ブロック攻撃", "rarity": "common", "pool": "init", "owner": "knight", "name": "挑発", "type": "skill", "target": "front_enemy_group", "art": "c_taunt", "ap": 0,
+			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}, {"effect": "draw", "eff_val": 1, "to": "self"}]},
 		# --- ウィッチ ---
-		"missile": {"no": "W001", "owner": "witch", "name": "マジックミサイル", "type": "attack", "target": "front_pair", "art": "star", "pow_pct": 35, "ap": 1},
-		"firebolt": {"no": "W002", "owner": "witch", "name": "ファイアボルト", "type": "attack", "target": "enemy_all", "art": "flame", "pow_pct": 30, "ap": 2,
+		# 12 回目（D）：ウィッチのカードは設計表（design12/cards.csv）の通り。rarity＝4 段階、pool＝init / unlock / none
+		"missile": {"no": "W001", "rarity": "common", "pool": "none", "group": "汎用・味方支援", "owner": "witch", "name": "マジックミサイル", "type": "attack", "target": "front_pair", "art": "star", "pow_pct": 100, "ap": 1},
+		"firebolt": {"no": "W002", "rarity": "common", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "ファイアボルト", "type": "attack", "target": "enemy_all", "art": "flame", "pow_pct": 70, "ap": 2,
 			"effects": [{"effect": "add_status", "status": "fire", "eff_val": 3}]},
-		"sparks": {"no": "W003", "owner": "witch", "name": "魔法準備", "type": "skill", "target": "self", "art": "formation", "ap": 1, "keywords": ["yoyaku"],
+		"sparks": {"no": "W003", "rarity": "common", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "魔法準備", "type": "skill", "target": "self", "art": "formation", "ap": 1, "keywords": ["yoyaku"],
 			"effects": [{"effect": "rank_to", "eff_val": 1}],
 			"bonus_yoyaku": {"effects": [{"effect": "add_ap", "eff_val": 1, "to": "self"}]}},
-		"barrier": {"no": "W004", "owner": "witch", "name": "マジックバリア", "type": "skill", "target": "self", "art": "shield", "ap": 1,
-			"effects": [{"effect": "add_shield", "sld_pct": 140}]},
-		"chant": {"no": "W005", "owner": "witch", "name": "高速詠唱", "type": "skill", "target": "self", "art": "chevrons", "ap": 0, "keywords": ["tenshin"],
+		"barrier": {"no": "W004", "rarity": "common", "pool": "none", "group": "汎用・味方支援", "owner": "witch", "name": "マジックバリア", "type": "skill", "target": "self", "art": "shield", "ap": 1,
+			"effects": [{"effect": "add_shield", "sld_pct": 100}]},
+		"chant": {"no": "W005", "rarity": "common", "pool": "init", "group": "陣形・即応・転身", "owner": "witch", "name": "高速詠唱", "type": "skill", "target": "self", "art": "chevrons", "ap": 0, "keywords": ["tenshin"],
 			"effects": [{"effect": "add_shield", "sld_pct": 60}],
 			"bonus_tenshin": {"effects": [{"effect": "add_ap", "eff_val": 1, "to": "self"}]}},
-		"swap_card": {"no": "W006", "owner": "witch", "name": "スワップ", "type": "skill", "target": "self", "art": "c_swap", "ap": 0,
+		"swap_card": {"no": "W006", "rarity": "common", "pool": "init", "group": "陣形・即応・転身", "owner": "witch", "name": "スワップ", "type": "skill", "target": "self", "art": "c_swap", "ap": 0,
 			"effects": [{"effect": "swap"}]},
-		"draw_magic": {"no": "W007", "owner": "witch", "name": "ドローマジック", "type": "attack", "target": "front_pair", "art": "c_draw_magic", "pow_pct": 25, "ap": 1,
+		"draw_magic": {"no": "W007", "rarity": "common", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "ドローマジック", "type": "attack", "target": "front_pair", "art": "c_draw_magic", "pow_pct": 125, "ap": 1,
 			"effects": [{"effect": "draw", "eff_val": 1, "to": "self"}]},
-		"hit_away": {"no": "W008", "owner": "witch", "name": "ヒットアンドアウェイ", "type": "attack", "target": "front_pair", "art": "c_hit_away", "pow_pct": 40, "ap": 1,
+		"hit_away": {"no": "W008", "rarity": "common", "pool": "init", "group": "陣形・即応・転身", "owner": "witch", "name": "ヒットアンドアウェイ", "type": "attack", "target": "front_pair", "art": "c_hit_away", "pow_pct": 140, "ap": 1,
 			"effects": [{"effect": "swap", "to": "self"}]},
-		"ap_pass": {"no": "W009", "owner": "witch", "name": "APパサー", "type": "skill", "target": "other_ally", "art": "c_ap_pass", "ap": 1,
+		"ap_pass": {"no": "W009", "rarity": "common", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "APパサー", "type": "skill", "target": "other_ally", "art": "c_ap_pass", "ap": 1,
 			"effects": [{"effect": "add_ap", "eff_val": 1}]},
-		"golem": {"no": "W010", "owner": "witch", "name": "ゴーレム", "type": "skill", "target": "self", "art": "c_golem", "ap": 1, "keywords": ["consume"],
-			"effects": [{"effect": "add_shield", "sld_pct": 220}]},
-		"reblock": {"no": "W011", "owner": "witch", "name": "リブロック", "type": "skill", "target": "self", "art": "c_reblock", "ap": 1, "keywords": ["yoyaku"],
+		"golem": {"no": "W010", "rarity": "common", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "ゴーレム", "type": "skill", "target": "self", "art": "c_golem", "ap": 1, "keywords": ["consume"],
+			"effects": [{"effect": "add_shield", "sld_pct": 220}, {"effect": "add_stat", "stat": "sld", "eff_val": 3, "to": "self"}]},  # ブロックの後に SLD+3（戦闘中）
+		"reblock": {"no": "W011", "rarity": "common", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "リブロック", "type": "skill", "target": "self", "art": "c_reblock", "ap": 1, "keywords": ["yoyaku"],
 			"effects": [{"effect": "add_shield", "sld_pct": 80}],
 			"bonus_yoyaku": {"effects": [{"effect": "add_shield", "sld_pct": 80, "to": "self"}]}},
-		"drain": {"no": "W012", "owner": "witch", "name": "ドレイン", "type": "attack", "target": "front_enemy_group", "art": "c_drain", "pow_pct": 30, "ap": 1, "kill_ap": 1, "keywords": ["gekiha"],
-			"effects": [{"effect": "add_status", "status": "poison", "eff_val": 1}]},
-		"absorb": {"no": "W013", "owner": "witch", "name": "アブソーブ", "type": "skill", "target": "front_enemy_group", "art": "c_absorb", "ap": 1,
-			"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 2, "turns": 1}, {"effect": "add_status", "status": "atk_buff", "eff_val": 1, "to": "self"}]},
-		"poison_gas": {"no": "W014", "owner": "witch", "name": "毒ガス", "type": "skill", "target": "front_enemy_group", "art": "c_poison_gas", "ap": 1,
+		"drain": {"no": "W012", "rarity": "common", "pool": "init", "group": "毒・状態異常", "owner": "witch", "name": "ドレイン", "type": "attack", "target": "front_enemy_group", "art": "c_drain", "pow_pct": 130, "ap": 1, "keywords": ["gekiha"],
+			"effects": [{"effect": "add_status", "status": "poison", "eff_val": 1}],
+			"bonus_gekiha": {"effects": [{"effect": "add_ap", "eff_val": 1, "to": "self"}]}},  # 12 回目：倒すたび AP+1 → 撃破：AP+1（1 回）
+		"absorb": {"no": "W013", "rarity": "common", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "アブソーブ", "type": "skill", "target": "front_enemy_group", "art": "c_absorb", "ap": 1,
+			"effects": [{"effect": "add_status", "status": "pow_down", "eff_val": 2, "turns": 1}, {"effect": "add_stat", "stat": "pow", "eff_val": 1, "to": "self"}]},
+		"poison_gas": {"no": "W014", "rarity": "common", "pool": "init", "group": "毒・状態異常", "owner": "witch", "name": "毒ガス", "type": "skill", "target": "front_enemy_group", "art": "c_poison_gas", "ap": 1,
 			"effects": [{"effect": "add_status", "status": "poison", "eff_val": 4, "turns": 4}]},
 		# --- 8 回目の新カード：ナイト ---
-		"k_rand_thrust": {"no": "K013", "owner": "knight", "name": "乱れ突き", "type": "attack", "target": "random_enemy", "art": "c_flurry", "pow_pct": 20, "hits": 3, "reroll": true, "ap": 1,
+		"k_rand_thrust": {"no": "K013", "group": "自らの状態異常", "rarity": "common", "pool": "init", "owner": "knight", "name": "乱れ突き", "type": "attack", "target": "random_enemy", "art": "c_flurry", "pow_pct": 120, "hits": 3, "reroll": true, "ap": 1,
 			"effects": [{"effect": "add_status", "status": "fire", "eff_val": 1, "to": "self"}]},
-		"k_rear_raid": {"no": "K014", "owner": "knight", "name": "後方強襲", "type": "attack", "target": "back_row", "art": "dagger", "pow_pct": 40, "ap": 0},
-		"k_sweep_leg": {"no": "K015", "owner": "knight", "name": "足払い", "type": "attack", "target": "front_enemy_group", "art": "def_debuff", "pow_pct": 25, "ap": 0,
+		"k_rear_raid": {"no": "K014", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "後方強襲", "type": "attack", "target": "back_row", "art": "dagger", "pow_pct": 140, "ap": 0},
+		"k_sweep_leg": {"no": "K015", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "足払い", "type": "attack", "target": "front_enemy_group", "art": "def_debuff", "pow_pct": 150, "ap": 0,
 			"keywords": ["saigo"], "saigo_only": true,
-			"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 1}]},
-		"k_escort": {"no": "K016", "owner": "knight", "name": "護衛の構え", "type": "skill", "target": "other_ally", "art": "shield_sword", "ap": 1, "keywords": ["jinkei"],
+			"effects": [{"effect": "add_stat", "stat": "def", "eff_val": -1}]},
+		"k_escort": {"no": "K016", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "護衛の構え", "type": "skill", "target": "other_ally", "art": "shield_sword", "ap": 1, "keywords": ["jinkei"],
 			"bonus_left": {"effects": [{"effect": "add_shield", "sld_pct": 160}]},
 			"bonus_right": {"effects": [{"effect": "add_shield", "sld_pct": 80}, {"effect": "draw", "eff_val": 1}]}},  # 10 回目：素早さ+2 → 1 枚引く
-		"k_step_in": {"no": "K017", "owner": "knight", "name": "踏み込み", "type": "skill", "target": "self", "art": "formation", "ap": 0, "keywords": ["tenshin"],
+		"k_step_in": {"no": "K017", "group": "POW強化", "rarity": "common", "pool": "init", "owner": "knight", "name": "踏み込み", "type": "skill", "target": "self", "art": "formation", "ap": 0, "keywords": ["tenshin"],
 			"effects": [{"effect": "rank_swap"}],
-			"bonus": {"effects": [{"effect": "add_status", "status": "atk_buff", "eff_val": 1}, {"effect": "add_status", "status": "def_buff", "eff_val": 1}]}},
-		"k_reset": {"no": "K018", "owner": "knight", "name": "構え直し", "type": "skill", "target": "self", "art": "st_reblock", "ap": 0, "keywords": ["yoyaku"],
+			"bonus": {"effects": [{"effect": "add_stat", "stat": "pow", "eff_val": 1, "to": "self"}, {"effect": "add_stat", "stat": "def", "eff_val": 1, "to": "self"}]}},  # 12 回目：POW+1・DEF+1（戦闘中）
+		"k_reset": {"no": "K018", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "構え直し", "type": "skill", "target": "self", "art": "st_reblock", "ap": 0, "keywords": ["yoyaku"],
 			"bonus_yoyaku": {"effects": [{"effect": "add_shield", "sld_pct": 200}]}},
-		"k_iron_counter": {"no": "K019", "owner": "knight", "name": "鉄壁の反撃", "type": "skill", "target": "self", "art": "c_rampart", "ap": 3, "keywords": ["hangeki"],
+		"k_iron_counter": {"no": "K019", "group": "挑発・ブロック攻撃", "rarity": "rare", "pool": "init", "owner": "knight", "name": "鉄壁の反撃", "type": "skill", "target": "self", "art": "c_rampart", "ap": 3, "keywords": ["hangeki"],
 			"effects": [{"effect": "add_shield", "sld_pct": 320}],
-			"bonus_hangeki": {"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 3, "turns": 1}]}},
-		"k_all_guard": {"no": "K020", "owner": "knight", "name": "総員防御", "type": "skill", "target": "ally_all", "art": "c_big_shield", "ap": 1,
+			"bonus_hangeki": {"effects": [{"effect": "add_status", "status": "pow_down", "eff_val": 3, "turns": 1}]}},
+		"k_all_guard": {"no": "K020", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "総員防御", "type": "skill", "target": "ally_all", "art": "c_big_shield", "ap": 1,
 			"keywords": ["saigo"], "saigo_only": true,
 			"effects": [{"effect": "add_shield", "sld_pct": 200}]},
 		# --- 8 回目の新カード：ウィッチ ---
-		"w_curse_mist": {"no": "W015", "owner": "witch", "name": "呪いの霧", "type": "attack", "target": "front_enemy_group", "art": "drop", "pow_pct": 30, "ap": 1,
+		"w_curse_mist": {"no": "W015", "rarity": "common", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "呪いの霧", "type": "attack", "target": "front_enemy_group", "art": "drop", "pow_pct": 130, "ap": 1,
 			"effects": [{"effect": "add_status", "status": "no_heal", "eff_val": 1, "turns": 1}]},
-		"w_starfall": {"no": "W016", "owner": "witch", "name": "星降り", "type": "attack", "target": "enemy_all", "art": "star", "pow_pct": 25, "ap": 1, "keywords": ["jinkei"],
-			"bonus_left": {"text": "敵全体にPOW25%ダメージ"},
-			"bonus_right": {"pow_pct": 15, "target": "front_row", "text": "前衛全体にPOW40%ダメージ"}},
-		"w_twin_chant": {"no": "W017", "owner": "witch", "name": "二連詠唱", "type": "attack", "target": "front_enemy_group", "art": "c_double", "pow_pct": 30, "ap": 1,
+		"w_starfall": {"no": "W016", "rarity": "rare", "pool": "init", "group": "陣形・即応・転身", "owner": "witch", "name": "星降り", "type": "attack", "target": "enemy_all", "art": "star", "pow_pct": 125, "ap": 1, "keywords": ["jinkei"],
+			"bonus_left": {"text": "敵全体にPOW125%ダメージ"},
+			"bonus_right": {"pow_pct": 15, "target": "front_row", "text": "前衛全体にPOW140%ダメージ"}},
+		"w_twin_chant": {"no": "W017", "rarity": "common", "pool": "init", "group": "予約・AP・大技", "owner": "witch", "name": "二連詠唱", "type": "attack", "target": "front_enemy_group", "art": "c_double", "pow_pct": 130, "ap": 1,
 			"ap_hits": {"min": 2, "hits": 2}},
-		"w_hex": {"no": "W018", "owner": "witch", "name": "衰弱の呪い", "type": "skill", "target": "enemy_all", "art": "c_atk_down", "ap": 3,
-			"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 4, "turns": 1}, {"effect": "add_status", "status": "def_down", "eff_val": 3, "turns": 1},
+		"w_hex": {"no": "W018", "rarity": "common", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "衰弱の呪い", "type": "skill", "target": "enemy_all", "art": "c_atk_down", "ap": 3,
+			"effects": [{"effect": "add_status", "status": "pow_down", "eff_val": 4, "turns": 1}, {"effect": "add_status", "status": "def_down", "eff_val": 3, "turns": 1},
 				{"effect": "add_status", "status": "no_heal", "eff_val": 1, "turns": 1}]},
-		"w_light_lance": {"no": "W019", "owner": "witch", "name": "光の槍", "type": "attack", "target": "front_pair", "art": "target_one", "pow_pct": 140, "ap": 4},
-		"w_flame_ward": {"no": "W020", "owner": "witch", "name": "炎の盾", "type": "skill", "target": "other_ally", "art": "c_fire_guard", "ap": 1,
+		"w_light_lance": {"no": "W019", "rarity": "common", "pool": "init", "group": "予約・AP・大技", "owner": "witch", "name": "光の槍", "type": "attack", "target": "front_pair", "art": "target_one", "pow_pct": 540, "ap": 4},
+		"w_flame_ward": {"no": "W020", "rarity": "common", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "炎の盾", "type": "skill", "target": "other_ally", "art": "c_fire_guard", "ap": 1,
 			"effects": [{"effect": "add_shield", "sld_pct": 220}, {"effect": "add_status", "status": "fire", "eff_val": 1}]},
 		# --- 10 回目の新カード（D）：ナイト K051〜K060。数値は仮 ---
-		"k_self_burn": {"no": "K051", "owner": "knight", "name": "焼身の構え", "type": "skill", "target": "self", "art": "flame", "ap": 1,
-			"effects": [{"effect": "add_status", "status": "fire", "eff_val": 2, "to": "self"}, {"effect": "add_status", "status": "atk_buff", "eff_val": 2, "turns": 1, "to": "self"}]},
-		"k_flame_blade": {"no": "K052", "owner": "knight", "name": "炎刃", "type": "attack", "target": "front_pair", "art": "sword", "pow_pct": 30, "ap": 1,
-			"if_self_status": {"status": "fire", "pow_pct": 30}},
-		"k_hot_pulse": {"no": "K053", "owner": "knight", "name": "熱き鼓動", "type": "skill", "target": "self", "art": "heart", "ap": 0,
+		"k_self_burn": {"no": "K051", "group": "自らの状態異常", "rarity": "common", "pool": "init", "owner": "knight", "name": "焼身の構え", "type": "skill", "target": "self", "art": "flame", "ap": 1,
+			"effects": [{"effect": "add_status", "status": "fire", "eff_val": 2, "to": "self"}, {"effect": "add_stat", "stat": "pow", "eff_val": 2, "to": "self"},
+				{"effect": "draw", "eff_val": 1, "to": "self"}]},  # 12 回目：POW+2（戦闘中）・1 枚引く
+		"k_flame_blade": {"no": "K052", "group": "自らの状態異常", "rarity": "common", "pool": "init", "owner": "knight", "name": "炎刃", "type": "attack", "target": "front_pair", "art": "sword", "pow_pct": 130, "ap": 1,
+			"if_self_status": {"status": "fire", "pow_pct": 230}},
+		"k_hot_pulse": {"no": "K053", "group": "自らの状態異常", "rarity": "common", "pool": "init", "owner": "knight", "name": "熱き鼓動", "type": "skill", "target": "self", "art": "heart", "ap": 0,
 			"effects": [{"effect": "shield_per_status", "status": "fire", "sld_pct": 60}]},
-		"k_shield_bash": {"no": "K054", "owner": "knight", "name": "盾打ち", "type": "attack", "target": "front_pair", "art": "shield_sword", "power": 0, "ap": 1,
-			"power_half_block": true},
-		"k_lure": {"no": "K055", "owner": "knight", "name": "引きつけ", "type": "skill", "target": "front_row", "art": "c_taunt", "ap": 1,
-			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}, {"effect": "add_shield", "sld_pct": 120, "to": "self"}]},
-		"k_shield_return": {"no": "K056", "owner": "knight", "name": "盾の返し", "type": "skill", "target": "self", "art": "shield", "ap": 1, "keywords": ["hangeki"],
+		"k_shield_bash": {"no": "K054", "group": "挑発・ブロック攻撃", "rarity": "common", "pool": "init", "owner": "knight", "name": "盾打ち", "type": "attack", "target": "front_pair", "art": "shield_sword", "power": 0, "ap": 1,
+			"power_block": true},  # 12 回目：自分のブロックと同じダメージ（ブロックは残る）
+		"k_lure": {"no": "K055", "group": "挑発・ブロック攻撃", "rarity": "common", "pool": "init", "owner": "knight", "name": "引きつけ", "type": "skill", "target": "self", "art": "c_taunt", "ap": 1, "keywords": ["exhaust", "horyu"],
+			"effects": [{"effect": "double_block", "to": "self"}]},  # 12 回目：今ある自分のブロックを 2 倍にするだけ（挑発なし）
+		"k_shield_return": {"no": "K056", "group": "挑発・ブロック攻撃", "rarity": "rare", "pool": "init", "owner": "knight", "name": "盾の返し", "type": "skill", "target": "self", "art": "shield", "ap": 1, "keywords": ["hangeki"],
 			"effects": [{"effect": "add_shield", "sld_pct": 100}],
 			"bonus_hangeki": {"effects": [{"effect": "dmg_half_block"}]}},
-		"k_immovable": {"no": "K057", "owner": "knight", "name": "不動", "type": "skill", "target": "self", "art": "c_big_shield", "ap": 2, "keywords": ["saigo"],
-			"effects": [{"effect": "add_shield", "sld_pct": 240}],
-			"bonus_saigo": {"effects": [{"effect": "add_shield", "sld_pct": 160}]}},
-		"k_pawn": {"no": "K058", "owner": "knight", "name": "捨て石", "type": "skill", "target": "self", "art": "c_rampart", "ap": 0, "keywords": ["consume"],
+		"k_immovable": {"no": "K057", "group": "汎用・味方支援", "rarity": "common", "pool": "init", "owner": "knight", "name": "不動", "type": "skill", "target": "self", "art": "c_big_shield", "ap": 1, "keywords": ["highcost"],
+			"effects": [{"effect": "add_shield", "sld_pct": 150}]},  # 12 回目：最後 → ハイコスト
+		"k_pawn": {"no": "K058", "group": "消費・廃棄・必殺技", "rarity": "common", "pool": "init", "owner": "knight", "name": "捨て石", "type": "skill", "target": "self", "art": "c_rampart", "ap": 0, "keywords": ["consume"],
 			"effects": [{"effect": "add_shield", "sld_pct": 160}]},
-		"k_ash_slash": {"no": "K059", "owner": "knight", "name": "灰燼斬", "type": "attack", "target": "front_enemy_group", "art": "sweep", "pow_pct": 30, "ap": 1,
+		"k_ash_slash": {"no": "K059", "group": "消費・廃棄・必殺技", "rarity": "common", "pool": "init", "owner": "knight", "name": "灰燼斬", "type": "attack", "target": "front_enemy_group", "art": "sweep", "pow_pct": 130, "ap": 1,
 			"per_exhaust_pct": 10},
-		"k_charge_aura": {"no": "K060", "owner": "knight", "name": "闘気溜め", "type": "skill", "target": "self", "art": "chevrons", "ap": 1, "keywords": ["yoyaku"],
+		# K060 闘気溜め：csv は食事の札（食材の仕組みは次回）なので、札と動きは今のまま
+		"k_charge_aura": {"no": "K060", "group": "消費・廃棄・必殺技", "rarity": "common", "pool": "init", "owner": "knight", "name": "闘気溜め", "type": "skill", "target": "self", "art": "chevrons", "ap": 1, "keywords": ["yoyaku"],
 			"bonus_yoyaku": {"target": "self", "effects": [{"effect": "add_gauge", "eff_val": 15, "to": "self"}]}},
+		# --- 12 回目の新カード：ナイト（コモン）。ステータス増減 add_stat・庇う cover の仕組みは B ---
+		"k_gather": {"no": "K081", "group": "POW強化", "rarity": "common", "pool": "unlock", "owner": "knight", "name": "力溜め", "type": "skill", "target": "self", "art": "atk_buff", "ap": 1,
+			"effects": [{"effect": "add_stat", "stat": "pow", "eff_val": 3, "to": "self"}]},
+		"k_brace_slash": {"no": "K082", "group": "POW強化", "rarity": "common", "pool": "unlock", "owner": "knight", "name": "踏ん張り斬り", "type": "attack", "target": "front_pair", "art": "sword", "pow_pct": 135, "ap": 1,
+			"effects": [{"effect": "add_stat", "stat": "pow", "eff_val": 1, "to": "self"}]},
+		"k_fighting_aura": {"no": "K083", "group": "POW強化", "rarity": "common", "pool": "unlock", "owner": "knight", "name": "気炎", "type": "skill", "target": "self", "art": "flame", "ap": 0, "keywords": ["jinkei"],
+			"bonus_left": {"effects": [{"effect": "shield_pow", "pow_pct": 30, "to": "self"}]},
+			"bonus_right": {"effects": [{"effect": "add_stat", "stat": "sld", "eff_val": 4, "to": "self"}]}},
+		"k_lend_shoulder": {"no": "K092", "group": "汎用・味方支援", "rarity": "common", "pool": "unlock", "owner": "knight", "name": "肩を貸す", "type": "skill", "target": "other_ally", "art": "heart", "ap": 1,
+			"effects": [{"effect": "add_shield", "sld_pct": 120}, {"effect": "cleanse_one"}]},
 		# --- 10 回目の新カード（D）：ウィッチ W051〜W060。数値は仮 ---
-		"w_venom_mist": {"no": "W051", "owner": "witch", "name": "毒霧", "type": "skill", "target": "front_row", "art": "c_poison_gas", "ap": 1,
-			"effects": [{"effect": "add_status", "status": "poison", "eff_val": 2, "turns": 2}]},
-		"w_erode_needle": {"no": "W052", "owner": "witch", "name": "侵食の針", "type": "attack", "target": "front_pair", "art": "dagger", "pow_pct": 20, "ap": 1,
-			"vs_status": {"status": "poison", "pow_pct": 20}},
-		"w_bind": {"no": "W053", "owner": "witch", "name": "呪縛", "type": "skill", "target": "random_enemy", "art": "c_atk_down", "ap": 1,
-			"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 2, "turns": 1}, {"effect": "add_status", "status": "def_down", "eff_val": 2, "turns": 1}]},
-		"w_mana_store": {"no": "W054", "owner": "witch", "name": "魔力の蓄え", "type": "skill", "target": "self", "art": "st_ap_next", "ap": 1, "keywords": ["yoyaku"],
+		"w_venom_mist": {"no": "W051", "rarity": "common", "pool": "init", "group": "毒・状態異常", "owner": "witch", "name": "毒霧", "type": "skill", "target": "front_row", "art": "c_poison_gas", "ap": 1,
+			"effects": [{"effect": "add_status", "status": "poison", "eff_val": 2, "turns": 2}, {"effect": "add_shield", "sld_pct": 100, "to": "self"}]},
+		"w_erode_needle": {"no": "W052", "rarity": "common", "pool": "init", "group": "毒・状態異常", "owner": "witch", "name": "侵食の針", "type": "attack", "target": "front_pair", "art": "dagger", "pow_pct": 120, "ap": 1,
+			"vs_status": {"status": "poison", "pow_pct": 220}},
+		"w_bind": {"no": "W053", "rarity": "rare", "pool": "init", "group": "毒・状態異常", "owner": "witch", "name": "呪縛", "type": "skill", "target": "random_enemy", "art": "c_atk_down", "ap": 1,
+			"effects": [{"effect": "add_status", "status": "pow_down", "eff_val": 2, "turns": 1}, {"effect": "add_status", "status": "def_down", "eff_val": 2, "turns": 1}]},
+		"w_mana_store": {"no": "W054", "rarity": "common", "pool": "init", "group": "予約・AP・大技", "owner": "witch", "name": "魔力の蓄え", "type": "skill", "target": "self", "art": "st_ap_next", "ap": 1, "keywords": ["yoyaku"],
 			"bonus_yoyaku": {"effects": [{"effect": "add_ap", "eff_val": 2, "to": "self"}]}},
-		"w_chant_stance": {"no": "W055", "owner": "witch", "name": "詠唱の構え", "type": "skill", "target": "self", "art": "star", "ap": 0, "keywords": ["yoyaku"],
+		"w_chant_stance": {"no": "W055", "rarity": "common", "pool": "init", "group": "予約・AP・大技", "owner": "witch", "name": "詠唱の構え", "type": "skill", "target": "self", "art": "star", "ap": 0, "keywords": ["yoyaku"],
 			"bonus_yoyaku": {"effects": [{"effect": "add_status", "status": "chant", "eff_val": 6, "to": "self"}]}},
-		"w_meditate": {"no": "W056", "owner": "witch", "name": "黙想", "type": "skill", "target": "self", "art": "c_meditate", "ap": 0,
-			"keywords": ["saigo"], "saigo_only": true,
-			"bonus_saigo": {"effects": [{"effect": "add_ap", "eff_val": 2, "to": "self"}]}},
-		"w_wind_dance": {"no": "W057", "owner": "witch", "name": "風の舞", "type": "skill", "target": "self", "art": "formation", "ap": 1, "keywords": ["sokuou"],
+		"w_meditate": {"no": "W056", "rarity": "common", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "黙想", "type": "skill", "target": "self", "art": "c_meditate", "ap": 0,
+			"keywords": ["highcost"],
+			"effects": [{"effect": "add_ap", "eff_val": 2}]},  # 12 回目：最後 → ハイコスト（制限なし）
+		"w_wind_dance": {"no": "W057", "rarity": "common", "pool": "init", "group": "陣形・即応・転身", "owner": "witch", "name": "風の舞", "type": "skill", "target": "self", "art": "formation", "ap": 1, "keywords": ["sokuou"],
 			"effects": [{"effect": "rank_swap"}],
 			"bonus_sokuou": {"effects": [{"effect": "add_shield", "sld_pct": 120, "to": "self"}]}},
-		"w_formation_fire": {"no": "W058", "owner": "witch", "name": "陣の火球", "type": "attack", "target": "front_enemy_group", "art": "flame", "pow_pct": 25, "ap": 1, "keywords": ["jinkei"],
-			"bonus_left": {"text": "目の前の敵グループにPOW25%ダメージ"},
-			"bonus_right": {"pow_pct": 10, "target": "back_row", "text": "後衛全体にPOW35%ダメージ"}},
-		"w_turn_arrow": {"no": "W059", "owner": "witch", "name": "転身の矢", "type": "attack", "target": "random_enemy", "art": "target_one", "pow_pct": 30, "ap": 1, "reroll": true,
+		"w_formation_fire": {"no": "W058", "rarity": "rare", "pool": "init", "group": "陣形・即応・転身", "owner": "witch", "name": "陣の火球", "type": "attack", "target": "front_enemy_group", "art": "flame", "pow_pct": 125, "ap": 1, "keywords": ["jinkei"],
+			"bonus_left": {"text": "目の前の敵グループにPOW125%ダメージ"},
+			"bonus_right": {"pow_pct": 110, "target": "back_row", "text": "後衛全体にPOW235%ダメージ"}},
+		"w_turn_arrow": {"no": "W059", "rarity": "epic", "pool": "init", "group": "陣形・即応・転身", "owner": "witch", "name": "転身の矢", "type": "attack", "target": "random_enemy", "art": "target_one", "pow_pct": 130, "ap": 1, "reroll": true,
 			"keywords": ["tenshin"],
 			"bonus_tenshin": {"hits": 2, "text": "もう1回（ランダムな敵を選び直す）"}},
-		"w_signal": {"no": "W060", "owner": "witch", "name": "合図", "type": "skill", "target": "other_ally", "art": "c_ap_pass", "ap": 0, "keywords": ["sokuou"],
+		"w_signal": {"no": "W060", "rarity": "rare", "pool": "init", "group": "陣形・即応・転身", "owner": "witch", "name": "合図", "type": "skill", "target": "other_ally", "art": "c_ap_pass", "ap": 0, "keywords": ["sokuou"],
 			"effects": [{"effect": "add_shield", "sld_pct": 60}],
 			"bonus_sokuou": {"effects": [{"effect": "add_ap", "eff_val": 1}]}},
+		# --- 12 回目の新カード（D）：ウィッチ（コモン）。add_stat・pow_down の仕組みは B ---
+		"w_mana_shield": {"no": "W091", "rarity": "common", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "魔力の盾", "type": "skill", "target": "other_ally", "art": "shield", "ap": 1,
+			"effects": [{"effect": "add_shield", "sld_pct": 120}, {"effect": "add_stat", "stat": "sld", "eff_val": 2}]},
+		"w_link_magic": {"no": "W092", "rarity": "common", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "連携魔法", "type": "attack", "target": "front_pair", "art": "c_double", "pow_pct": 125, "ap": 1,
+			"keywords": ["tenshin"],
+			"bonus_tenshin": {"pow_pct": 125, "effects": [{"effect": "add_stat", "stat": "pow", "eff_val": -1}]}},  # 転身：さらに POW125%、当たった敵に POW−1（敵のダメージ −1。戦闘中）
+		"w_first_aid": {"no": "W093", "rarity": "common", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "応急手当", "type": "skill", "target": "other_ally", "art": "heart", "ap": 0, "keywords": ["kihatsu"],
+			"effects": [{"effect": "add_shield", "sld_pct": 100}]},
 	},
 	"rare": {
 		# --- ナイト ---
-		"heavy": {"no": "K021", "owner": "knight", "name": "重撃", "type": "attack", "target": "front_pair", "art": "sword", "pow_pct": 80, "ap": 2},
-		"guard_all": {"no": "K022", "owner": "knight", "name": "守護の陣", "type": "skill", "target": "ally_all", "art": "shield", "ap": 2,
+		"heavy": {"no": "K021", "group": "汎用・味方支援", "rarity": "rare", "pool": "init", "owner": "knight", "name": "重撃", "type": "attack", "target": "front_pair", "art": "sword", "pow_pct": 280, "ap": 2},
+		"guard_all": {"no": "K022", "group": "汎用・味方支援", "rarity": "rare", "pool": "init", "owner": "knight", "name": "守護の陣", "type": "skill", "target": "ally_all", "art": "shield", "ap": 2, "keywords": ["horyu"],
 			"effects": [{"effect": "add_shield", "sld_pct": 160}]},
-		"fire_guard": {"no": "K023", "owner": "knight", "name": "ファイアガード", "type": "skill", "target": "self", "art": "c_fire_guard", "ap": 2, "keywords": ["hangeki"],
-			"effects": [{"effect": "add_shield", "sld_pct": 160}, {"effect": "add_status", "status": "fire_guard", "eff_val": 2, "turns": 1}]},
-		"big_swing": {"no": "K024", "owner": "knight", "name": "大振り", "type": "attack", "target": "front_pair", "art": "c_big_swing", "pow_pct": 120, "ap": 3},
-		"store": {"no": "K025", "owner": "knight", "name": "貯める", "type": "skill", "target": "self", "art": "c_store", "ap": 3,
-			"effects": [{"effect": "add_shield", "sld_pct": 200}, {"effect": "add_status", "status": "ap_next", "eff_val": 3, "turns": 1},
-				{"effect": "add_status", "status": "def_buff", "eff_val": 1}]},
-		"focus": {"no": "K026", "owner": "knight", "name": "精神統一", "type": "skill", "target": "self", "art": "c_focus", "ap": 3, "keywords": ["yoyaku"],
+		"fire_guard": {"no": "K023", "group": "挑発・ブロック攻撃", "rarity": "rare", "pool": "init", "owner": "knight", "name": "ファイアガード", "type": "skill", "target": "self", "art": "c_fire_guard", "ap": 2, "keywords": ["hangeki"],
+			"effects": [{"effect": "add_shield", "sld_pct": 200}, {"effect": "add_status", "status": "fire_guard", "eff_val": 2, "turns": 1}]},
+		"big_swing": {"no": "K024", "group": "汎用・味方支援", "rarity": "epic", "pool": "init", "owner": "knight", "name": "大振り", "type": "attack", "target": "front_pair", "art": "c_big_swing", "pow_pct": 420, "ap": 3},
+		"store": {"no": "K025", "group": "汎用・味方支援", "rarity": "rare", "pool": "init", "owner": "knight", "name": "貯める", "type": "skill", "target": "self", "art": "c_store", "ap": 2,
+			"effects": [{"effect": "add_shield", "sld_pct": 200}, {"effect": "add_stat", "stat": "def", "eff_val": 1, "to": "self"}]},  # 12 回目：次ターン AP を外して DEF+1（戦闘中）
+		"focus": {"no": "K026", "group": "消費・廃棄・必殺技", "rarity": "rare", "pool": "init", "owner": "knight", "name": "精神統一", "type": "skill", "target": "self", "art": "c_focus", "ap": 1, "keywords": ["yoyaku"],
 			"bonus_yoyaku": {"effects": [{"effect": "add_gauge", "eff_val": 20, "to": "self"}]}},  # 10 回目：必殺技 AP-1 → 予約：ゲージ+20（リーダー決定）
-		"barricade": {"no": "K027", "owner": "knight", "name": "バリケード", "type": "skill", "target": "self", "art": "c_barricade", "ap": 3,
-			"effects": [{"effect": "add_status", "status": "barricade", "eff_val": 1}]},
-		"dance": {"no": "K028", "owner": "knight", "name": "演舞", "type": "attack", "target": "enemy_all", "art": "c_dance", "pow_pct": 25, "hits": 3, "ap": 2, "keywords": ["consume"]},
-		"declare": {"no": "K029", "owner": "knight", "name": "宣言", "type": "skill", "target": "self", "art": "c_declare", "ap": 1, "keywords": ["yoyaku"],
+		# 12 回目：バリケードはパワーに（使った時に状態 barricade を付ける。説明は kind "barricade"）
+		"barricade": {"no": "K027", "group": "挑発・ブロック攻撃", "rarity": "epic", "pool": "init", "owner": "knight", "name": "バリケード", "type": "power", "ap": 3, "target": "self", "art": "c_barricade",
+			"keywords": ["power"], "power_effect": {"kind": "barricade", "once": [{"effect": "add_status", "status": "barricade", "eff_val": 1, "to": "self"}]}},
+		"dance": {"no": "K028", "group": "消費・廃棄・必殺技", "rarity": "rare", "pool": "init", "owner": "knight", "name": "演舞", "type": "attack", "target": "enemy_all", "art": "c_dance", "pow_pct": 75, "hits": 3, "ap": 2, "keywords": ["consume"]},
+		"declare": {"no": "K029", "group": "汎用・味方支援", "rarity": "rare", "pool": "init", "owner": "knight", "name": "宣言", "type": "skill", "target": "self", "art": "c_declare", "ap": 1, "keywords": ["yoyaku"],
 			"effects": [{"effect": "add_status", "status": "declare", "eff_val": 3}]},
-		"holy": {"no": "K030", "owner": "knight", "name": "聖なる加護", "type": "skill", "target": "self", "art": "c_holy", "ap": 1, "ap_x": true,
-			"effects": [{"effect": "add_shield", "sld_pct": 120, "x": true}]},
-		"steel": {"no": "K031", "owner": "knight", "name": "鋼鉄化", "type": "power", "ap": 2,"target": "ally_all", "art": "c_steel",
-			"keywords": ["power"], "power_effect": {"status": "def_buff", "eff_val": 2, "all": true}},
+		"holy": {"no": "K030", "group": "汎用・味方支援", "rarity": "rare", "pool": "init", "owner": "knight", "name": "聖なる加護", "type": "skill", "target": "self", "art": "c_holy", "ap": 0, "keywords": ["exhaust"],
+			"effects": [{"effect": "add_shield", "sld_pct": 120}]},  # 12 回目：APX → AP0・廃棄
+		"steel": {"no": "K031", "group": "汎用・味方支援", "rarity": "epic", "pool": "init", "owner": "knight", "name": "鋼鉄化", "type": "power", "ap": 2,"target": "ally_all", "art": "c_steel",
+			"keywords": ["power"], "power_effect": {"status": "def_up", "eff_val": 4, "all": true}},
 		# --- ウィッチ ---
-		"ice_lance": {"no": "W021", "owner": "witch", "name": "氷の槍", "type": "attack", "target": "front_pair", "art": "snow", "pow_pct": 75, "ap": 2,
+		"ice_lance": {"no": "W021", "rarity": "rare", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "氷の槍", "type": "attack", "target": "front_pair", "art": "snow", "pow_pct": 175, "ap": 1,
 			"effects": [{"effect": "rank_swap"}]},
-		"weaken": {"no": "W022", "owner": "witch", "name": "アタックダウン", "type": "skill", "target": "enemy_all", "art": "c_atk_down", "ap": 2, "keywords": ["consume"],
-			"effects": [{"effect": "add_status", "status": "atk_down", "eff_val": 6, "turns": 1}]},
-		"break_armor": {"no": "W023", "owner": "witch", "name": "防御力低下", "type": "skill", "target": "front_enemy_group", "art": "c_def_down", "ap": 2, "keywords": ["tenshin"],
+		"weaken": {"no": "W022", "rarity": "rare", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "アタックダウン", "type": "skill", "target": "enemy_all", "art": "c_atk_down", "ap": 1, "keywords": ["highcost"],
+			"effects": [{"effect": "add_status", "status": "pow_down", "eff_val": 6, "turns": 1}]},  # 12 回目：消費・AP2 → ハイコスト・AP1
+		"break_armor": {"no": "W023", "rarity": "rare", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "防御力低下", "type": "skill", "target": "front_enemy_group", "art": "c_def_down", "ap": 2, "keywords": ["tenshin"],
 			"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 1, "turns": 1}],
 			"bonus_tenshin": {"effects": [{"effect": "add_status", "status": "def_down", "eff_val": 3, "turns": 1}]}},
-		"meditate": {"no": "W024", "owner": "witch", "name": "瞑想", "type": "skill", "target": "self", "art": "c_meditate", "ap": 2,
+		"meditate": {"no": "W024", "rarity": "rare", "pool": "init", "group": "予約・AP・大技", "owner": "witch", "name": "瞑想", "type": "skill", "target": "self", "art": "c_meditate", "ap": 2,
 			"effects": [{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 3}]},
-		"quake": {"no": "W025", "owner": "witch", "name": "アースクエイク", "type": "attack", "target": "front_row", "art": "c_quake", "pow_pct": 75, "ap": 2, "keywords": ["consume"]},
-		"absorb_block": {"no": "W026", "owner": "witch", "name": "ブロック吸収", "type": "skill", "target": "enemy_all", "art": "c_absorb_block", "ap": 0, "keywords": ["consume"],
-			"effects": [{"effect": "absorb_block"}]},
-		"energy": {"no": "W027", "owner": "witch", "name": "エナジーチャージ", "type": "skill", "target": "self", "art": "c_energy", "ap": 0, "keywords": ["consume", "exhaust"],
-			"effects": [{"effect": "add_ap", "eff_val": 2}]},
-		"force": {"no": "W028", "owner": "witch", "name": "フォース", "type": "power", "ap": 2,"target": "ally_all", "art": "c_force",
-			"keywords": ["power"], "power_effect": {"status": "atk_buff", "eff_val": 2, "all": true}},
+		"quake": {"no": "W025", "rarity": "rare", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "アースクエイク", "type": "attack", "target": "front_row", "art": "c_quake", "pow_pct": 275, "ap": 2, "keywords": ["consume"]},
+		"absorb_block": {"no": "W026", "rarity": "rare", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "ブロック吸収", "type": "skill", "target": "enemy_all", "art": "c_absorb_block", "ap": 0,
+			"effects": [{"effect": "absorb_block"}]},  # 12 回目：消費の札を外した
+		"energy": {"no": "W027", "rarity": "rare", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "エナジーチャージ", "type": "skill", "target": "self", "art": "c_energy", "ap": 0, "keywords": ["exhaust"],
+			"effects": [{"effect": "add_ap", "eff_val": 2}]},  # 12 回目：消費の札を外した（廃棄だけ）
+		# フォース（12 回目）：持ち主のターン開始時に、味方全体の SLD+1（戦闘中。毎ターン積み重なる）。kind turn_start_stat は Cont_Battle._power_turn_start
+		"force": {"no": "W028", "rarity": "rare", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "フォース", "type": "power", "ap": 2,"target": "ally_all", "art": "c_force",
+			"keywords": ["power"], "power_effect": {"kind": "turn_start_stat", "stat": "sld", "eff_val": 1}},
+		# --- 12 回目の新カード（D）：ウィッチ（レア） ---
+		"w_mana_share": {"no": "W094", "rarity": "rare", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "マナの共有", "type": "skill", "target": "other_ally", "art": "c_ap_pass", "ap": 1, "keywords": ["exhaust"],
+			"effects": [{"effect": "add_ap", "eff_val": 1}, {"effect": "draw", "eff_val": 2, "to": "self"}]},
 		# --- 8 回目の新カード：ナイト ---
-		"k_reckless": {"no": "K032", "owner": "knight", "name": "捨て身斬り", "type": "attack", "target": "front_pair", "art": "c_big_swing", "pow_pct": 70, "ap": 1,
+		"k_reckless": {"no": "K032", "group": "自らの状態異常", "rarity": "rare", "pool": "init", "owner": "knight", "name": "捨て身斬り", "type": "attack", "target": "front_pair", "art": "c_big_swing", "pow_pct": 170, "ap": 1,
 			"effects": [{"effect": "add_status", "status": "fire", "eff_val": 2, "to": "self"}]},
-		"k_judgement": {"no": "K033", "owner": "knight", "name": "断罪の剣", "type": "attack", "target": "front_enemy_group", "art": "c_full_strike", "pow_pct": 100, "ap": 3,
+		"k_judgement": {"no": "K033", "group": "汎用・味方支援", "rarity": "rare", "pool": "init", "owner": "knight", "name": "断罪の剣", "type": "attack", "target": "front_enemy_group", "art": "c_full_strike", "pow_pct": 300, "ap": 3,
 			"effects": [{"effect": "add_status", "status": "no_heal", "eff_val": 1, "turns": 2}]},
-		"k_desperate": {"no": "K034", "owner": "knight", "name": "決死の突撃", "type": "attack", "target": "back_row", "art": "skull", "pow_pct": 85, "ap": 1, "keywords": ["consume"],
+		"k_desperate": {"no": "K034", "group": "消費・廃棄・必殺技", "rarity": "rare", "pool": "init", "owner": "knight", "name": "決死の突撃", "type": "attack", "target": "back_row", "art": "skull", "pow_pct": 185, "ap": 1, "keywords": ["consume"],
 			"effects": [{"effect": "add_status", "status": "fire", "eff_val": 1, "to": "self"}]},
-		"k_devotion": {"no": "K035", "owner": "knight", "name": "盾の献身", "type": "skill", "target": "other_ally", "art": "heart", "ap": 0, "keywords": ["exhaust", "yoyaku"],
+		"k_devotion": {"no": "K035", "group": "汎用・味方支援", "rarity": "rare", "pool": "init", "owner": "knight", "name": "盾の献身", "type": "skill", "target": "other_ally", "art": "heart", "ap": 0, "keywords": ["exhaust", "yoyaku"],
 			"effects": [{"effect": "add_shield", "sld_pct": 140}],
 			"bonus_yoyaku": {"effects": [{"effect": "add_shield", "sld_pct": 140}]}},
-		"k_burning_shield": {"no": "K036", "owner": "knight", "name": "灼熱の盾", "type": "skill", "target": "self", "art": "c_fire_guard", "ap": 1, "keywords": ["consume"],
-			"effects": [{"effect": "add_shield", "sld_pct": 320}, {"effect": "add_status", "status": "fire", "eff_val": 1}]},
-		"k_burning_spirit": {"no": "K037", "owner": "knight", "name": "燃える闘志", "type": "power", "ap": 2,"target": "self", "art": "flame",
+		"k_burning_shield": {"no": "K036", "group": "自らの状態異常", "rarity": "rare", "pool": "init", "owner": "knight", "name": "灼熱の盾", "type": "skill", "target": "self", "art": "c_fire_guard", "ap": 1, "keywords": ["consume"],
+			"effects": [{"effect": "add_shield", "sld_pct": 220}, {"effect": "add_status", "status": "fire", "eff_val": 1}]},
+		"k_burning_spirit": {"no": "K037", "group": "自らの状態異常", "rarity": "rare", "pool": "init", "owner": "knight", "name": "燃える闘志", "type": "power", "ap": 2,"target": "self", "art": "flame",
 			"keywords": ["power"], "power_effect": {"kind": "burn_atk"}},
-		"k_guard_stance": {"no": "K038", "owner": "knight", "name": "守りの陣", "type": "power", "ap": 2,"target": "self", "art": "c_barricade",
+		# 12 回目：守りの陣＝左にいる間 自分の SLD+10／右にいる間 DEF+3。鼓舞＝左にいる間 SLD+10（自分）／右にいる間 もう 1 人の POW+3
+		"k_guard_stance": {"no": "K038", "group": "汎用・味方支援", "rarity": "rare", "pool": "init", "owner": "knight", "name": "守りの陣", "type": "power", "ap": 1,"target": "self", "art": "c_barricade",
 			"keywords": ["power", "jinkei"], "power_effect": {
-				"left": {"once": [{"effect": "add_shield", "eff_val": 5, "to": "self"}]},
-				"right": {"status": "def_buff", "eff_val": 3}}},
-		"k_rally": {"no": "K039", "owner": "knight", "name": "鼓舞", "type": "power", "ap": 2,"target": "other_ally", "art": "atk_buff",
+				"left": {"status": "sld_up", "eff_val": 10},
+				"right": {"status": "def_up", "eff_val": 3}}},
+		"k_rally": {"no": "K039", "group": "汎用・味方支援", "rarity": "rare", "pool": "init", "owner": "knight", "name": "鼓舞", "type": "power", "ap": 1,"target": "other_ally", "art": "atk_buff",
 			"keywords": ["power", "jinkei"], "power_effect": {
-				"left": {"once": [{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 1, "to": "other_ally"}]},
+				"left": {"status": "sld_up", "eff_val": 10},
 				"right": {"aid_atk": 3}}},
-		"k_fervor": {"no": "K040", "owner": "knight", "name": "連撃の気迫", "type": "power", "ap": 2,"target": "enemy_all", "art": "c_dance",
+		"k_fervor": {"no": "K040", "group": "汎用・味方支援", "rarity": "epic", "pool": "init", "owner": "knight", "name": "連撃の気迫", "type": "power", "ap": 2,"target": "enemy_all", "art": "c_dance",
 			"keywords": ["power", "sokuou"], "power_effect": {"kind": "on_kw_card", "kws": ["sokuou", "tenshin"], "dmg": 3, "sokuou_add": 3}},
+		# --- 12 回目の新カード：ナイト（レア） ---
+		"k_strong_arm": {"no": "K084", "group": "POW強化", "rarity": "rare", "pool": "unlock", "owner": "knight", "name": "剛腕", "type": "attack", "target": "front_pair", "art": "c_big_swing", "pow_pct": 180, "ap": 2,
+			"if_pow": {"min": 30, "pow_pct": 140}},
+		"k_rising_aura": {"no": "K085", "group": "POW強化", "rarity": "rare", "pool": "unlock", "owner": "knight", "name": "闘気の昂り", "type": "power", "ap": 2, "target": "self", "art": "chevrons",
+			"keywords": ["power"], "power_effect": {"kind": "turn_stat", "stat": "pow", "eff_val": 1}},
+		"k_zanshin": {"no": "K086", "group": "POW強化", "rarity": "rare", "pool": "unlock", "owner": "knight", "name": "残心", "type": "attack", "target": "front_enemy_group", "art": "c_flash", "pow_pct": 140, "ap": 2, "keywords": ["yoyaku"],
+			"bonus_yoyaku": {"target": "self", "effects": [{"effect": "add_stat", "stat": "pow", "eff_val": 5, "to": "self"}]}},
+		"k_joint_attack": {"no": "K093", "group": "汎用・味方支援", "rarity": "rare", "pool": "unlock", "owner": "knight", "name": "連携攻撃", "type": "attack", "target": "front_pair", "art": "shield_sword", "pow_pct": 100, "ap": 1,
+			"effects": [{"effect": "add_shield", "sld_pct": 70, "to": "other_ally"}]},
+		"k_substitute": {"no": "K094", "group": "汎用・味方支援", "rarity": "rare", "pool": "unlock", "owner": "knight", "name": "身代わり", "type": "skill", "target": "self", "art": "c_stand", "ap": 1,
+			"effects": [{"effect": "add_shield", "sld_pct": 120}, {"effect": "add_status", "status": "cover", "eff_val": 1, "turns": 1, "to": "self"}]},
+		"k_tactical_eye": {"no": "K095", "group": "汎用・味方支援", "rarity": "rare", "pool": "unlock", "owner": "knight", "name": "戦術眼", "type": "skill", "target": "self", "art": "cards", "ap": 0,
+			"effects": [{"effect": "draw", "eff_val": 1}, {"effect": "add_stat", "stat": "sld", "eff_val": 5, "to": "self"}]},
 		# --- 8 回目の新カード：ウィッチ ---
-		"w_homing": {"no": "W029", "owner": "witch", "name": "追尾弾", "type": "attack", "target": "random_enemy", "art": "chevrons", "pow_pct": 75, "ap": 2, "keywords": ["gekiha"],
+		"w_homing": {"no": "W029", "rarity": "rare", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "追尾弾", "type": "attack", "target": "random_enemy", "art": "chevrons", "pow_pct": 175, "ap": 2, "keywords": ["gekiha"],
 			"bonus_gekiha": {"effects": [{"effect": "repeat"}]}},
-		"w_chain_bolt": {"no": "W030", "owner": "witch", "name": "連鎖雷", "type": "attack", "target": "enemy_all", "art": "bolt", "pow_pct": 25, "hits": 2, "ap": 3, "keywords": ["gekiha"],
+		"w_chain_bolt": {"no": "W030", "rarity": "epic", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "連鎖雷", "type": "attack", "target": "enemy_all", "art": "bolt", "pow_pct": 125, "hits": 2, "ap": 3, "keywords": ["gekiha"],
 			"bonus_gekiha": {"effects": [{"effect": "add_ap", "eff_val": 3, "to": "self"}]}},
-		"w_last_light": {"no": "W031", "owner": "witch", "name": "終焉の光", "type": "attack", "target": "enemy_all", "art": "burst", "pow_pct": 25, "hits": 4, "ap": 2,
+		# 終焉の光：「最後」の札が付いているので、今まで通り最後の時だけ使える（saigo_only）
+		"w_last_light": {"no": "W031", "rarity": "legend", "pool": "init", "group": "陣形・即応・転身", "owner": "witch", "name": "終焉の光", "type": "attack", "target": "enemy_all", "art": "burst", "pow_pct": 125, "hits": 4, "ap": 2,
 			"keywords": ["saigo", "jinkei"], "saigo_only": true,
-			"bonus_left": {"text": "敵全体にPOW25%×4ダメージ"},
-			"bonus_right": {"target": "front_enemy_group", "hits": 5, "text": "目の前の敵グループにPOW25%×5ダメージ"}},
-		"w_magic_shot": {"no": "W032", "owner": "witch", "name": "魔弾", "type": "attack", "target": "random_enemy", "art": "c_energy", "pow_pct": 70, "ap": 0, "pre_rank": 0},
-		"w_sanctuary": {"no": "W033", "owner": "witch", "name": "聖域", "type": "skill", "target": "ally_all", "art": "c_magic_wall", "ap": 2,
-			"keywords": ["saigo"], "saigo_only": true,
-			"effects": [{"effect": "add_shield", "sld_pct": 400}]},
-		"w_needle_storm": {"no": "W034", "owner": "witch", "name": "毒針の嵐", "type": "skill", "target": "random_enemy", "art": "c_poison_gas", "ap": 2, "hits": 5, "reroll": true,
-			"hit_effects": [{"effect": "add_status", "status": "poison", "eff_val": 4}]},
-		"w_corrode": {"no": "W035", "owner": "witch", "name": "腐食", "type": "attack", "target": "enemy_all", "art": "skull", "power": 0, "fixed": true, "power_from": "poison", "ap": 1},
-		"w_venom_edge": {"no": "W036", "owner": "witch", "name": "毒の刃", "type": "power", "ap": 2,"target": "self", "art": "dagger",
-			"keywords": ["power"], "power_effect": {"kind": "on_attack_poison", "eff_val": 1}},
-		"w_hex_guard": {"no": "W037", "owner": "witch", "name": "呪術の加護", "type": "power", "ap": 2,"target": "self", "art": "c_absorb",
+			"bonus_left": {"text": "敵全体にPOW125%ダメージ×4回"},
+			"bonus_right": {"target": "front_enemy_group", "hits": 5, "text": "目の前の敵グループにPOW125%ダメージ×5回"}},
+		"w_magic_shot": {"no": "W032", "rarity": "epic", "pool": "init", "group": "陣形・即応・転身", "owner": "witch", "name": "魔弾", "type": "attack", "target": "random_enemy", "art": "c_energy", "pow_pct": 170, "ap": 0, "pre_rank": 0},
+		# 聖域（12 回目）：もう 1 人の味方（ナイト）に SLD200% ブロック（使った人＝ウィッチの SLD）と庇う（1 ターン。仕組みは B）。最後の札は外した
+		"w_sanctuary": {"no": "W033", "rarity": "rare", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "聖域", "type": "skill", "target": "other_ally", "art": "c_magic_wall", "ap": 2,
+			"effects": [{"effect": "add_shield", "sld_pct": 200}, {"effect": "add_status", "status": "cover", "eff_val": 1, "turns": 1}]},
+		"w_needle_storm": {"no": "W034", "rarity": "rare", "pool": "init", "group": "毒・状態異常", "owner": "witch", "name": "毒針の嵐", "type": "skill", "target": "random_enemy", "art": "c_poison_gas", "ap": 2, "hits": 5, "reroll": true,
+			"hit_effects": [{"effect": "add_status", "status": "poison", "eff_val": 3}]},
+		"w_corrode": {"no": "W035", "rarity": "legend", "pool": "init", "group": "毒・状態異常", "owner": "witch", "name": "腐食", "type": "attack", "target": "enemy_all", "art": "skull", "power": 0, "fixed": true, "power_from": "poison", "ap": 1},
+		"w_venom_edge": {"no": "W036", "rarity": "epic", "pool": "init", "group": "毒・状態異常", "owner": "witch", "name": "毒の刃", "type": "power", "ap": 2,"target": "self", "art": "dagger",
+			"keywords": ["power"], "power_effect": {"kind": "on_attack_poison", "eff_val": 1, "any_card": true}},  # 12 回目：アタックカードに限らず、当たった敵に
+		"w_hex_guard": {"no": "W037", "rarity": "rare", "pool": "init", "group": "毒・状態異常", "owner": "witch", "name": "呪術の加護", "type": "power", "ap": 2,"target": "self", "art": "c_absorb",
 			"keywords": ["power"], "power_effect": {"kind": "on_debuff_card", "shield": 2}},
-		"w_flame_aura": {"no": "W038", "owner": "witch", "name": "炎の守り", "type": "power", "ap": 2,"target": "other_ally", "art": "flame",
-			"keywords": ["power"], "power_effect": {"kind": "on_own_card", "fire": 1, "shield": 4}},
-		"w_hunter": {"no": "W039", "owner": "witch", "name": "狩人の本能", "type": "power", "ap": 2,"target": "self", "art": "horns",
-			"keywords": ["power"], "power_effect": {"kind": "on_gekiha_card", "kws": ["jinkei", "yoyaku"], "atk": 1}},
+		"w_flame_aura": {"no": "W038", "rarity": "rare", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "炎の守り", "type": "power", "ap": 2,"target": "other_ally", "art": "flame",
+			"keywords": ["power"], "power_effect": {"kind": "on_own_card", "fire": 1, "shield": 7}},
+		"w_hunter": {"no": "W039", "rarity": "rare", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "狩人の本能", "type": "power", "ap": 2,"target": "self", "art": "horns",
+			"keywords": ["power"], "power_effect": {"kind": "on_gekiha_card", "kws": ["jinkei", "yoyaku"], "atk": 1}},  # 12 回目：攻撃力+1 → POW+1（add_stat。戦闘中。キー名は "atk" のまま）
 		# --- 9 回目に超レアから移した（ウィッチ） ---
-		"magic_wall": {"no": "W040", "owner": "witch", "name": "マジックウォール", "type": "skill", "target": "ally_all", "art": "c_magic_wall", "ap": 2, "keywords": ["exhaust"],
+		"magic_wall": {"no": "W040", "rarity": "epic", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "マジックウォール", "type": "skill", "target": "ally_all", "art": "c_magic_wall", "ap": 2, "keywords": ["exhaust", "consume"],
 			"effects": [{"effect": "add_shield", "sld_pct": 800}]},
 	},
 	"super_rare": {
 		# --- ナイト ---
-		"fighting": {"no": "K041", "owner": "knight", "name": "闘志", "type": "skill", "target": "ally_all", "art": "atk_buff", "ap": 1,
+		"fighting": {"no": "K041", "group": "汎用・味方支援", "rarity": "epic", "pool": "init", "owner": "knight", "name": "闘志", "type": "skill", "target": "ally_all", "art": "atk_buff", "ap": 1,
 			"effects": [{"effect": "cleanse"}]},
-		"full_strike": {"no": "K042", "owner": "knight", "name": "渾身の一撃", "type": "attack", "target": "front_enemy_group", "art": "c_full_strike", "pow_pct": 50, "ap": 3,
-			"keywords": ["tenshin", "sokuou"], "bonus_tenshin": {"pow_pct": 50}, "bonus_sokuou": {"pow_pct": 50}},
-		"stand": {"no": "K043", "owner": "knight", "name": "仁王立ち", "type": "skill", "target": "enemy_all", "art": "c_stand", "ap": 3, "keywords": ["exhaust"],
+		"full_strike": {"no": "K042", "group": "汎用・味方支援", "rarity": "legend", "pool": "init", "owner": "knight", "name": "渾身の一撃", "type": "attack", "target": "front_enemy_group", "art": "c_full_strike", "pow_pct": 150, "ap": 3,
+			"keywords": ["tenshin", "sokuou"], "bonus_tenshin": {"pow_pct": 150}, "bonus_sokuou": {"pow_pct": 150}},
+		"stand": {"no": "K043", "group": "挑発・ブロック攻撃", "rarity": "epic", "pool": "init", "owner": "knight", "name": "仁王立ち", "type": "skill", "target": "enemy_all", "art": "c_stand", "ap": 3, "keywords": ["exhaust"],
 			"effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}, {"effect": "add_shield", "sld_pct": 1200, "to": "self"}]},
-		"mushin": {"no": "K044", "owner": "knight", "name": "無心乱舞", "type": "attack", "target": "front_row", "art": "c_mushin", "pow_pct": 40, "hits_x": true, "ap": 1, "ap_x": true,
+		"mushin": {"no": "K044", "group": "消費・廃棄・必殺技", "rarity": "epic", "pool": "init", "owner": "knight", "name": "無心乱舞", "type": "attack", "target": "front_row", "art": "c_mushin", "pow_pct": 140, "hits_x": true, "ap": 1, "ap_x": true,
 			"keywords": ["exhaust"]},
 		# --- ウィッチ ---
-		"inferno": {"no": "W041", "owner": "witch", "name": "豪炎", "type": "attack", "target": "enemy_all", "art": "c_inferno", "pow_pct": 25, "hits_x": true, "ap": 1, "ap_x": true},
-		"overload": {"no": "W042", "owner": "witch", "name": "魔力暴走", "type": "attack", "target": "front_pair", "art": "c_overload", "pow_pct": 90, "ap": 3, "on_kill": "reuse_free", "keywords": ["gekiha"],
+		# 豪炎（12 回目）：予約の札。bonus_yoyaku の "pow_pct"・"hits_x" ＝ 次の自分のターン開始時に、同じ対象へ POW%×X 回（X は使った時の X）
+		"inferno": {"no": "W041", "rarity": "rare", "pool": "init", "group": "予約・AP・大技", "owner": "witch", "name": "豪炎", "type": "attack", "target": "enemy_all", "art": "c_inferno", "pow_pct": 25, "hits_x": true, "ap": 1, "ap_x": true,
+			"keywords": ["yoyaku"],
+			"bonus_yoyaku": {"pow_pct": 25, "hits_x": true, "text": "POW25%ダメージ×X回"}},
+		"overload": {"no": "W042", "rarity": "epic", "pool": "init", "group": "予約・AP・大技", "owner": "witch", "name": "魔力暴走", "type": "attack", "target": "front_pair", "art": "c_overload", "pow_pct": 290, "ap": 3, "on_kill": "reuse_free", "keywords": ["gekiha"],
 			"bonus_gekiha": {"effects": [{"effect": "add_ap", "eff_val": 3, "to": "self"}]}},
-		"insight": {"no": "W043", "owner": "witch", "name": "ひらめき", "type": "skill", "target": "self", "art": "cards", "ap": 0,
+		"insight": {"no": "W043", "rarity": "epic", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "ひらめき", "type": "skill", "target": "self", "art": "cards", "ap": 0,
 			"effects": [{"effect": "draw", "eff_val": 2}]},
-		"double_cast": {"no": "W044", "owner": "witch", "name": "連続魔法", "type": "skill", "target": "self", "art": "c_double", "ap": 1, "keywords": ["exhaust"],
-			"effects": [{"effect": "double"}]},
+		"double_cast": {"no": "W044", "rarity": "legend", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "連続魔法", "type": "skill", "target": "self", "art": "c_double", "ap": 1, "keywords": ["consume"],
+			"effects": [{"effect": "double"}]},  # 12 回目：廃棄 → 消費
 		# --- 8 回目の新カード：ナイト ---
-		"k_finisher": {"no": "K045", "owner": "knight", "name": "怒涛の締め", "type": "attack", "target": "front_pair", "art": "c_mushin", "pow_pct": 40, "hits_used": true, "ap": 0,
-			"keywords": ["saigo"], "saigo_only": true},
-		"k_thousand": {"no": "K046", "owner": "knight", "name": "千本突き", "type": "attack", "target": "enemy_all", "art": "target_all", "pow_pct": 5, "hits": 6, "ap": 3},
-		"k_command": {"no": "K047", "owner": "knight", "name": "陣頭指揮", "type": "skill", "target": "ally_all", "art": "crown", "ap": 1, "keywords": ["jinkei"],
+		"k_finisher": {"no": "K045", "group": "汎用・味方支援", "rarity": "legend", "pool": "init", "owner": "knight", "name": "怒涛の締め", "type": "attack", "target": "front_pair", "art": "c_mushin", "pow_pct": 100, "hits_used": true, "ap": 0},  # 12 回目：最後の札を外した（制限なし）
+		"k_thousand": {"no": "K046", "group": "POW強化", "rarity": "epic", "pool": "init", "owner": "knight", "name": "千本突き", "type": "attack", "target": "enemy_all", "art": "target_all", "pow_pct": 20, "hits": 6, "ap": 3},
+		"k_command": {"no": "K047", "group": "汎用・味方支援", "rarity": "legend", "pool": "init", "owner": "knight", "name": "陣頭指揮", "type": "skill", "target": "ally_all", "art": "crown", "ap": 1, "keywords": ["jinkei"],
 			"bonus_left": {"effects": [{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 2, "to": "self"}]},
 			"bonus_right": {"effects": [{"effect": "add_shield", "sld_pct": 140, "to": "other_ally"}]}},
-		"k_last_stand": {"no": "K048", "owner": "knight", "name": "背水の陣", "type": "power", "ap": 2,"target": "self", "art": "c_declare",
+		"k_last_stand": {"no": "K048", "group": "POW強化", "rarity": "epic", "pool": "init", "owner": "knight", "name": "背水の陣", "type": "power", "ap": 2,"target": "self", "art": "c_declare",
 			"keywords": ["power"], "power_effect": {"kind": "last_stand"}},
-		"k_scorched": {"no": "K049", "owner": "knight", "name": "焦土の誓い", "type": "power", "ap": 2,"target": "enemy_all", "art": "burst",
+		"k_scorched": {"no": "K049", "group": "消費・廃棄・必殺技", "rarity": "legend", "pool": "init", "owner": "knight", "name": "焦土の誓い", "type": "power", "ap": 1,"target": "enemy_all", "art": "burst",
 			"keywords": ["power"], "power_effect": {"kind": "on_burn", "dmg": 5}},
-		"k_revelation": {"no": "K050", "owner": "knight", "name": "天啓", "type": "power", "ap": 2,"target": "ally_all", "art": "st_ap_plus",
-			"keywords": ["power", "exhaust"], "power_effect": {"exhaust_now": true, "once": [
-				{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 2, "to": "ally_all"}, {"effect": "add_ap", "eff_val": 2, "to": "ally_all"}]}},
+		# 12 回目：天啓はスキル（廃棄）に
+		"k_revelation": {"no": "K050", "group": "消費・廃棄・必殺技", "rarity": "epic", "pool": "init", "owner": "knight", "name": "天啓", "type": "skill", "ap": 2,"target": "ally_all", "art": "st_ap_plus",
+			"keywords": ["exhaust"], "effects": [
+				{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 2, "to": "ally_all"}, {"effect": "add_ap", "eff_val": 2, "to": "ally_all"}]},
+		# --- 12 回目の新カード：ナイト（エピック・レジェンド） ---
+		#   if_pow            : {"min", "pow_pct"}。自分の POW が min 以上なら % を足す（剛腕。レアの段に置いた）
+		#   per_pow_up_pct    : 自分の POW の増えた分（ActionController.stat_delta）1 につき % を足す（覇王の一撃）
+		#   per_self_status_pct : {"statuses", "pow_pct"}。自分の状態の値の合計 1 につき % を足す（苦痛の糧）
+		#   burn_all_pct      : 自分の火傷を全部消し、消した数値 1 につき % を足す（不死鳥の剣。火傷が無ければダメージ 0）
+		#   power_block       : true なら power ＝ 自分のブロック（盾打ち・審判の大盾。ブロックは減らない）
+		#   効果 shield_pow（POW × pow_pct のブロック。気炎）/ double_block（自分のブロックを 2 倍）/ cleanse_one（デバフを 1 つ解除）
+		#   power_effect kind : turn_stat（自分のターン開始時に stat+eff_val）/ on_tick_dmg（状態異常のダメージを受けるたび、ランダムな敵に同じダメージ×hits）/
+		#                       on_ally_attack（もう 1 人の味方がアタックカードを使うたび、味方全体にブロック+shield）/ barricade（説明用）
+		"k_overlord": {"no": "K087", "group": "POW強化", "rarity": "legend", "pool": "unlock", "owner": "knight", "name": "覇王の一撃", "type": "attack", "target": "front_enemy_group", "art": "crown", "pow_pct": 150, "ap": 2,
+			"keywords": ["highcost"], "per_pow_up_pct": 10},
+		"k_hellfire_stance": {"no": "K088", "group": "自らの状態異常", "rarity": "epic", "pool": "unlock", "owner": "knight", "name": "業火の構え", "type": "power", "ap": 2, "target": "self", "art": "c_fire_guard",
+			"keywords": ["power"], "power_effect": {"kind": "on_tick_dmg", "hits": 2}},
+		"k_pain_feast": {"no": "K089", "group": "自らの状態異常", "rarity": "epic", "pool": "unlock", "owner": "knight", "name": "苦痛の糧", "type": "attack", "target": "front_enemy_group", "art": "skull", "pow_pct": 150, "ap": 2,
+			"per_self_status_pct": {"statuses": ["fire", "poison"], "pow_pct": 10}},
+		"k_phoenix": {"no": "K090", "group": "自らの状態異常", "rarity": "legend", "pool": "unlock", "owner": "knight", "name": "不死鳥の剣", "type": "attack", "target": "enemy_all", "art": "c_inferno", "pow_pct": 0, "ap": 2,
+			"burn_all_pct": 50},
+		"k_judge_shield": {"no": "K091", "group": "挑発・ブロック攻撃", "rarity": "legend", "pool": "unlock", "owner": "knight", "name": "審判の大盾", "type": "attack", "target": "front_enemy_group", "art": "c_big_shield", "power": 0, "ap": 2,
+			"power_block": true, "effects": [{"effect": "add_status", "status": "taunt", "eff_val": 0, "turns": 1}]},
+		"k_twin_oath": {"no": "K096", "group": "汎用・味方支援", "rarity": "epic", "pool": "unlock", "owner": "knight", "name": "双剣の誓い", "type": "power", "ap": 2, "target": "ally_all", "art": "shield_sword",
+			"keywords": ["power"], "power_effect": {"kind": "on_ally_attack", "shield": 3}},
+		"k_charge_horn": {"no": "K097", "group": "汎用・味方支援", "rarity": "epic", "pool": "unlock", "owner": "knight", "name": "突撃ラッパ", "type": "skill", "target": "ally_all", "art": "horns", "ap": 2,
+			"effects": [{"effect": "add_status", "status": "pow_up", "eff_val": 5, "turns": 2}]},
+		"k_knight_blade": {"no": "K098", "group": "汎用・味方支援", "rarity": "epic", "pool": "unlock", "owner": "knight", "name": "騎士の剛剣", "type": "attack", "target": "front_row", "art": "c_full_strike", "pow_pct": 370, "ap": 2,
+			"keywords": ["kihatsu"]},
+		"k_shield_wall": {"no": "K099", "group": "汎用・味方支援", "rarity": "epic", "pool": "unlock", "owner": "knight", "name": "盾の壁", "type": "skill", "target": "ally_all", "art": "c_magic_wall", "ap": 2, "keywords": ["horyu"],
+			"effects": [{"effect": "add_shield", "sld_pct": 200}]},
+		"k_royal_order": {"no": "K100", "group": "汎用・味方支援", "rarity": "legend", "pool": "unlock", "owner": "knight", "name": "王命", "type": "skill", "target": "other_ally", "art": "crown", "ap": 2, "keywords": ["kihatsu"],
+			"effects": [{"effect": "add_ap", "eff_val": 3}, {"effect": "add_status", "status": "pow_up", "eff_val": 3, "turns": 2}]},
 		# --- 8 回目の新カード：ウィッチ ---
-		"w_meteor": {"no": "W045", "owner": "witch", "name": "流星群", "type": "attack", "target": "random_enemy", "art": "c_inferno", "pow_pct": 50, "hits": 4, "reroll": true, "ap": 5},
-		"w_star_judge": {"no": "W046", "owner": "witch", "name": "星の審判", "type": "attack", "target": "random_enemy", "art": "crown", "pow_pct": 35, "hits": 6, "reroll": true, "ap": 7,
+		# 流星の煌めき（12 回目。旧 流星群）：AP5・保留。turn_discount ＝ 自分のターン開始時（手札の補充の後）に手札にあれば、
+		#   このカードの AP を n 下げる（その戦闘中。カードの辞書の ap_down。0 まで）。使うと AP+3
+		"w_meteor": {"no": "W045", "rarity": "epic", "pool": "init", "group": "予約・AP・大技", "owner": "witch", "name": "流星の煌めき", "type": "skill", "target": "self", "art": "c_inferno", "ap": 5,
+			"keywords": ["horyu"], "turn_discount": 1,
+			"effects": [{"effect": "add_ap", "eff_val": 3}]},
+		"w_star_judge": {"no": "W046", "rarity": "legend", "pool": "init", "group": "予約・AP・大技", "owner": "witch", "name": "星の審判", "type": "attack", "target": "random_enemy", "art": "crown", "pow_pct": 135, "hits": 6, "reroll": true, "ap": 7,
 			"hit_effects": [{"effect": "add_status", "status": "stun", "eff_val": 1, "if_damaged": true}]},
-		"w_retribution": {"no": "W047", "owner": "witch", "name": "断罪の連鎖", "type": "power", "ap": 2,"target": "random_enemy", "art": "c_drain",
+		"w_retribution": {"no": "W047", "rarity": "legend", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "断罪の連鎖", "type": "power", "ap": 2,"target": "random_enemy", "art": "c_drain",
 			"keywords": ["power"], "power_effect": {"kind": "on_gekiha_hangeki", "power": 2, "hits": 5}},
-		"w_herbalist": {"no": "W048", "owner": "witch", "name": "薬師の加護", "type": "power", "ap": 2,"target": "self", "art": "item_herb",
+		"w_herbalist": {"no": "W048", "rarity": "epic", "pool": "init", "group": "汎用・味方支援", "owner": "witch", "name": "薬師の加護", "type": "power", "ap": 2,"target": "self", "art": "item_herb",
 			"keywords": ["power", "exhaust"], "power_effect": {"kind": "end_herb"}},
-		"w_mana_convert": {"no": "W049", "owner": "witch", "name": "魔力の転換", "type": "power", "ap": 2,"target": "self", "art": "c_meditate",
+		"w_mana_convert": {"no": "W049", "rarity": "rare", "pool": "init", "group": "予約・AP・大技", "owner": "witch", "name": "魔力の転換", "type": "power", "ap": 2,"target": "self", "art": "c_meditate",
 			"keywords": ["power", "consume"], "power_effect": {"kind": "end_convert"}},
 		# --- 9 回目にレアから移した（ウィッチ） ---
-		"w_toxic_rain": {"no": "W050", "owner": "witch", "name": "毒の雨", "type": "attack", "target": "front_row", "art": "st_poison", "pow_pct": 15, "hits_x": true, "ap": 1, "ap_x": true,
-			"hit_effects": [{"effect": "add_status", "status": "poison", "eff_val": 1}]},
+		# 毒の雨（12 回目）：スキル。ダメージは無く、X 回 毒 3
+		"w_toxic_rain": {"no": "W050", "rarity": "epic", "pool": "init", "group": "毒・状態異常", "owner": "witch", "name": "毒の雨", "type": "skill", "target": "front_row", "art": "st_poison", "hits_x": true, "ap": 1, "ap_x": true,
+			"hit_effects": [{"effect": "add_status", "status": "poison", "eff_val": 3}]},
+		# --- 12 回目の新カード（D）：ウィッチ（エピック・レジェンド） ---
+		#   power_effect kind on_skill_card：スキルカードが発動するたび、発動したキャラにブロック（そのキャラの SLD × sld_pct）
+		"w_ward": {"no": "W095", "rarity": "epic", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "守護結界", "type": "skill", "target": "ally_all", "art": "c_barricade", "ap": 2,
+			"effects": [{"effect": "add_shield", "sld_pct": 160}, {"effect": "add_status", "status": "def_up", "eff_val": 2, "turns": 1}]},
+		"w_haste": {"no": "W096", "rarity": "epic", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "加速の魔法", "type": "skill", "target": "other_ally", "art": "st_ap_plus", "ap": 1, "keywords": ["kihatsu"],
+			"effects": [{"effect": "add_status", "status": "ap_plus", "eff_val": 1, "turns": 2}]},
+		"w_enchant": {"no": "W097", "rarity": "epic", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "魔力付与", "type": "skill", "target": "other_ally", "art": "atk_buff", "ap": 1,
+			"effects": [{"effect": "add_stat", "stat": "pow", "eff_val": 3}, {"effect": "add_stat", "stat": "sld", "eff_val": 3}]},
+		"w_thunder": {"no": "W098", "rarity": "epic", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "雷鳴", "type": "attack", "target": "enemy_all", "art": "bolt", "pow_pct": 140, "ap": 2,
+			"keywords": ["sokuou"],
+			"bonus_sokuou": {"hits": 3, "text": "3回攻撃"}},
+		"w_time_bless": {"no": "W099", "rarity": "legend", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "時の祝福", "type": "skill", "target": "ally_all", "art": "hourglass", "ap": 2,
+			"keywords": ["exhaust", "yoyaku"],
+			"effects": [{"effect": "cleanse"}],
+			"bonus_yoyaku": {"target": "self", "effects": [{"effect": "add_ap", "eff_val": 2, "to": "self"}]}},
+		"w_twin_circle": {"no": "W100", "rarity": "legend", "pool": "unlock", "group": "汎用・味方支援", "owner": "witch", "name": "双星の魔法陣", "type": "power", "ap": 3, "target": "self", "art": "star",
+			"keywords": ["power"], "power_effect": {"kind": "on_skill_card", "sld_pct": 50}},
 	},
 }
 
@@ -540,14 +632,14 @@ static func has_keyword(a: Dictionary, k: String) -> bool:
 static func make_card(card_id: String) -> Dictionary:
 	var base := base_id(card_id)
 	var badge := badge_of(card_id)
-	for rarity in ["common", "rare", "super_rare"]:
+	for rarity in ALLY_CARDS:  # 見出し（common / rare / super_rare …）。カードのレア度はデータの "rarity" が正（12 回目）
 		if ALLY_CARDS[rarity].has(base):
 			var c: Dictionary = ALLY_CARDS[rarity][base].duplicate(true)
 			if c.has("pow_pct") and not c.has("power"):
 				c["power"] = 0  # 11 回目：POW% の攻撃も "power"（固定の上乗せ）を持たせてアタックとして扱う
 			c["id"] = base
 			c["deck_id"] = card_id
-			c["rarity"] = "normal" if rarity == "common" else rarity
+			c["rarity"] = norm_rarity(c.get("rarity", rarity))  # 12 回目：common / rare / epic / legend の 4 段階にそろえる
 			if not c.has("keywords"):
 				c["keywords"] = []
 			if badge != "" and BadgeList.DATA.has(badge):
@@ -589,20 +681,153 @@ static func random_badged_id(min_tier: String = "", owner: String = "") -> Strin
 	return cid if ok.is_empty() else with_badge(cid, ok.pick_random())
 
 
-## 報酬用にランダムなカードIDを選ぶ（レアほど出にくい）。owner を指定するとそのキャラのカードだけ
-static func random_card_id(min_tier: String = "", owner: String = "") -> String:
-	var roll := randf()
-	var tier := "common"
-	if roll > 0.88:
-		tier = "super_rare"
-	elif roll > 0.58:
-		tier = "rare"
-	if min_tier == "rare" and tier == "common":
-		tier = "rare"
-	var keys: Array = ALLY_CARDS[tier].keys().filter(func(k): return owner == "" or ALLY_CARDS[tier][k].owner == owner)
-	if keys.is_empty():
-		keys = ALLY_CARDS[tier].keys()
-	return keys[randi() % keys.size()]
+## 報酬用にランダムなカードIDを選ぶ（12 回目・C：コモン:レア:エピック:レジェンド＝50:25:10:5。解放済みのカードだけ）。
+## min_tier＝これ以上のレア度だけ（"rare"・"epic"。古い "super_rare" はエピック以上）。owner・type を指定するとそれだけ。except は出さない。
+## 条件に合うカードが無い時は、type → owner → min_tier の順に条件を外す
+static func random_card_id(min_tier: String = "", owner: String = "", type: String = "", except: Array = []) -> String:
+	var min_i := 0 if min_tier == "" else RARITIES.find(norm_rarity(min_tier))
+	var table := drop_table(min_i, owner, type, except)
+	if table.is_empty() and type != "":
+		table = drop_table(min_i, owner, "", except)
+	if table.is_empty() and owner != "":
+		table = drop_table(min_i, "", "", except)
+	if table.is_empty() and min_i > 0:
+		table = drop_table(0, owner, "", except)
+	if table.is_empty():
+		table = drop_table(0, "", "", [])
+	if table.is_empty():
+		return str(card_ids()[0])
+	var total := 0
+	for r in table:
+		total += int(RARITY_WEIGHT[r])
+	var roll := randi() % total
+	for r in RARITIES:
+		if table.has(r):
+			roll -= int(RARITY_WEIGHT[r])
+			if roll < 0:
+				var ids: Array = table[r]
+				return str(ids[randi() % ids.size()])
+	return str(card_ids()[0])
+
+
+# ============================================================
+# 12 回目（C）：レア度 4 段階・排出（pool）・カードの解放
+# ============================================================
+## レア度（低い順）。データの "rarity"。古い値（normal・super_rare など）は norm_rarity で読み替える
+const RARITIES := ["common", "rare", "epic", "legend"]
+const RARITY_NAME := {"common": "コモン", "rare": "レア", "epic": "エピック", "legend": "レジェンド"}
+## 報酬・ショップ・イベントでの出やすさ（比）
+const RARITY_WEIGHT := {"common": 50, "rare": 25, "epic": 10, "legend": 5}
+## 解放した "pool": "unlock" のカード ID（値は true）。SaveData が周回をまたぐ記録（user://unlock.json）から入れる
+static var unlocked_cards: Dictionary = {}
+
+
+## レア度の値を 4 段階にそろえる（古い normal → common、super_rare → epic。知らない値は common）
+static func norm_rarity(v: Variant) -> String:
+	match str(v):
+		"rare": return "rare"
+		"epic", "super_rare", "super", "sr": return "epic"
+		"legend", "legendary": return "legend"
+	return "common"
+
+
+## レア度の番号（0＝コモン 〜 3＝レジェンド）
+static func rarity_rank(v: Variant) -> int:
+	return RARITIES.find(norm_rarity(v))
+
+
+## カードのデータ（コピーしない。読むだけ）。無ければ空
+static func card_raw(card_id: String) -> Dictionary:
+	var base := base_id(card_id)
+	for sec in ALLY_CARDS:
+		var d: Dictionary = ALLY_CARDS[sec]
+		if d.has(base):
+			return d[base]
+	return {}
+
+
+## 全カードの ID
+static func card_ids() -> Array:
+	var out: Array = []
+	for sec in ALLY_CARDS:
+		var d: Dictionary = ALLY_CARDS[sec]
+		out.append_array(d.keys())
+	return out
+
+
+## カードのレア度（データの "rarity"。無ければ見出しから）
+static func rarity_of(card_id: String) -> String:
+	var base := base_id(card_id)
+	for sec in ALLY_CARDS:
+		var d: Dictionary = ALLY_CARDS[sec]
+		if d.has(base):
+			var c: Dictionary = d[base]
+			return norm_rarity(c.get("rarity", sec))
+	return "common"
+
+
+## 排出：init＝初期から／unlock＝解放されてから／none＝報酬に出ない。データに無ければ init
+static func pool_of(card_id: String) -> String:
+	var p := str(card_raw(card_id).get("pool", "init"))
+	return p if p in ["init", "unlock", "none"] else "init"
+
+
+## グループ名（データの "group"。無ければ No. から CardGroupList の表で引く。どちらも無ければ ""）
+static func group_of(card_id: String) -> String:
+	var c := card_raw(card_id)
+	var g := str(c.get("group", ""))
+	return g if g != "" else CardGroupList.of_no(str(c.get("no", "")))
+
+
+## 報酬・ショップ・イベントに出るカードか（init、または解放済みの unlock）
+static func can_drop(card_id: String) -> bool:
+	var base := base_id(card_id)
+	match pool_of(base):
+		"init": return true
+		"unlock": return unlocked_cards.has(base)
+	return false
+
+
+## まだ解放していないカード（"pool": "unlock" で未解放）か。カード一覧の表示用
+static func is_card_locked(card_id: String) -> bool:
+	var base := base_id(card_id)
+	return pool_of(base) == "unlock" and not unlocked_cards.has(base)
+
+
+## まだ解放していないカードの ID
+static func locked_card_ids() -> Array:
+	return card_ids().filter(func(k): return is_card_locked(str(k)))
+
+
+## 出せるカードをレア度ごとに分けた表 {レア度: [ID…]}（カードが無いレア度は入らない）
+static func drop_table(min_i: int, owner: String, type: String, except: Array) -> Dictionary:
+	var out := {}
+	for sec in ALLY_CARDS:
+		var d: Dictionary = ALLY_CARDS[sec]
+		for k in d:
+			var c: Dictionary = d[k]
+			if (owner != "" and str(c.get("owner", "")) != owner) or (type != "" and str(c.get("type", "")) != type):
+				continue
+			if except.has(k) or not can_drop(str(k)):
+				continue
+			var r := norm_rarity(c.get("rarity", sec))
+			if RARITIES.find(r) < min_i:
+				continue
+			if not out.has(r):
+				out[r] = []
+			(out[r] as Array).append(str(k))
+	return out
+
+
+## 必殺技の排出：init＝最初から選べる／unlock＝ラスボスを倒すと 1 つずつ解放。データに無ければ SPECIAL_START かどうか
+static func special_pool(special_id: String) -> String:
+	for ch in SPECIALS:
+		for s in SPECIALS[ch]:
+			if str(s.id) == special_id:
+				var p := str(s.get("pool", ""))
+				if p in ["init", "unlock"]:
+					return p
+	return "init" if SPECIAL_START.has(special_id) else "unlock"
 
 
 static func special(char_id: String, special_id: String) -> Dictionary:

@@ -181,9 +181,9 @@ func _place_treasures() -> void:
 # ------------------------------------------------------------
 # 必殺技の解放（9 回目）
 # ------------------------------------------------------------
-## 新しい冒険：最初の 4 つだけ解放し、セットも初期の 2 つに戻す
+## 新しい冒険：選べる必殺技（最初からの 4 つ＋周回をまたいで解放したもの。SaveData）にし、セットは初期の 2 つに戻す
 func reset_specials() -> void:
-	special_unlocked = ActionList.SPECIAL_START.duplicate()
+	special_unlocked = SaveData.open_specials()
 	special_choice = {"knight": "k_sp_formation", "witch": "w_sp_explosion"}
 
 
@@ -196,26 +196,19 @@ func locked_specials() -> Array:
 	return ActionList.special_ids().filter(func(id): return not special_unlocked.has(id))
 
 
-## 強敵を倒した時：まだ解放されていない必殺技をランダムに 1 つ解放する。解放した ID（全部解放済みなら ""）
+## 12 回目（C）：ラスボスを倒した時、まだ解放されていない必殺技をランダムに 1 つ解放する（周回をまたいで残る。SaveData.unlock_special）。
+## 解放した ID（全部解放済みなら ""）。強敵では解放しなくなった
 func unlock_random_special() -> String:
-	var cand := locked_specials()
-	if cand.is_empty():
-		return ""
-	var id: String = cand.pick_random()
-	special_unlocked.append(id)
+	var id := SaveData.unlock_special()
+	if id != "" and not special_unlocked.has(id):
+		special_unlocked.append(id)
 	return id
 
 
-## セーブの読み込み後など：知らない ID・未解放の必殺技がセットされていたら初期のものに戻す
+## セーブの読み込み後など：知らない ID・未解放の必殺技がセットされていたら初期のものに戻す。
+## 12 回目（C）：選べる必殺技は周回をまたぐ記録（SaveData）で決まる。古いセーブの「強敵で解放した分」は引き継がない
 func fix_specials() -> void:
-	var ok: Array = []
-	for id in special_unlocked:
-		if ActionList.special_owner(str(id)) != "" and not ok.has(str(id)):
-			ok.append(str(id))
-	for id in ActionList.SPECIAL_START:
-		if not ok.has(id):
-			ok.append(id)
-	special_unlocked = ok
+	special_unlocked = SaveData.open_specials()
 	var defaults := {"knight": "k_sp_formation", "witch": "w_sp_explosion"}
 	for ch in defaults:
 		var cur := str(special_choice.get(ch, ""))
@@ -297,14 +290,9 @@ func boss_card_ids() -> Array:
 	var owners := ["knight", "witch", ["knight", "witch"].pick_random()]
 	owners.shuffle()
 	var out: Array = []
-	var sr: Dictionary = ActionList.ALLY_CARDS["super_rare"]
+	# 12 回目（C）：エピック以上（エピック:レジェンド＝10:5）。解放済みのカードだけ
 	for o in owners:
-		var keys: Array = sr.keys().filter(func(k): return str(sr[k].get("owner", "")) == o and not out.has(k))
-		if keys.is_empty():
-			keys = sr.keys().filter(func(k): return not out.has(k))
-		if keys.is_empty():
-			keys = sr.keys()
-		out.append(str(keys.pick_random()))
+		out.append(ActionList.random_card_id("epic", str(o), "", out))
 	return out
 
 

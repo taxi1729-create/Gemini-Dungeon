@@ -129,15 +129,16 @@ func _start() -> void:
 func open_card_list() -> GuiDeckView:
 	var secs := {}
 	for owner in ["knight", "witch"]:
-		var groups: Array = []
-		for tier in [["common", "通常"], ["rare", "レア"], ["super_rare", "超レア"]]:
-			var cards: Array = []
-			for cid in ActionList.ALLY_CARDS[tier[0]]:
-				if ActionList.ALLY_CARDS[tier[0]][cid].get("owner", "") == owner:
-					cards.append(ActionList.make_card(cid))
-			if not cards.is_empty():
-				groups.append([tier[1], cards])
-		secs[owner] = groups
+		# 12 回目（C）：全カード（見出しは一覧が並べ替えで作り直す）。未解放のカードは "_locked" の印を付けて暗く出す
+		var cards: Array = []
+		for cid in ActionList.card_ids():
+			var c := ActionList.make_card(str(cid))
+			if str(c.get("owner", "")) != owner:
+				continue
+			if ActionList.is_card_locked(str(cid)):
+				c["_locked"] = true
+			cards.append(c)
+		secs[owner] = [["全カード", cards]]
 	return GuiDeckView.open_list(ui, "カード一覧", secs)
 
 

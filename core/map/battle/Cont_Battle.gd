@@ -233,8 +233,8 @@ func _setup_units() -> void:
 		a["uid"] = _new_uid()
 		a["shield"] = int(nb.get("block", 0)) if a.hp > 0 else 0
 		a["status_effects"] = {}
-		if int(nb.get("atk", 0)) > 0:
-			a.status_effects["atk_buff"] = int(nb.atk)
+		a["stat_add"] = {}  # 12 回目：ステータス増減（戦闘終了まで）。料理の POW・DEF は _battle_start_effects が入れる
+		a["gauge_pos"] = [ln, ln]  # 12 回目：必殺技ゲージ「移動した時」の判定用（_gauge_move_check）
 		a["ap"] = 0
 		a["max_ap"] = InitAllyStatus.AP_MAX
 		a["depth_scale"] = ally_depth(a)
@@ -245,6 +245,7 @@ func _setup_units() -> void:
 		first_turn[a.id] = true
 		specials[a.id] = ActionList.special(a.id, CurrentStatus.special_choice.get(a.id, ""))
 		a["sp_gauge"] = 0  # 必殺技ゲージ（10 回目。途中のセーブがあれば _restore_battle で戻る）
+		a["sp_gauge_max"] = ActionController.special_gauge_max(specials[a.id])  # 12 回目：上限は必殺技ごと（虚空連斬 150）
 		a["powers"] = []  # 使ったパワー（戦闘終了まで）
 
 	var floor_no := maxi(0, CurrentStatus.current_floor)
@@ -443,17 +444,24 @@ func _update_targets() -> void:
 			continue
 		var t: String = e.intent.get("target", "")
 		var lanes: Array = []
+		# 12 回目：庇う（cover）の付け替え込みの相手（攻撃だけ付け替わる）
+		var aimed := ActionController.attack_targets(e, e.intent, CurrentStatus.allies, CurrentStatus.enemies)
 		if t == "front_enemy_single":
-			var tg := ActionController.resolve_targets(e, t, CurrentStatus.allies, CurrentStatus.enemies)
-			lanes = [int(tg[0].lane)] if not tg.is_empty() else [int(e.target_lane)]
+			lanes = [int(aimed[0].lane)] if not aimed.is_empty() else [int(e.target_lane)]
 		elif t == "enemy_all":
 			lanes = [0, 1]
+			if (e.intent as Dictionary).has("power") and not aimed.is_empty():
+				lanes = []  # 全体攻撃を庇われている時は、受ける味方の側だけ
+				for a in aimed:
+					if not lanes.has(int(a.lane)):
+						lanes.append(int(a.lane))
+				lanes.sort()
 		e["aim_lanes"] = lanes
 		if lanes.is_empty():
 			continue
 		var from: Vector2 = e.pos if e.move_to == null else e.move_to
 		list.append({"from": from, "lanes": lanes, "move_to": e.move_to})
-		for a in ActionController.resolve_targets(e, t, CurrentStatus.allies, CurrentStatus.enemies):
+		for a in aimed:
 			views[a.uid].targeted += 1
 	fx.set_intents(list)
 	_update_intent_values()
@@ -467,7 +475,7 @@ func _update_intent_values() -> void:
 		var act: Dictionary = e.get("intent", {})
 		var out: Array = []
 		if e.hp > 0 and act.has("power") and not StatusController.has(e, "stun"):
-			var tg := ActionController.resolve_targets(e, act.get("target", ""), CurrentStatus.allies, CurrentStatus.enemies)
+			var tg := ActionController.attack_targets(e, act, CurrentStatus.allies, CurrentStatus.enemies)  # 12 回目：庇う込み
 			tg = tg.filter(func(a): return a.get("side", "") == "ally")
 			tg.sort_custom(func(a, b): return int(a.get("lane", 0)) < int(b.get("lane", 0)))
 			for a in tg:
@@ -889,6 +897,14 @@ func _restore_battle(st: Dictionary, enemies: Array) -> void:
 		if not (a.get("powers") is Array):
 			a["powers"] = []
 		InitAllyStatus.upgrade_old(a)  # 11 回目より前の途中セーブ：HP・POW・DEF・SLD を今のステータスに（"pow" があれば何もしない）
+		# 12 回目より前の途中セーブ：ステータス増減の入れ物・ゲージの上限を足し、旧 ID の状態（攻撃力アップなど）を新しい ID に
+		if not (a.get("stat_add") is Dictionary):
+			a["stat_add"] = {}
+		a["sp_gauge_max"] = ActionController.special_gauge_max(specials[a.id])
+		a["sp_gauge"] = clampi(int(a.sp_gauge), 0, int(a.sp_gauge_max))
+		StatusController.upgrade_ids(a)
+	for e in enemies:
+		StatusController.upgrade_ids(e)
 	# st.ext の項目はここで戻す（battle_snapshot() の d["ext"] と対に）
 
 
@@ -907,17 +923,18 @@ func _battle_start_effects() -> void:
 		# 大きな砂時計：AP の上限 +5
 		a["max_ap"] = InitAllyStatus.AP_MAX + (5 if Inventory.has_relic("hourglass") else 0)
 		# _setup_units が入れた料理の値はここで正しい形に入れ直す
-		a.status_effects.erase("atk_buff")
+		a["stat_add"] = {}
 		a["shield"] = 0
 		a.erase("rosary")
 		a["sp_gauge"] = 0
 		a["powers"] = []
 		if int(a.hp) <= 0:
 			continue
+		# 12 回目：料理の攻撃力・防御力は POW・DEF の増減（戦闘終了まで）
 		if int(nb.get("atk", 0)) > 0:
-			StatusController.apply_status(a, "atk_buff", int(nb.atk), -1)
+			ActionController.add_stat(a, "pow", int(nb.atk))
 		if int(nb.get("def", 0)) > 0:
-			StatusController.apply_status(a, "def_buff", int(nb.def), -1)
+			ActionController.add_stat(a, "def", int(nb.def))
 		if int(nb.get("regen", 0)) > 0:
 			StatusController.apply_status(a, "regen", int(nb.regen), int(nb.regen))
 		a["shield"] = int(nb.get("block", 0))
@@ -938,10 +955,47 @@ func _tally(events: Array, src: Dictionary = {}) -> void:
 			stats["hp_lost"] = int(stats.hp_lost) + int(ev.get("lost", 0))
 		else:
 			stats["overkill"] = int(stats.overkill) + int(ev.get("overkill", 0))
-		if ev.has("shield") and str(t.get("id", "")) == "knight" and str(t.get("side", "")) == "ally":
-			_gauge_gain(t, int(ev.shield))
-		if ev.has("damage") and str(src.get("id", "")) == "witch" and str(src.get("side", "")) == "ally" and str(t.get("side", "")) == "enemy":
-			_gauge_gain(src, int(ev.damage) + int(ev.get("blocked", 0)))
+		# 12 回目：貯まり方は選んでいる必殺技ごと（"gauge_by"）。block＝得たブロック（だれの行動でも）、damage＝自分が敵に与えたダメージ
+		if ev.has("shield") and str(t.get("side", "")) == "ally":
+			_gauge_on(t, "block", int(ev.shield))
+		if ev.has("damage") and str(src.get("side", "")) == "ally" and str(t.get("side", "")) == "enemy":
+			_gauge_on(src, "damage", int(ev.damage) + int(ev.get("blocked", 0)))
+
+
+# ------------------------------------------------------------
+# 12 回目：必殺技ゲージの貯まり方（選んでいる必殺技の "gauge_by"。ActionList.SPECIALS）
+#   block   ：得たブロック（双陣斬・虚空連斬）          targeted：敵の攻撃の対象にされた時 +20（大防御）
+#   hp_lost ：自分のターン開始時に 最大 HP − 今の HP（浄化の誓い）
+#   damage  ：敵に与えたダメージ（爆発）                ap      ：使った AP（ターンスキップ）
+#   move    ：移動した時 +10（星縛り。左右の入替・前後の移動）  skill：スキルカードを使うたび +10（毒蛇の舞）
+#   カードの効果 add_gauge はどの必殺技でも足される
+# ------------------------------------------------------------
+const GAUGE_TARGETED := 20
+const GAUGE_MOVE := 10
+const GAUGE_SKILL := 10
+
+
+func _gauge_by(u: Dictionary) -> String:
+	if str(u.get("side", "")) != "ally":
+		return ""
+	var sp = specials.get(str(u.get("id", "")))
+	return str((sp as Dictionary).get("gauge_by", "")) if sp is Dictionary else ""
+
+
+## u の必殺技の貯まり方が by の時だけ、ゲージを n 増やす
+func _gauge_on(u: Dictionary, by: String, n: int) -> void:
+	if n > 0 and int(u.get("hp", 0)) > 0 and _gauge_by(u) == by:
+		_gauge_gain(u, n)
+
+
+## 移動（星縛り）：前に見た位置（u.gauge_pos＝[lane, rank]）から変わっていれば +10。入替・陣形変更・カードの移動の後に呼ぶ
+func _gauge_move_check() -> void:
+	for a in CurrentStatus.allies:
+		var now := [int(a.get("lane", 0)), int(a.get("rank", 0))]
+		var was = a.get("gauge_pos")
+		a["gauge_pos"] = now
+		if was is Array and (was as Array).size() == 2 and (int(was[0]) != now[0] or int(was[1]) != now[1]):
+			_gauge_on(a, "move", GAUGE_MOVE)
 
 
 ## 必殺技ゲージを増やす（満タンになった時だけ知らせる）
@@ -954,8 +1008,7 @@ func _gauge_gain(u: Dictionary, n: int) -> void:
 ## イベントを通らないブロックの加算（レリック・パワー）。ナイトならゲージにも数える
 func _gain_shield(u: Dictionary, n: int) -> void:
 	u["shield"] = int(u.get("shield", 0)) + n
-	if str(u.get("id", "")) == "knight":
-		_gauge_gain(u, n)
+	_gauge_on(u, "block", n)  # 12 回目：必殺技が「得たブロックで貯まる」ものの時だけ
 
 
 func _run_turn(u: Dictionary) -> void:
@@ -980,6 +1033,7 @@ func _run_turn(u: Dictionary) -> void:
 			fx.popup(views[u.uid], "青い絵 盾+%d" % CurrentStatus.floor_fx_val("left_block"), ImageController.COL.shield, 26)
 		var ticks := StatusController.trigger_start_of_turn(u)
 		_tally(ticks, u)
+		_knight_turn_start(u, ticks)  # A（12 回目）：闘気の昂り・業火の構え
 		var hurt := false
 		for t in ticks:
 			if t.has("declare"):
@@ -999,8 +1053,16 @@ func _run_turn(u: Dictionary) -> void:
 				fx.popup(views[u.uid], "予約！", ImageController.COL.accent, 28)
 				for entry in t.yoyaku:
 					var ed: Dictionary = entry
-					var yev := ActionController.execute_action(u, {"target": str(ed.get("target", "self")), "effects": ed.get("effects", [])},
-							CurrentStatus.allies, CurrentStatus.enemies)
+					var yact := {"target": str(ed.get("target", "self")), "effects": ed.get("effects", [])}
+					if int(ed.get("pow_pct", 0)) > 0:
+						# D（12 回目・豪炎）：予約の攻撃（POW × pow_pct を hits 回。0 回なら何もしない）
+						if int(ed.get("hits", 1)) <= 0:
+							continue
+						yact["type"] = "attack"
+						yact["pow_pct"] = int(ed.pow_pct)
+						yact["power"] = 0
+						yact["hits"] = int(ed.get("hits", 1))
+					var yev := ActionController.execute_action(u, yact, CurrentStatus.allies, CurrentStatus.enemies)
 					_tally(yev, u)
 					_handle_specials(u, yev)
 					_show_events(yev, {})
@@ -1016,6 +1078,9 @@ func _run_turn(u: Dictionary) -> void:
 			_update_deaths({})
 		if u.hp <= 0 or _all_dead(CurrentStatus.enemies) or _all_dead(CurrentStatus.allies):
 			break
+		# 12 回目：必殺技ゲージ（浄化の誓い）：自分のターン開始時（火傷・毒・再生の後）に、最大 HP − 今の HP を加算
+		if u.side == "ally":
+			_gauge_on(u, "hp_lost", int(u.max_hp) - int(u.hp))
 		if StatusController.has(u, "stun"):
 			# スタン：このターンは行動しない（ターン開始時の効果は上で起きている）。休んだら消える
 			StatusController.remove(u, "stun")
@@ -1057,6 +1122,7 @@ func _ally_turn(u: Dictionary) -> void:
 	u["cards_used"] = 0  # 怒涛の締めの X（このターンに使ったカードの枚数）
 	# ターン開始の補充は 4 枠（8・4・2・6）だけ。空き欄（9・3）は「カードを引く」効果で入る
 	dc.draw_cards(DeckController.HAND_SIZE, DeckController.BASE_SLOTS)
+	_witch_turn_start(u, dc)  # D（12 回目）：フォース（味方全体 SLD+1）・流星の煌めき（手札にあれば AP−1）
 	_log("%sの手番" % u.name)
 	phase = "player"
 	_refresh_all()
@@ -1099,7 +1165,7 @@ func _enemy_turn(e: Dictionary) -> void:
 	var dur := 0.4
 	var hit_cb := func(): _apply(e, act)
 	if act.has("power") or act.get("target", "") in ["front_enemy_single", "enemy_all"]:
-		var targets := ActionController.resolve_targets(e, act.target, CurrentStatus.allies, CurrentStatus.enemies)
+		var targets := ActionController.attack_targets(e, act, CurrentStatus.allies, CurrentStatus.enemies)  # 12 回目：庇う込み
 		var tp: Vector2 = fx.lanes[clampi(int(e.target_lane), 0, 1)] if act.target == "front_enemy_single" else (Vector2(fx.lanes[0]) + Vector2(fx.lanes[1])) / 2
 		if act.target == "front_enemy_single" and not targets.is_empty():
 			tp = targets[0].pos
@@ -1115,7 +1181,19 @@ func _enemy_turn(e: Dictionary) -> void:
 
 ## 行動の効果をその場で確定し、演出を流す
 func _apply(user: Dictionary, action: Dictionary) -> void:
+	# 12 回目：必殺技ゲージ（大防御）：敵の攻撃の対象にされた時 +20（1 回の攻撃につき 1 回。庇って受ける分も「対象」）
+	var aimed: Array = []
+	if str(user.get("side", "")) == "enemy" and action.has("power"):
+		for t in ActionController.attack_targets(user, action, CurrentStatus.allies, CurrentStatus.enemies):
+			if not aimed.has(t):
+				aimed.append(t)
+		for t in aimed:
+			if views.has(t.get("uid", -1)) and StatusController.has(t, "cover") and ActionController.cover_of(t, CurrentStatus.allies) == t \
+					and ActionController.resolve_targets(user, str(action.get("target", "")), CurrentStatus.allies, CurrentStatus.enemies).any(func(o): return o != t):
+				fx.popup(views[t.uid], "庇う！", ImageController.COL.shield, 28)
 	var events := ActionController.execute_action(user, action, CurrentStatus.allies, CurrentStatus.enemies)
+	for t in aimed:
+		_gauge_on(t, "targeted", GAUGE_TARGETED)
 	_tally(events)
 	_show_events(events, action)
 	_power_marks(events)  # 断罪の連鎖：反撃が発動するたび（敵の攻撃）
@@ -1176,12 +1254,14 @@ func _handle_specials(user: Dictionary, events: Array) -> void:
 				# 踏み込み：自分だけ前衛・後衛を入れ替える（左右はそのまま）
 				user["rank"] = 1 - int(user.get("rank", 0))
 				_move_ally(user)
+				_gauge_move_check()
 				_sync_lanes()
 				_update_targets()
 				_log("%sは%sへ移った！" % [user.name, "前衛" if int(user.rank) == 0 else "後衛"])
 			"rank_to":
 				# 魔法準備・魔弾：段は ActionController が変え済み。絵を動かす
 				_move_ally(user)
+				_gauge_move_check()
 				_sync_lanes()
 				_update_targets()
 			"repeat":
@@ -1236,6 +1316,10 @@ func _show_events(events: Array, action: Dictionary) -> void:
 			fx.popup(tv, "デバフ解除" if not (ev.cleanse as Array).is_empty() else "解除なし", col.good, 26)  # 闘志
 		if ev.has("gauge"):
 			fx.popup(tv, "ゲージ+%d" % int(ev.gauge), col.accent, 26)  # 必殺技ゲージ（add_gauge）
+		if ev.has("stat"):
+			# 12 回目：ステータス増減（add_stat）。「POW+3」「DEF-1」
+			var sv := int(ev.get("stat_val", 0))
+			fx.popup(tv, "%s%+d" % [str(ActionController.STAT_NAME.get(str(ev.stat), str(ev.stat))), sv], col.good if (sv > 0) == (t.get("side", "") == "ally") else Color("ffa060"), 26)
 
 
 func _update_deaths(attacker: Dictionary) -> void:
@@ -1294,6 +1378,8 @@ func _finish(result: String) -> void:
 		a["power_def"] = 0
 		a.erase("powers")  # パワー（効いているもの・鼓舞・使った枚数）
 		a.erase("sp_gauge")  # 必殺技ゲージは戦闘ごと
+		for k12 in ["sp_gauge_max", "stat_add", "gauge_pos", "power_sld", "aid_sld"]:
+			a.erase(k12)  # 12 回目：ステータス増減・ゲージの上限なども戦闘ごと
 		a.erase("aid_atk")
 		a.erase("aid_def")  # 鋼鉄化（味方全体）
 		a.erase("cards_used")
@@ -1474,10 +1560,11 @@ func _action_for(num) -> Dictionary:
 			return {"title": "入替", "desc": "左右の位置を入れ替える（前衛・後衛はそのまま）（AP%d）。敵の矢印の色で狙われる側がわかる" % c7, "action": ActionList.SWAP, "kind": "swap", "ap": c7}
 		1:
 			var c1 := _move_cost()
-			return {"title": "陣形変更", "desc": "味方全員の前衛・後衛を入れ替える（AP%d）。前衛は攻撃力+2、後衛は防御力+2" % c1, "action": FORMATION, "kind": "formation", "ap": c1}
+			return {"title": "陣形変更", "desc": "味方全員の前衛・後衛を入れ替える（AP%d）。前衛はPOW+2、後衛はDEF+2" % c1, "action": FORMATION, "kind": "formation", "ap": c1}
 		5:
 			var s: Dictionary = specials[current.id]
-			var gtxt := "（ゲージ%d/%d）" % [int(current.get("sp_gauge", 0)), ActionController.GAUGE_MAX]
+			var gtxt := "（ゲージ%d/%d%s）" % [int(current.get("sp_gauge", 0)), ActionController.gauge_max(current),
+					("：" + str(s.gauge_text)) if s.has("gauge_text") else ""]  # 12 回目：上限・貯まり方は必殺技ごと
 			var sd := DeckController.pct_fill(current, str(s.get("desc", ""))) + gtxt if s.has("desc") else _short(s) + gtxt  # 11 回目：「POW70%」→「POW70%（21）」
 			return {"title": "必殺", "desc": "%s　%s（長押し）" % [s.name, sd], "action": _boss_mod(current, _special_play(s), true), "kind": "special", "ap": 0,
 					"block_msg": _special_block(s)}
@@ -1595,7 +1682,7 @@ func _card_empties() -> int:
 ## 必殺技を今使えないわけ（"" = 使える）。ゲージ・即応の条件・消費する手札
 func _special_block(sp: Dictionary) -> String:
 	if not ActionController.gauge_full(current):
-		return "必殺技ゲージが満タン（%d）の時に使える（今 %d）" % [ActionController.GAUGE_MAX, int(current.get("sp_gauge", 0))]
+		return "必殺技ゲージが満タン（%d）の時に使える（今 %d）" % [ActionController.gauge_max(current), int(current.get("sp_gauge", 0))]
 	if sp.get("sokuou_only", false) and not ActionController.keyword_on(current, "sokuou", {"swapped": last_swap_round == round_no}):
 		return "即応の時だけ使える（このラウンドに入替をした時）"
 	if DeckController.burns(sp, "consume"):
@@ -1630,7 +1717,7 @@ func _use_special(dc: DeckController) -> void:
 	for ev in evs:
 		if ev.has("purge"):
 			var t: Dictionary = ev.target
-			fx.popup(views[t.uid], "浄化！" if int(ev.get("purge_bonus", 0)) <= 0 else "浄化！ 攻防+%d" % int(ev.purge_bonus), ImageController.COL.good, 30)
+			fx.popup(views[t.uid], "浄化！" if int(ev.get("purge_bonus", 0)) <= 0 else "浄化！ POW・DEF+%d" % int(ev.purge_bonus), ImageController.COL.good, 30)
 	if act.has("void_n"):
 		fx.popup(views[current.uid], "空き%d" % int(act.void_n), ImageController.COL.accent, 28)
 
@@ -1790,6 +1877,9 @@ func _effect_label(a: Dictionary, x: int = 1) -> String:
 			return st.short if (e.status in ["taunt"] or st.get("label", "") == "none") else "%s%d" % [st.short, v]
 		"extra_turn": return "再行動"
 		"add_gauge": return "ゲージ+%d" % int(e.eff_val)
+		"shield_pow": return "盾+%d" % (ActionController.get_pow(current) * int(e.get("pow_pct", 0)) / 100)  # A：気炎
+		"double_block": return "盾+%d" % int(current.get("shield", 0))  # A：引きつけ（今のブロックと同じだけ増える）
+		"add_stat": return "%s%+d" % [str(ActionController.STAT_NAME.get(str(e.get("stat", "pow")), "")), v]  # 12 回目
 	return ""
 
 
@@ -1838,6 +1928,7 @@ func _execute(num) -> void:
 			_use_card(info, dc, dir)
 		"swap", "formation":
 			current["ap"] = int(current.ap) - ap
+			_gauge_on(current, "ap", ap)  # 12 回目：必殺技ゲージ（ターンスキップ＝使った AP）
 			if ap == 0 and Inventory.has_relic("light_boots"):
 				boots_used[current.id] = true  # 軽い靴：このターンの AP0 を使った
 			if info.kind == "swap":
@@ -1876,6 +1967,7 @@ func _use_card(info: Dictionary, dc: DeckController, dir: Vector2) -> void:
 	var c: Dictionary = info.action
 	var slot := int(info.slot)
 	if ActionList.has_keyword(c, "power"):
+		_gauge_on(current, "ap", mini(int(current.ap), int(info.ap)))  # 12 回目：必殺技ゲージ（使った AP）
 		current["ap"] = maxi(0, int(current.ap) - int(info.ap))
 		_fly_card(hand_cards[slot], dir)
 		dc.play_and_discard(slot)  # 廃棄の札（天啓・薬師の加護）は廃棄札へ
@@ -1890,6 +1982,10 @@ func _use_card(info: Dictionary, dc: DeckController, dir: Vector2) -> void:
 		x = int(current.ap)
 	var ap_before := int(current.ap)  # 二連詠唱：使う前の AP
 	current["ap"] = maxi(0, int(current.ap) - int(info.ap))
+	# 12 回目：必殺技ゲージ（ターンスキップ＝使った AP／毒蛇の舞＝スキルカードを使うたび +10。連続魔法で 2 回発動しても 1 枚で 1 回）
+	_gauge_on(current, "ap", ap_before - int(current.ap))
+	if str(c.get("type", "")) == "skill":
+		_gauge_on(current, "skill", GAUGE_SKILL)
 	# 実際に発動する行動：キーワード（条件は使う前の手札で判定）・バッジ・砥石・十連の数珠の強化込み
 	var ctx0 := _play_ctx(c, slot)
 	var on_kw: Array = (c.get("keywords", []) as Array).filter(func(k): return str(k) in ["sokuou", "saigo", "tenshin"] and ActionController.keyword_on(current, str(k), ctx0))
@@ -2009,25 +2105,29 @@ func _power_recalc() -> void:
 	for a in CurrentStatus.allies:
 		a["power_atk"] = 0
 		a["power_def"] = 0
+		a["power_sld"] = 0
 		a["aid_atk"] = {}
 		a["aid_def"] = {}
+		a["aid_sld"] = {}
 	for a in CurrentStatus.allies:
 		if int(a.hp) <= 0:
 			continue
 		for pe0 in a.get("powers", []):
 			var pe := ActionController.power_side(a, pe0)
-			var st := str(pe.get("status", ""))
+			var st := StatusController.canon(str(pe.get("status", "")))  # 12 回目：pow_up / def_up / sld_up（旧 atk_buff / def_buff も可）
 			var v := int(pe.get("eff_val", 0))
-			if st == "atk_buff":
+			if st == "pow_up":
 				a["power_atk"] = int(a.power_atk) + v
-			elif st == "def_buff":
+			elif st == "def_up":
 				a["power_def"] = int(a.power_def) + v
+			elif st == "sld_up":
+				a["power_sld"] = int(a.power_sld) + v
 			for o in CurrentStatus.allies:
 				if o == a or int(o.hp) <= 0:
 					continue
 				# 鋼鉄化・フォース（"all"）：もう 1 人の味方にも同じ分
-				if pe.get("all", false) and st in ["atk_buff", "def_buff"]:
-					var key := "aid_atk" if st == "atk_buff" else "aid_def"
+				if pe.get("all", false) and st in ["pow_up", "def_up", "sld_up"]:
+					var key: String = {"pow_up": "aid_atk", "def_up": "aid_def", "sld_up": "aid_sld"}[st]
 					var ad: Dictionary = o[key]
 					ad[a.id] = int(ad.get(a.id, 0)) + v
 				# 鼓舞（右）：もう 1 人の攻撃力 +n
@@ -2093,15 +2193,28 @@ func _power_card_triggers(card: Dictionary, evs: Array) -> void:
 		for p in _powers_of("on_plain_card"):
 			var dmg := int(p[1].get("dmg", 0)) + (int(p[1].get("sokuou_add", 0)) if last_swap_round == round_no else 0)
 			_power_hit(p[0], {"name": "連撃の気迫", "power": dmg, "fixed": true, "target": "enemy_all"})
+	# 毒の刃：当たった敵に毒（D・12 回目：any_card ならアタックカードに限らない）
+	for p in _powers_of("on_attack_poison"):
+		if not is_attack and not p[1].get("any_card", false):
+			continue
+		var pevs: Array = []
+		for t in hit:
+			if int(t.hp) > 0:
+				var ev2 := {"target": t}
+				ActionController._apply_effect(p[0], t, {"effect": "add_status", "status": "poison", "eff_val": int(p[1].get("eff_val", 1))}, ev2)
+				pevs.append(ev2)
+		_show_events(pevs, {})
+	# A（双剣の誓い）：もう 1 人の味方（パワーの持ち主ではない方）がアタックカードを使うたび、味方全体にブロック+n（固定）
 	if is_attack:
-		for p in _powers_of("on_attack_poison"):
-			var pevs: Array = []
-			for t in hit:
-				if int(t.hp) > 0:
-					var ev2 := {"target": t}
-					ActionController._apply_effect(p[0], t, {"effect": "add_status", "status": "poison", "eff_val": int(p[1].get("eff_val", 1))}, ev2)
-					pevs.append(ev2)
-			_show_events(pevs, {})
+		for p in _powers_of("on_ally_attack"):
+			if p[0] == current:
+				continue
+			var sevs: Array = []
+			for a in CurrentStatus.allies:
+				if int(a.hp) > 0:
+					_gain_shield(a, int(p[1].get("shield", 0)))
+					sevs.append({"target": a, "shield": int(p[1].get("shield", 0))})
+			_show_events(sevs, {})
 	if debuff:
 		for p in _powers_of("on_debuff_card"):
 			var o: Dictionary = p[0]
@@ -2122,8 +2235,57 @@ func _power_card_triggers(card: Dictionary, evs: Array) -> void:
 	# 狩人の本能：kws（9 回目は陣形・予約。無ければ撃破）の札が付いたカードを使うたび
 	for p in _powers_of("on_gekiha_card"):
 		if (p[1].get("kws", ["gekiha"]) as Array).any(func(k): return kws.has(k)):
-			StatusController.apply_status(p[0], "atk_buff", int(p[1].get("atk", 1)), -1)
-			fx.popup(views[p[0].uid], "狩人の本能 攻+%d" % int(p[1].get("atk", 1)), ImageController.COL.good, 24)
+			ActionController.add_stat(p[0], "pow", int(p[1].get("atk", 1)))  # 12 回目：攻撃力 → POW（戦闘終了まで）
+			fx.popup(views[p[0].uid], "狩人の本能 POW+%d" % int(p[1].get("atk", 1)), ImageController.COL.good, 24)
+	# D（12 回目・双星の魔法陣）：スキルカードが発動するたび、発動したキャラにブロック（そのキャラの SLD × sld_pct）
+	if str(card.get("type", "")) == "skill" and int(current.get("hp", 0)) > 0:
+		for p in _powers_of("on_skill_card"):
+			var sn := ActionController.get_sld(current) * int(p[1].get("sld_pct", 0)) / 100
+			if sn <= 0:
+				continue
+			_gain_shield(current, sn)
+			_show_events([{"target": current, "shield": sn}], {})
+
+
+## D（12 回目）：味方 u のターン開始時（手札を補充した後）
+##   フォース（power_effect kind turn_start_stat）：持ち主のターン開始時に、味方全体の stat+eff_val（戦闘中。毎ターン積み重なる）
+##   流星の煌めき（カードの turn_discount）：手札（空き欄を含む）にあれば、そのカードの AP を n 下げる（カードの ap_down。0 まで。その戦闘中）
+func _witch_turn_start(u: Dictionary, dc: DeckController) -> void:
+	for pe0 in u.get("powers", []):
+		var pe := ActionController.power_side(u, pe0)
+		if str(pe.get("kind", "")) != "turn_start_stat":
+			continue
+		var st := str(pe.get("stat", "sld"))
+		var n := int(pe.get("eff_val", 1))
+		for a in CurrentStatus.allies:
+			if int(a.hp) > 0:
+				ActionController.add_stat(a, st, n)
+				fx.popup(views[a.uid], "%s%+d" % [str(ActionController.STAT_NAME.get(st, st)), n], ImageController.COL.good, 26)
+	for c in dc.hand:
+		if c is Dictionary and int(c.get("turn_discount", 0)) > 0:
+			DeckController.lower_ap(c, int(c.turn_discount))
+
+
+## A（12 回目）：持ち主 u のターン開始時のパワー。ticks = ターン開始時のイベント（火傷・毒のダメージなど）
+##   闘気の昂り（turn_stat）：自分の stat+eff_val（戦闘中。毎ターン積み重なる）
+##   業火の構え（on_tick_dmg）：自分が状態異常のダメージを受けるたび、ランダムな敵に同じダメージ×hits 回（固定。1 回ごとに敵を選び直す）
+func _knight_turn_start(u: Dictionary, ticks: Array) -> void:
+	if str(u.get("side", "")) != "ally" or int(u.hp) <= 0:
+		return
+	for pe0 in u.get("powers", []):
+		var pe := ActionController.power_side(u, pe0)
+		match str(pe.get("kind", "")):
+			"turn_stat":
+				var st := str(pe.get("stat", "pow"))
+				var n := int(pe.get("eff_val", 1))
+				ActionController.add_stat(u, st, n)
+				fx.popup(views[u.uid], "%s%+d" % [str(ActionController.STAT_NAME.get(st, st)), n], ImageController.COL.good, 26)
+			"on_tick_dmg":
+				for t in ticks:
+					var td: Dictionary = t
+					if td.has("damage") and td.has("tick") and int(td.damage) > 0 and is_same(td.get("target"), u):
+						_power_hit(u, {"name": "業火の構え", "power": int(td.damage), "hits": int(pe.get("hits", 2)), "fixed": true,
+								"target": "random_enemy", "reroll": true})
 
 
 ## 焦土の誓い：消費・廃棄が 1 回発動するたび
@@ -2192,6 +2354,7 @@ func _do_swap() -> void:
 		a["lane"] = 1 - int(a.lane)
 		_move_ally(a)
 	last_swap_round = round_no
+	_gauge_move_check()  # 12 回目：必殺技ゲージ（星縛り＝移動した時 +10）
 	_power_recalc()  # 陣形のパワーは位置で切り替わる
 	_sync_lanes()
 	_update_targets()
@@ -2203,6 +2366,7 @@ func _do_formation() -> void:
 	for a in CurrentStatus.allies:
 		a["rank"] = 1 - int(a.get("rank", 0))
 		_move_ally(a)
+	_gauge_move_check()  # 12 回目：必殺技ゲージ（前後の移動も +10）
 	_power_recalc()
 	_sync_lanes()
 	_update_targets()
@@ -2237,7 +2401,7 @@ func _unit_lines(u: Dictionary) -> Array:
 	var lines: Array = []
 	if u.side == "ally":
 		lines.append("AP %d / %d　位置：%s・%s" % [u.ap, int(u.get("max_ap", InitAllyStatus.AP_MAX)), "左（青）" if int(u.lane) == 0 else "右（赤）",
-				"前衛（攻撃力+2）" if int(u.get("rank", 0)) == 0 else "後衛（防御力+2）"])
+				"前衛（POW+2）" if int(u.get("rank", 0)) == 0 else "後衛（DEF+2）"])
 	else:
 		lines.append("位置：%s（%s）" % ["前衛" if int(u.get("row", 0)) == 0 else "後衛", str(u.get("slot", ""))])
 	for k in u.status_effects:
@@ -2387,6 +2551,7 @@ func _refresh_all() -> void:
 		btn.special.title = sp.name
 		btn.special.icon_kind = sp.art
 		btn.special.ap_cost = -1  # 必殺技は AP を使わない（10 回目）
+		btn.special.gauge_max = ActionController.gauge_max(current)  # 12 回目：輪の上限は必殺技ごと（虚空連斬 150）
 		btn.special.gauge = int(current.get("sp_gauge", 0))  # AP の代わりにゲージ
 		btn.special.subtitle = "長押し"
 		btn.special.dimmed = _special_block(sp) != ""

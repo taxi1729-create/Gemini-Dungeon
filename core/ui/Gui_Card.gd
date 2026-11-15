@@ -38,7 +38,7 @@ func _process(delta: float) -> void:
 	if card.is_empty():
 		return
 	# 光の帯：一覧・ライトモードでは動かさない（毎フレームの描き直しをしない）。溜め満タンの点滅は残す
-	var shine: bool = animate_shine and not ImageController.light_mode and card.get("rarity", "normal") != "normal"
+	var shine: bool = animate_shine and not ImageController.light_mode and ActionList.norm_rarity(card.get("rarity", "common")) != "common"
 	# 11回目（軽くする）：毎フレームではなく、そろえた時計で 1 秒に ANIM_HZ 回だけ描き直す
 	if (shine or charge >= 1.0) and ImageController.anim_tick(ImageController.ANIM_HZ):
 		queue_redraw()
@@ -65,17 +65,14 @@ func _draw() -> void:
 		return
 	var IC = ImageController
 	var r := Rect2(Vector2.ZERO, size)
-	var rarity: String = card.get("rarity", "normal")
+	var rarity: String = ActionList.norm_rarity(card.get("rarity", "common"))  # 12 回目：4 段階（古い値も読み替える）
 	var fc := _frame_color()
-	# 外枠（種類の色の太い枠）。縁の色はレア度で変わる。選択中は白縁＋赤のベタ影
+	# 外枠（種類の色の太い枠）。縁の色はレア度で変わる（コモン＝黒・レア＝青・エピック＝紫・レジェンド＝金）。選択中は白縁＋赤のベタ影
 	var border: Color = IC.COL.ink
 	var bw := 2.0
-	if rarity == "rare":
-		border = IC.COL.gold
-		bw = 3.0
-	elif rarity == "super_rare":
-		border = Color.from_hsv(fmod(_t * 0.35, 1.0), 0.55, 1.0)
-		bw = 3.0
+	if rarity != "common":
+		border = RARITY_COL[rarity]
+		bw = 4.0 if rarity == "legend" else 3.0
 	if highlighted:
 		IC.cut_rect(self, r, fc, 14, 4.0, IC.COL.paper, IC.COL.red, Vector2(7, 7))
 	else:
@@ -164,6 +161,11 @@ func _draw() -> void:
 	_draw_badge(art)
 	if not playable and not unsel:
 		draw_colored_polygon(IC.cut_pts(r, 14), Color(0, 0, 0, 0.55))
+	if card.get("_locked", false):
+		# 12 回目（C）：未解放のカード（カード一覧）。暗くして「未解放」の札
+		draw_colored_polygon(IC.cut_pts(r, 14), Color(0, 0, 0, 0.6))
+		IC.slant(self, Rect2(8, size.y / 2 - 16, size.x - 16, 32), IC.COL.ink, 8, 2.0, IC.COL.paper)
+		IC.text(self, "未解放", Vector2(size.x / 2, size.y / 2), 20, IC.COL.paper, true, 0, size.x - 30)
 	if charge > 0:
 		_draw_charge(r)
 
@@ -324,24 +326,30 @@ func _draw_charge(r: Rect2) -> void:
 		draw_polyline(out, Color(1, 1, 1, 0.25 + 0.25 * sin(_t * 20.0)), 2.0, true)
 
 
-## 絵柄の窓に斜めの光を走らせる（レア＝金、スーパーレア＝虹）
+## レア度の色（12 回目・C：4 段階。コモンは色なし）。枠の縁・絵柄の窓の線・光の帯に使う
+const RARITY_COL := {"rare": Color("5ab8ff"), "epic": Color("c77dff"), "legend": Color("ffd24a")}
+
+
+## 絵柄の窓に斜めの光を走らせる（レア＝青、エピック＝紫、レジェンド＝虹）
 func _draw_shine(art: Rect2, rarity: String) -> void:
-	if rarity == "normal":
+	if not RARITY_COL.has(rarity):
 		return
+	var rc: Color = RARITY_COL[rarity]
 	if not animate_shine or ImageController.light_mode:
-		# 止めている時：帯は描かず、絵柄の窓の上辺にレア度の色の細い線だけ（多角形の演算をしない）
-		var lc := Color(1.0, 0.9, 0.5, 0.7) if rarity == "rare" else Color.from_hsv(0.8, 0.4, 1.0, 0.8)
-		draw_rect(Rect2(art.position, Vector2(art.size.x, 3)), lc)
+		# 止めている時：帯は描かず、絵柄の窓の上辺にレア度の色の細い線だけ（多角形の演算をしない）。レジェンドは下辺にも
+		draw_rect(Rect2(art.position, Vector2(art.size.x, 4)), Color(rc, 0.9))
+		if rarity == "legend":
+			draw_rect(Rect2(Vector2(art.position.x, art.end.y - 4), Vector2(art.size.x, 4)), Color(rc, 0.9))
 		return
-	var period := 2.6 if rarity == "rare" else 2.0
+	var period := 2.6 if rarity == "rare" else (2.2 if rarity == "epic" else 1.8)
 	var k := fmod(_t, period) / period
 	var x := lerpf(art.position.x - 60, art.end.x + 60, k)
 	var band := PackedVector2Array([Vector2(x - 14, art.end.y), Vector2(x + 14, art.end.y),
 			Vector2(x + 54, art.position.y), Vector2(x + 26, art.position.y)])
 	var rect_poly := PackedVector2Array([art.position, Vector2(art.end.x, art.position.y), art.end, Vector2(art.position.x, art.end.y)])
-	var col := Color(1.0, 0.9, 0.5, 0.45)
-	if rarity == "super_rare":
-		col = Color.from_hsv(fmod(_t * 0.5, 1.0), 0.5, 1.0, 0.5)
+	var col := Color(rc.lightened(0.25), 0.45)
+	if rarity == "legend":
+		col = Color.from_hsv(fmod(_t * 0.5, 1.0), 0.5, 1.0, 0.55)
 	for poly in Geometry2D.intersect_polygons(band, rect_poly):
 		draw_colored_polygon(poly, col)
 
@@ -372,6 +380,17 @@ static func summary(c: Dictionary) -> String:
 	var ou := ActionController.owner_unit(c)
 	if c.get("power_half_block", false):
 		parts.append("盾の半分")
+	# A（12 回目のナイトのカード）
+	if c.get("power_block", false):
+		parts.append("盾と同じ")
+	if c.get("if_pow") is Dictionary:
+		parts.append("POW%d以上+%d" % [int(c.if_pow.get("min", 0)), ActionController.pow_part(ou, c.if_pow)])
+	if int(c.get("per_pow_up_pct", 0)) > 0:
+		parts.append("POW増1で+%d%%" % int(c.per_pow_up_pct))
+	if c.get("per_self_status_pct") is Dictionary:
+		parts.append("自状態1で+%d%%" % int(c.per_self_status_pct.get("pow_pct", 0)))
+	if int(c.get("burn_all_pct", 0)) > 0:
+		parts.append("自火傷1で+%d%%" % int(c.burn_all_pct))
 	if c.get("if_self_status") is Dictionary:
 		parts.append("自%s+%d" % [str(StatusEffectList.DATA.get(str(c.if_self_status.get("status", "")), {}).get("short", "")),
 				int(c.if_self_status.get("power", 0)) + ActionController.pow_part(ou, c.if_self_status)])
@@ -437,6 +456,9 @@ static func _eff_summary(effs: Array, u: Dictionary = {}) -> Array:
 			"repeat": parts.append("再発動")
 			"shield_per_status": parts.append("火傷1で盾%d" % ActionController.shield_amount(u, e))  # D：熱き鼓動
 			"dmg_half_block": parts.append("盾半分返し")  # D：盾の返し
+			"shield_pow": parts.append("盾%d" % (ActionController.get_pow(u) * int(e.get("pow_pct", 0)) / 100))  # A：気炎
+			"double_block": parts.append("盾2倍")  # A：引きつけ
+			"cleanse_one": parts.append("デバフ1つ解除")  # A：肩を貸す
 			"add_gauge": parts.append("ゲージ+%d" % int(e.eff_val))  # D：闘気溜め
 			"add_status":
 				var st: Dictionary = StatusEffectList.DATA.get(e.status, {})
@@ -458,8 +480,13 @@ static func _power_summary(c: Dictionary) -> String:
 	if int(pe.get("aid_atk", 0)) > 0:
 		return "味方攻+%d" % int(pe.aid_atk)
 	match str(pe.get("kind", "")):
-		"burn_atk": return "攻+火傷"
-		"last_stand": return "HP減で攻防+"
+		"burn_atk": return "POW+火傷"
+		"last_stand": return "HP減でPOW・DEF+"
+		# A（12 回目）：バリケード・闘気の昂り・業火の構え・双剣の誓い
+		"barricade": return "盾が消えない"
+		"turn_stat": return "毎ターン%s+%d" % [str(ActionController.STAT_NAME.get(str(pe.get("stat", "pow")), "")), int(pe.get("eff_val", 1))]
+		"on_tick_dmg": return "状態ダメージを敵へ×%d" % int(pe.get("hits", 2))
+		"on_ally_attack": return "味方の攻撃で全盾%d" % int(pe.get("shield", 0))
 		"on_plain_card": return "札無しで全%d" % int(pe.get("dmg", 0))
 		"on_burn": return "消費廃棄で全%d" % int(pe.get("dmg", 0))
 		"on_attack_poison": return "攻撃で毒%d" % int(pe.get("eff_val", 1))
